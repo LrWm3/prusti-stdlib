@@ -534,6 +534,21 @@ impl<'vir> WandEncOutput<'vir> {
             self.predicates_for_function_shape_node(vcx, deps, g, None)
                 .is_some()
         };
+        // A resource-free LHS without an expiry obligation encodes as `true`.
+        // Return its resources directly: `true --* P` can be applied immediately,
+        // but keeping P inside the wand prevents functional postconditions from
+        // reading it. This occurs for e.g. `mem::replace<T>(&mut T, T) -> T`,
+        // whose generalized result projections have no indirect predicates.
+        // Removing the wand also removes its RHS from `blocked_inputs`, so
+        // `indirect_posts` returns the corresponding permissions instead.
+        // Keep pledges: their conditions belong to the borrow's expiry, even
+        // when the reference itself carries no encoded permissions.
+        let wands = wands
+            .into_iter()
+            .filter(|wand_data| {
+                !wand_data.pledges.is_empty() || wand_data.lhs.iter().any(|g| has_resources(*g))
+            })
+            .collect::<Vec<_>>();
         // A wand is only needed if it gives back a resource, or to carry the
         // pledges if none does (e.g. for shared references).
         let (mut wands, resourceless): (Vec<_>, Vec<_>) = wands

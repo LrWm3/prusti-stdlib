@@ -48,3 +48,39 @@ impl target_api::Bounded for target_api::Zero {
     #[ensures(result == 0)]
     fn bounded(value: u32) -> u32;
 }
+
+#[extern_spec(target_api)]
+#[trusted]
+#[ensures(result === value)]
+fn copied<T: Copy + Clone>(value: T) -> T;
+
+#[extern_spec(target_api)]
+#[trusted]
+#[ensures(result === value)]
+fn static_value<T: 'static>(value: T) -> T;
+
+#[extern_spec(target_api)]
+trait Copier<T: Copy> {
+    #[trusted]
+    #[ensures(result === value)]
+    fn copy(value: T) -> T;
+}
+
+#[extern_spec(target_api)]
+#[trusted]
+#[ensures(*result == *first)]
+fn first<'left, 'right>(first: &'left u32, second: &'right u32) -> &'left u32;
+
+#[extern_spec(target_api)]
+trait Consume {
+    #[trusted]
+    #[ensures(result == 0)]
+    fn consume(self) -> u32;
+}
+
+#[extern_spec(target_api)]
+trait Observe {
+    #[trusted]
+    #[ensures(result == 0)]
+    fn observe(&self) -> u32;
+}

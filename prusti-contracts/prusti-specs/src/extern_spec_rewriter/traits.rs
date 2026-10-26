@@ -5,7 +5,7 @@ use crate::{
     specifications::common::generate_struct_name_for_trait, ExternSpecKind,
 };
 use proc_macro2::TokenStream;
-use quote::{quote_spanned, ToTokens};
+use quote::quote_spanned;
 use syn::{parse_quote, spanned::Spanned, TypeParam};
 
 /// Generates a struct for a `syn::ItemTrait` which is used for checking
@@ -61,35 +61,44 @@ fn generate_new_struct(
 
     // Add a new type parameter to struct which represents an implementation of the trait
     let self_type_ident = syn::Ident::new("Prusti_T_Self", item_trait.span());
-    new_generics.push(syn::GenericParam::Type(parse_quote!(#self_type_ident)));
+    new_generics.push(syn::GenericParam::Type(
+        parse_quote!(#self_type_ident: ?Sized),
+    ));
 
     let parsed_generics = parse_trait_type_params(item_trait)?;
+    let trait_args = parsed_generics.iter().map(|param| &param.ident);
 
     let self_type_trait: syn::TypePath = parse_quote_spanned! {item_trait.span()=>
-        #trait_path :: <#(#parsed_generics),*>
+        #trait_path :: <#(#trait_args),*>
+    };
+
+    let supertraits = &item_trait.supertraits;
+    let self_bounds = if supertraits.is_empty() {
+        quote_spanned!(item_trait.span()=> #self_type_trait)
+    } else {
+        quote_spanned!(item_trait.span()=> #self_type_trait + #supertraits)
     };
 
     // Generic type parameters are added as generics to the struct
     new_generics.extend(parsed_generics.into_iter().map(syn::GenericParam::Type));
 
     // Add a where clause which restricts this self type parameter to the trait
-    let self_where_clause: syn::WhereClause = if let Some(where_clause) =
-        &item_trait.generics.where_clause
-    {
-        let mut where_clause = where_clause.clone();
-        where_clause.rewrite_self_type(&parse_quote! { #self_type_ident }, Some(&self_type_trait));
-        // remove trailing comma
-        let p = where_clause.predicates.pop().unwrap();
-        where_clause.predicates.push(p.into_value());
-        // merge into existing where clause
-        parse_quote! {
-            #where_clause, #self_type_ident: #self_type_trait
-        }
-    } else {
-        parse_quote! {
-            where #self_type_ident: #self_type_trait
-        }
-    };
+    let mut self_where_clause: syn::WhereClause =
+        if let Some(where_clause) = &item_trait.generics.where_clause {
+            let mut where_clause = where_clause.clone();
+            // remove trailing comma
+            let p = where_clause.predicates.pop().unwrap();
+            where_clause.predicates.push(p.into_value());
+            // merge into existing where clause
+            parse_quote! {
+                #where_clause, #self_type_ident: #self_bounds
+            }
+        } else {
+            parse_quote! {
+                where #self_type_ident: #self_bounds
+            }
+        };
+    self_where_clause.rewrite_self_type(&parse_quote! { #self_type_ident }, Some(&self_type_trait));
     new_struct.generics.where_clause = Some(self_where_clause);
 
     add_phantom_data_for_generic_params(&mut new_struct);
@@ -122,22 +131,12 @@ impl GeneratedStruct<'_> {
     fn generate_impl(&self) -> syn::Result<syn::ItemImpl> {
         // Generate impl block
         let struct_ident = &self.generated_struct.ident;
-        let generic_params = self
-            .generated_struct
-            .generics
-            .params
-            .clone()
-            .into_token_stream();
-        let where_clause = self
-            .generated_struct
-            .generics
-            .where_clause
-            .clone()
-            .into_token_stream();
+        let (impl_generics, type_generics, where_clause) =
+            self.generated_struct.generics.split_for_impl();
 
         let mut struct_impl: syn::ItemImpl = parse_quote_spanned! {self.item_trait.span()=>
             #[allow(non_camel_case_types)]
-            impl< #generic_params > #struct_ident < #generic_params > #where_clause {}
+            impl #impl_generics #struct_ident #type_generics #where_clause {}
         };
 
         // Add items to impl block
@@ -183,8 +182,22 @@ impl GeneratedStruct<'_> {
         };
         let self_type = syn::Type::Path(self_type_path);
 
+        // Rust permits `self` by value on an unsized trait, but calling such a
+        // method requires a sized receiver. The rewritten `_self` parameter
+        // needs this requirement explicitly to remain well-formed.
+        let mut trait_method = trait_method.clone();
+        if matches!(trait_method.sig.inputs.first(), Some(syn::FnArg::Receiver(receiver)) if receiver.reference.is_none())
+        {
+            trait_method
+                .sig
+                .generics
+                .make_where_clause()
+                .predicates
+                .push(parse_quote!(Self: Sized));
+        }
+
         generate_extern_spec_method_stub(
-            trait_method,
+            &trait_method,
             &self_type,
             Some(&self.self_type_trait),
             ExternSpecKind::Trait,

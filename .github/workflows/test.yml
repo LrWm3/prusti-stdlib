@@ -189,6 +189,8 @@ jobs:
       - name: Run cargo tests
         run: python x.py test -p prusti-tests
         #run: python x.py test --all
+      - name: Check cross-crate standard-library contracts
+        run: python x.py exec python3 scripts/test_stdlib_extern_spec.py
       - name: Check prusti-contracts
         run: |
           cd prusti-contracts/prusti-contracts-test/

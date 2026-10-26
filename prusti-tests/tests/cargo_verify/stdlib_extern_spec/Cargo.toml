@@ -1,0 +1,13 @@
+[package]
+name = "stdlib_extern_spec"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+prusti-contracts = { path = "../../../../prusti-contracts/prusti-contracts" }
+stdlib_specs = { path = "specs" }
+
+[workspace]
+members = ["specs"]
+

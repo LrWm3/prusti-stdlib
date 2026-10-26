@@ -1,0 +1,120 @@
+"""Run the cross-crate stdlib contract milestone, including diagnostic checks.
+
+From the repository root, after building Prusti:
+    ./x.py exec python3 scripts/test_stdlib_extern_spec.py
+"""
+
+import argparse
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import tempfile
+import time
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--release", action="store_true", help="use release Prusti binaries")
+    args = parser.parse_args()
+    root = Path(__file__).resolve().parent.parent
+    fixture = root / "prusti-tests/tests/cargo_verify/stdlib_extern_spec"
+    profile = "release" if args.release else "debug"
+    executable = "cargo-prusti.exe" if os.name == "nt" else "cargo-prusti"
+    prusti = root / "target" / profile / executable
+    if not prusti.is_file():
+        parser.error("build Prusti first with ./x.py build --all (and --release if selected)")
+
+    toolchain = re.search(r'channel\s*=\s*"([^"]+)"', (root / "rust-toolchain").read_text())[1]
+    log_dir = root / "target/stdlib-extern-spec-logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    results = []
+
+    def run(name, command, env, expected=None, location=None):
+        print("Running {} ...".format(name), flush=True)
+        start = time.monotonic()
+        try:
+            result = subprocess.run(
+                command, cwd=fixture, env=env, text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=300,
+            )
+            output = result.stdout
+            errors = re.findall(r"^error(?:\[[^\]]+\])?: (.+)$", output, re.MULTILINE)
+            # Cargo's final compilation summary is not a primary diagnostic.
+            errors = [e for e in errors if not e.startswith(("could not compile", "aborting due to"))]
+            if expected is None:
+                passed = result.returncode == 0 and not errors
+            else:
+                passed = (
+                    result.returncode == 101
+                    and errors == ["[Prusti: verification error] " + expected]
+                    and re.search(location, output) is not None
+                )
+            passed = passed and not re.search(
+                r"\[Prusti: (?:internal error|unsupported feature)\]|internal compiler error|"
+                r"thread .* panicked|Verification timed out", output,
+            )
+        except subprocess.TimeoutExpired as error:
+            output = error.stdout or b""
+            if isinstance(output, bytes):
+                output = output.decode(errors="replace")
+            output += "\nTest command exceeded 300 seconds.\n"
+            passed = False
+        elapsed = round(time.monotonic() - start, 2)
+        log_path = log_dir / (name + ".log")
+        log_path.write_text(output)
+        results.append({"case": name, "passed": passed, "seconds": elapsed})
+        print("{}: {} ({:.2f}s); {}".format(name, "PASS" if passed else "FAIL", elapsed, log_path), flush=True)
+        if not passed:
+            print(output, flush=True)
+        return passed
+
+    # A fresh target directory forces real verification on every invocation.
+    # Only artifacts created by this run are removed; logs remain for diagnosis.
+    with tempfile.TemporaryDirectory(prefix="stdlib-extern-spec-", dir=root / "target") as target:
+        env = os.environ.copy()
+        for key in list(env):
+            if key.startswith(("PRUSTI_", "DEFAULT_PRUSTI_")) or key in (
+                "RUSTC", "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS",
+            ):
+                del env[key]
+        env.update({
+            "RUSTUP_TOOLCHAIN": toolchain,
+            "CARGO_TARGET_DIR": target,
+            "CARGO_TERM_COLOR": "never",
+            "PRUSTI_VERIFY_MODE": "verify",
+            "PRUSTI_CHECK_OVERFLOWS": "true",
+            "PRUSTI_CHECK_PANICS": "true",
+            "PRUSTI_NO_VERIFY_DEPS": "true",
+            "PRUSTI_ENABLE_CACHE": "false",
+            "PRUSTI_EXTRA_VERIFIER_ARGS": "--timeout=90",
+            "PRUSTI_LOG_DIR": str(log_dir / "verifier"),
+        })
+        compiled = run("rust-check", ["cargo", "check", "--bins"], env)
+        if compiled:
+            run("runtime", ["cargo", "run", "--bin", "pass"], env)
+            sources = fixture / "src/bin"
+            for source in [sources / "pass.rs"] + sorted(p for p in sources.glob("*.rs") if p.stem != "pass"):
+                annotations = [
+                    (i, line.split("// expected-error:", 1)[1].strip())
+                    for i, line in enumerate(source.read_text().splitlines(), 1)
+                    if "// expected-error:" in line
+                ]
+                if source.stem == "pass":
+                    assert not annotations
+                    expected, location = None, None
+                else:
+                    assert len(annotations) == 1, "each negative case needs one expected-error annotation"
+                    line, expected = annotations[0]
+                    location = r"--> [^\n]*[/\\]" + re.escape(source.name) + ":" + str(line) + ":"
+                run(source.stem, [str(prusti), "--bin", source.stem], env, expected, location)
+
+    (log_dir / "results.json").write_text(json.dumps({"toolchain": toolchain, "cases": results}, indent=2) + "\n")
+    if not all(result["passed"] for result in results):
+        raise SystemExit(1)
+    print("All stdlib external-specification cases passed.")
+
+
+if __name__ == "__main__":
+    main()

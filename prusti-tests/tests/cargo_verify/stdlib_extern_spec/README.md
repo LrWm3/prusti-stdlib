@@ -1,10 +1,18 @@
 # Standard-library external-contract milestone
 
 This fixture checks real `Option::unwrap` and `std::mem::replace` calls using
-contracts exported by the separate `stdlib_specs` crate. The client contains no
-external declarations, trusted functions, or assumptions. The contracts are
-prototype specifications for this fixture; they are not installed as bundled
-standard-library contracts.
+contracts exported by the separate `stdlib_specs` crate. The positive clients
+contain no external declarations, trusted functions, or assumptions. The
+contracts are prototype specifications for this fixture; they are not installed
+as bundled standard-library contracts.
+
+The unannotated `target_api` crate supplies small traits for testing resolution
+and refinement independently of any collection model. Their external contracts
+live in `stdlib_specs`, so positive generic clients depend on exported metadata.
+`Identity` preserves an associated item or a shared borrow, `Relay<T>` preserves
+a trait type argument, and `Bounded` permits a result at most ten. Its `Zero`
+implementation has a stronger contract. Negative declaration probes deliberately
+place external specs in their client crate to check diagnostics.
 
 After following the repository setup instructions and building with
 `./x.py build --all`, run from the repository root:
@@ -28,8 +36,9 @@ checks. Verifier calls have a 90-second timeout; each test command has a
 | Case | Expected result |
 |---|---|
 | Ordinary Rust check | All client binaries compile without verification. |
-| Runtime positive client | Concrete assertions agree with the actual standard-library behavior. |
+| Runtime positive clients | Concrete assertions agree with the actual standard-library and target API behavior. |
 | `pass` | Generic unwrap and replacement postconditions, a non-`Copy` token with no equality traits, both replacement effects, and bounded arithmetic verify. |
+| `traits_pass` | Generic trait arguments, associated items (owned and shared-reference values), explicit borrow lifetimes, concrete external impl contracts, and a verified local refinement work across crates. |
 | `false_assert` | Reject the false assertion, even with both external contracts loaded. |
 | `overflow` | Reject addition without the necessary overflow precondition. |
 | `unwrap_none` | Reject unwrapping a known `None`. |
@@ -38,11 +47,23 @@ checks. Verifier calls have a 90-second timeout; each test command has a
 | `replace_wrong_return` | Reject a claim that replacement returns the new value. |
 | `replace_wrong_destination` | Reject a claim that the destination retains its old value. |
 | `pledge_wrong_post` | Reject an invalid shared-reference pledge, guarding against dropping expiry contracts when there are no indirect permissions. |
+| `trait_wrong_value` | Reject a wrong value returned through an associated-type trait method. |
+| `trait_generic_refinement` | Reject use of a concrete implementation's stronger postcondition in a generic caller. |
+| `refinement_stronger_pre` | Reject a local implementation that strengthens an imported trait's precondition. |
+| `refinement_weaker_post` | Reject a local implementation that weakens an imported trait's postcondition. |
+| `duplicate_local` | Reject two external declarations for the same target in one crate. |
+| `duplicate_imported` | Reject a local declaration that duplicates an imported contract. |
+| `signature_generics` | Reject a monomorphic declaration for a generic target. |
+| `signature_specialized` | Reject specialization of a target's type parameter while retaining the same parameter count. |
+| `signature_coercion` | Reject a parameter type mismatch hidden by a mutable-to-shared reference coercion. |
+| `signature_return_coercion` | Reject a return type mismatch hidden by that coercion. |
 
-Each negative case has one `expected-error` annotation. Passing requires the
-expected verification diagnostic at that source line. A compiler error, internal
-error, unsupported feature, timeout, unexpected additional diagnostic, or
-successful verification fails the test. Logs and a timing/result summary remain
+Each negative case has one `expected-error` (verification) or
+`expected-incorrect` (invalid specification) annotation. Passing requires the
+exact diagnostic at that source line. Signature cases also require an
+`expected-note` explaining the mismatch. Unexpected compiler errors, internal
+errors, unsupported features, timeouts, additional diagnostics, and successful
+verification fail negative tests. Logs and a timing/result summary remain
 in `target/stdlib-extern-spec-logs/` after the temporary build directory is removed.
 
 The initial experiment exposed a permission-encoding bug: generic replacement
@@ -50,6 +71,14 @@ returned the destination permission inside `true --* P`, then its postcondition
 tried to read the destination without that permission. The encoder now returns
 those permissions directly when the wand's left side has no resources and there
 are no pledges. Wands carrying actual resources or expiry conditions remain.
+
+The resolution probes exposed another gap: a generated Rust call can compile
+even when the external declaration changes the target signature through a
+coercion. The resolver now compares normalized input and output types. It also
+requires type and const arguments to remain unchanged and in declaration order,
+preventing a specialized declaration from becoming an unconditional contract.
+This comparison erases regions; it does not establish equivalence of lifetime
+bounds or trait constraints between a declaration and its target.
 
 These checks establish the small external-contract milestone, not unrestricted
 collection or reference-containing generic support. Review trusted contracts

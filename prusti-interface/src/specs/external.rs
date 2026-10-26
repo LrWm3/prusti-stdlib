@@ -35,6 +35,14 @@ pub enum ExternSpecResolverError {
     /// Occurs when the extern spec is invalid due to mismatched type params.
     InvalidGenerics(isize, DefId, Span),
 
+    /// A generated call can typecheck through coercions even when the external
+    /// declaration has different parameter or return types from its target.
+    InvalidSignature(DefId, Span),
+
+    /// Equal generic counts do not allow specializing a target parameter, for
+    /// example declaring an Option<T> method only for Option<Vec<T>>.
+    InvalidSubstitutions(DefId, Span),
+
     /// Occurs when a trait impl extern spec resolves to the trait method.
     ResolvedToDefault(DefId, Span),
 }
@@ -164,7 +172,7 @@ impl<'tcx> ExternSpecResolver<'tcx> {
             {
                 // TODO: this resolution happens here but also in SpecCollector
                 // maybe it can be done once only?
-                let (resolved_def_id, _) =
+                let (resolved_def_id, resolved_substs) =
                     self.env_query
                         .resolve_method_call(current_def_id, target_def_id, substs);
                 if matches!(extern_spec_kind, ExternSpecKind::TraitImpl)
@@ -197,6 +205,42 @@ impl<'tcx> ExternSpecResolver<'tcx> {
                             resolved_def_id,
                             span,
                         ));
+                    } else if !resolved_substs.non_erasable_generics().eq(self
+                        .env_query
+                        .identity_substs(current_def_id)
+                        .non_erasable_generics())
+                    {
+                        self.errors
+                            .push(ExternSpecResolverError::InvalidSubstitutions(
+                                resolved_def_id,
+                                span,
+                            ));
+                    } else {
+                        let tcx = self.env_query.tcx();
+                        let target_sig = self.env_query.get_fn_sig_resolved(
+                            resolved_def_id,
+                            resolved_substs,
+                            current_def_id,
+                        );
+                        let spec_sig = self.env_query.get_fn_sig_resolved(
+                            current_def_id,
+                            self.env_query.identity_substs(current_def_id),
+                            current_def_id,
+                        );
+                        // The stub only checks that the target can be called.
+                        // Coercions such as &mut T to &T must not change the
+                        // types to which its contract will later be applied.
+                        // Normalize associated types and erase regions. This
+                        // checks type structure, not equivalence of lifetime
+                        // bounds; Rust also checks the generated call itself.
+                        let target_sig = tcx.instantiate_bound_regions_with_erased(target_sig);
+                        let spec_sig = tcx.instantiate_bound_regions_with_erased(spec_sig);
+                        if target_sig.inputs_and_output != spec_sig.inputs_and_output {
+                            self.errors.push(ExternSpecResolverError::InvalidSignature(
+                                resolved_def_id,
+                                span,
+                            ));
+                        }
                     }
                 }
             }
@@ -273,6 +317,30 @@ impl<'tcx> ExternSpecResolver<'tcx> {
                         MultiSpan::from_span(*span),
                     )
                     .add_note(err_note, None)
+                    .emit(env_diagnostic);
+                }
+                ExternSpecResolverError::InvalidSignature(def_id, span) => {
+                    let function_name = self.env_name.get_item_name(*def_id);
+                    PrustiError::incorrect(
+                        "Invalid external specification",
+                        MultiSpan::from_span(*span),
+                    )
+                    .add_note(
+                        format!("Parameter and return types must match method '{function_name}' exactly; coercions in the generated call are not supported."),
+                        None,
+                    )
+                    .emit(env_diagnostic);
+                }
+                ExternSpecResolverError::InvalidSubstitutions(def_id, span) => {
+                    let function_name = self.env_name.get_item_name(*def_id);
+                    PrustiError::incorrect(
+                        "Invalid external specification",
+                        MultiSpan::from_span(*span),
+                    )
+                    .add_note(
+                        format!("Type and const parameters must be forwarded unchanged and in declaration order to method '{function_name}'."),
+                        None,
+                    )
                     .emit(env_diagnostic);
                 }
             }

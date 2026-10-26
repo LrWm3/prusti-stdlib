@@ -14,3 +14,37 @@ impl<T> Option<T> {
 #[ensures(*dest === src)]
 #[ensures(result === *old(&*dest))]
 fn replace<T>(dest: &mut T, src: T) -> T;
+
+#[extern_spec(target_api)]
+trait Identity {
+    #[trusted]
+    #[ensures(result === value)]
+    fn identity(value: Self::Item) -> Self::Item;
+
+    #[trusted]
+    #[ensures(*result === *value)]
+    fn borrow<'a>(value: &'a Self::Item) -> &'a Self::Item;
+}
+
+#[extern_spec(target_api)]
+trait Relay<T> {
+    #[trusted]
+    #[ensures(result === value)]
+    fn relay(value: T) -> T;
+}
+
+#[extern_spec(target_api)]
+trait Bounded {
+    #[trusted]
+    #[requires(value <= 10)]
+    #[ensures(result <= 10)]
+    fn bounded(value: u32) -> u32;
+}
+
+#[extern_spec]
+impl target_api::Bounded for target_api::Zero {
+    #[trusted]
+    #[requires(value <= 10)]
+    #[ensures(result == 0)]
+    fn bounded(value: u32) -> u32;
+}

@@ -102,9 +102,40 @@ encoder. It is an existing diagnostic limitation, not a completed negative-test
 gate.
 
 This completes the small unwrap/replace milestone and the local P1-A runner.
-The broader P1-B trait, signature, duplicate, and refinement audit remains open.
+The P1-B audit has since been extended as recorded below.
 The first major collection milestone M1 has not been attempted. These prototype
 contracts live in the fixture crate and have not been added to bundled contracts.
+
+### External resolution and generic-trait probes
+
+**Verified locally on 2026-10-26:** the expanded focused suite has 23 checks,
+including ordinary Rust compilation, execution of both positive clients, and
+positive/negative verification with overflow checking enabled. The unannotated
+`target_api` fixture supplies generic traits and implementations; its contracts
+are exported by `stdlib_specs` to a third crate. The probes cover trait type
+arguments, owned non-`Copy` associated items, shared-reference items, explicit
+borrow lifetimes, concrete implementation contracts, and local refinement of
+an imported trait contract.
+
+Negative cases reject duplicate local and imported declarations, mismatched
+signatures, stronger implementation preconditions, weaker implementation
+postconditions, and use of a concrete refinement in an unconstrained generic
+caller. Diagnostics must match both the expected message and source line;
+signature failures also require the explanatory note.
+
+The signature probe initially **failed**: a declaration taking `&mut u32` was
+accepted for a target taking `&u32`, because Rust coerced the generated call.
+The [external-spec resolver](prusti-interface/src/specs/external.rs) now compares
+normalized input/output types and checks that type and const parameters are
+forwarded unchanged, preventing generic specialization from silently producing
+an unconditional contract. The existing generic trait-implementation,
+module-path, and shared-reference equality regression cases also pass.
+
+This does not complete P1-B. Equivalence of stronger trait constraints and
+lifetime bounds remains **untested**; signature comparison erases regions.
+The prototype stdlib contracts still need integration into the bundled modules.
+These small associated-type probes do not establish an iterator model or
+reference-containing collection snapshots. M1 remains **untested**.
 
 ## Phase 1 — External-specification support and unbounded Vec
 
@@ -457,15 +488,16 @@ must name the supported operations, element/key domain, and completed proof gate
 
 ## Dependency and support matrix
 
-Baseline inspection, the local P1-A runner, and the unwrap/replace subset of P1-B
-are complete. The remaining infrastructure probes and all collection milestones
-remain open; CI wiring has been added but a hosted CI run is not claimed.
+Baseline inspection, the local P1-A runner, and the focused unwrap/replace,
+generic-trait, and diagnostic probes of P1-B are complete. Bundled integration,
+bound-equivalence checks, and all collection milestones remain open; CI wiring
+has been added but a hosted CI run is not claimed.
 
 | Gate or capability | Depends on | Expected Prusti work | Baseline status / completion criterion |
 |---|---|---|---|
 | Baseline inventory | Checkout `87487f774` | None | Inspection complete; no new proofs claimed. |
 | P1-A: reproducible test execution | Setup, pinned submodules/toolchain | Focused harness and CI wiring | Verified locally; positive, negative, overflow, and cross-crate execution demonstrated. |
-| P1-B: external-contract foundation | P1-A | Targeted rewriting/resolution/substitution/metadata fixes | Unwrap/replace subset verified after a permission fix; remaining trait, signature, duplicate, and refinement probes untested. |
+| P1-B: external-contract foundation | P1-A | Targeted rewriting/resolution/substitution/metadata fixes | Unwrap/replace and focused generic-trait, signature, duplicate, and refinement probes verified; bundled integration and trait/lifetime-bound equivalence remain open. |
 | P1-C: sequence observations | P1-B | Model connection, explicit triggers, required generic snapshots | Untested; generic sequence and arbitrary-index proofs pass. |
 | **M1: unbounded functional Vec** | P1-A through P1-D | Minimal contracts plus reproduced blockers | Untested; symbolic-length and non-`Copy` functional proofs, with negative cases. |
 | P2-A: Vec and shared slices | M1 | Contracts, sequence lemmas, any slice encoding fixes | Untested; mutation, ordering, and boundary cases pass. |

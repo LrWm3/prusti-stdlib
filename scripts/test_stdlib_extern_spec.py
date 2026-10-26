@@ -31,7 +31,7 @@ def main():
     log_dir.mkdir(parents=True, exist_ok=True)
     results = []
 
-    def run(name, command, env, expected=None, location=None):
+    def run(name, command, env, expected=None, location=None, notes=()):
         print("Running {} ...".format(name), flush=True)
         start = time.monotonic()
         try:
@@ -48,8 +48,9 @@ def main():
             else:
                 passed = (
                     result.returncode == 101
-                    and errors == ["[Prusti: verification error] " + expected]
+                    and errors == [expected]
                     and re.search(location, output) is not None
+                    and all(re.search(r"^\s*(?:= )?note: .*" + re.escape(note), output, re.MULTILINE) for note in notes)
                 )
             passed = passed and not re.search(
                 r"\[Prusti: (?:internal error|unsupported feature)\]|internal compiler error|"
@@ -93,22 +94,27 @@ def main():
         })
         compiled = run("rust-check", ["cargo", "check", "--bins"], env)
         if compiled:
-            run("runtime", ["cargo", "run", "--bin", "pass"], env)
             sources = fixture / "src/bin"
-            for source in [sources / "pass.rs"] + sorted(p for p in sources.glob("*.rs") if p.stem != "pass"):
+            positive = sorted(p for p in sources.glob("*.rs") if p.stem == "pass" or p.stem.endswith("_pass"))
+            for source in positive:
+                run("runtime-" + source.stem, ["cargo", "run", "--bin", source.stem], env)
+            for source in positive + sorted(set(sources.glob("*.rs")) - set(positive)):
                 annotations = [
-                    (i, line.split("// expected-error:", 1)[1].strip())
+                    (i, match[1], match[2])
                     for i, line in enumerate(source.read_text().splitlines(), 1)
-                    if "// expected-error:" in line
+                    if (match := re.search(r"// expected-(error|incorrect): (.+)", line))
                 ]
-                if source.stem == "pass":
+                notes = re.findall(r"// expected-note: (.+)", source.read_text())
+                if source in positive:
                     assert not annotations
                     expected, location = None, None
                 else:
                     assert len(annotations) == 1, "each negative case needs one expected-error annotation"
-                    line, expected = annotations[0]
+                    line, kind, message = annotations[0]
+                    category = "verification error" if kind == "error" else "invalid specification"
+                    expected = "[Prusti: {}] {}".format(category, message)
                     location = r"--> [^\n]*[/\\]" + re.escape(source.name) + ":" + str(line) + ":"
-                run(source.stem, [str(prusti), "--bin", source.stem], env, expected, location)
+                run(source.stem, [str(prusti), "--bin", source.stem], env, expected, location, notes)
 
     (log_dir / "results.json").write_text(json.dumps({"toolchain": toolchain, "cases": results}, indent=2) + "\n")
     if not all(result["passed"] for result in results):

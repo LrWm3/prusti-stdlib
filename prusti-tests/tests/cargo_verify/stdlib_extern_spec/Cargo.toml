@@ -7,7 +7,7 @@ publish = false
 [dependencies]
 prusti-contracts = { path = "../../../../prusti-contracts/prusti-contracts" }
 stdlib_specs = { path = "specs" }
+target_api = { path = "target_api" }
 
 [workspace]
-members = ["specs"]
-
+members = ["specs", "target_api"]

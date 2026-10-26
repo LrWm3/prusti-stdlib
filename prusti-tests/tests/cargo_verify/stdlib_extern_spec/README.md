@@ -57,6 +57,10 @@ checks. Verifier calls have a 90-second timeout; each test command has a
 | `signature_specialized` | Reject specialization of a target's type parameter while retaining the same parameter count. |
 | `signature_coercion` | Reject a parameter type mismatch hidden by a mutable-to-shared reference coercion. |
 | `signature_return_coercion` | Reject a return type mismatch hidden by that coercion. |
+| `bounds_stronger_trait` | Reject an added `T: Copy` requirement on `mem::replace`. |
+| `bounds_stronger_associated` | Reject an added `Copy` requirement on a trait's associated item. |
+| `bounds_stronger_supertrait` | Reject an added `Copy` supertrait on an externally specified trait. |
+| `bounds_stronger_lifetime` | Reject an added `T: 'static` requirement on `mem::replace`. |
 
 Each negative case has one `expected-error` (verification) or
 `expected-incorrect` (invalid specification) annotation. Passing requires the
@@ -77,8 +81,17 @@ even when the external declaration changes the target signature through a
 coercion. The resolver now compares normalized input and output types. It also
 requires type and const arguments to remain unchanged and in declaration order,
 preventing a specialized declaration from becoming an unconditional contract.
-This comparison erases regions; it does not establish equivalence of lifetime
-bounds or trait constraints between a declaration and its target.
+The resolver also checks declaration bounds against the target environment,
+rejecting added requirements unless Rust can establish them from that
+environment. The positive trait client covers a redundant `Clone` bound implied
+by `Copy`, an existing `'static` bound, bounded trait arguments, a generic
+`?Sized` caller, and by-value receivers. The trait rewriter preserves supertraits
+and permits unsized `Self`, adding `Sized` only for a by-value receiver.
+
+The predicate check is conservative and can reject valid implications it cannot
+establish, particularly complex outlives relationships. Signature comparison
+still erases regions; it does not establish general equivalence of lifetime
+relationships between a declaration and its target.
 
 These checks establish the small external-contract milestone, not unrestricted
 collection or reference-containing generic support. Review trusted contracts

@@ -29,6 +29,14 @@ impl<T> std::option::Option<T> {
 
 Prusti does not verify the functions of an external specification against their implementation, so every function in an external specification must be marked [`#[trusted]`](trusted.md). It is possible to specify multiple `#[extern_spec]` implementations for the same type, but it is an error to externally specify the same function multiple times.
 
+An external declaration must preserve the target's parameter and return types
+and forward its type and const parameters unchanged. It must not add
+unconditional bounds that the target does not guarantee: for example, a
+declaration of `mem::replace` cannot add `T: Copy`. Bounds already implied by the
+target, such as `Clone` when the target requires `Copy`, are accepted. Prusti
+reports an invalid specification if it cannot establish a required bound; this
+check can conservatively reject complex outlives implications.
+
 The `extern_spec` attribute accepts an optional argument to provide the module path to the function being specified. For example, to specify `std::mem::swap`, the argument is `std::mem`:
 
 ```rust,noplaypen,ignore

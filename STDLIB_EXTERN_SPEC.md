@@ -108,7 +108,7 @@ contracts live in the fixture crate and have not been added to bundled contracts
 
 ### External resolution and generic-trait probes
 
-**Verified locally on 2026-10-26:** the expanded focused suite has 23 checks,
+**Verified locally on 2026-10-26:** the expanded focused suite has 27 checks,
 including ordinary Rust compilation, execution of both positive clients, and
 positive/negative verification with overflow checking enabled. The unannotated
 `target_api` fixture supplies generic traits and implementations; its contracts
@@ -131,8 +131,26 @@ forwarded unchanged, preventing generic specialization from silently producing
 an unconditional contract. The existing generic trait-implementation,
 module-path, and shared-reference equality regression cases also pass.
 
-This does not complete P1-B. Equivalence of stronger trait constraints and
-lifetime bounds remains **untested**; signature comparison erases regions.
+The bound audit reproduced another **failing** case: an external declaration
+could add `T: Copy` to `mem::replace`, whose target has no such requirement.
+The resolver now checks each declaration bound against the instantiated target
+environment. The suite rejects added `Copy`, associated-type, supertrait, and
+`T: 'static` requirements. It accepts a redundant `Clone` bound implied by
+`Copy`, an existing `'static` requirement, and a trait with a bounded type
+parameter. Positive clients also exercise generic `?Sized` callers and by-value
+receivers. All 33 `prusti-specs` unit tests pass.
+
+This check exposed an implicit `Self: Sized` requirement in trait-spec rewriting.
+The rewriter now permits unsized receivers, keeps type parameter bounds out of
+type arguments, and preserves declared supertraits. A by-value `self` still
+requires `Sized` at a Rust call. The bundled `PartialEq` declaration now matches
+the pinned Rust API's `PointeeSized` bounds on both `Self` and `Rhs`.
+
+This does not complete P1-B. General equivalence of lifetime relationships in
+signatures remains **untested**; signature comparison erases regions. The bound
+check is conservative: a requirement must occur in the target environment or
+be established by Rust's predicate checker (apart from call-implied `Sized`).
+It may reject valid implications involving more complex outlives constraints.
 The prototype stdlib contracts still need integration into the bundled modules.
 These small associated-type probes do not establish an iterator model or
 reference-containing collection snapshots. M1 remains **untested**.
@@ -489,15 +507,15 @@ must name the supported operations, element/key domain, and completed proof gate
 ## Dependency and support matrix
 
 Baseline inspection, the local P1-A runner, and the focused unwrap/replace,
-generic-trait, and diagnostic probes of P1-B are complete. Bundled integration,
-bound-equivalence checks, and all collection milestones remain open; CI wiring
-has been added but a hosted CI run is not claimed.
+generic-trait, explicit-bound, and diagnostic probes of P1-B are complete.
+Bundled integration, general lifetime matching, and all collection milestones
+remain open; CI wiring has been added but a hosted CI run is not claimed.
 
 | Gate or capability | Depends on | Expected Prusti work | Baseline status / completion criterion |
 |---|---|---|---|
 | Baseline inventory | Checkout `87487f774` | None | Inspection complete; no new proofs claimed. |
 | P1-A: reproducible test execution | Setup, pinned submodules/toolchain | Focused harness and CI wiring | Verified locally; positive, negative, overflow, and cross-crate execution demonstrated. |
-| P1-B: external-contract foundation | P1-A | Targeted rewriting/resolution/substitution/metadata fixes | Unwrap/replace and focused generic-trait, signature, duplicate, and refinement probes verified; bundled integration and trait/lifetime-bound equivalence remain open. |
+| P1-B: external-contract foundation | P1-A | Targeted rewriting/resolution/substitution/metadata fixes | Unwrap/replace and focused generic-trait, explicit-bound, signature, duplicate, and refinement probes verified; bundled integration and general lifetime matching remain open. |
 | P1-C: sequence observations | P1-B | Model connection, explicit triggers, required generic snapshots | Untested; generic sequence and arbitrary-index proofs pass. |
 | **M1: unbounded functional Vec** | P1-A through P1-D | Minimal contracts plus reproduced blockers | Untested; symbolic-length and non-`Copy` functional proofs, with negative cases. |
 | P2-A: Vec and shared slices | M1 | Contracts, sequence lemmas, any slice encoding fixes | Untested; mutation, ordering, and boundary cases pass. |

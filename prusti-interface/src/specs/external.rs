@@ -11,7 +11,10 @@ use crate::{
     environment::{EnvDiagnostic, EnvName, EnvQuery, Environment},
     PrustiError,
 };
-use prusti_rustc_interface::{data_structures::fx::FxHashMap, middle::ty::GenericArgsRef};
+use prusti_rustc_interface::{
+    data_structures::fx::FxHashMap,
+    middle::ty::{self, GenericArgsRef},
+};
 use prusti_specs::ExternSpecKind;
 use std::cmp::{Eq, PartialEq};
 
@@ -42,6 +45,10 @@ pub enum ExternSpecResolverError {
     /// Equal generic counts do not allow specializing a target parameter, for
     /// example declaring an Option<T> method only for Option<Vec<T>>.
     InvalidSubstitutions(DefId, Span),
+
+    /// The declaration must not assume bounds unavailable to callers of the
+    /// target. These specifications are unconditional, not specializations.
+    InvalidBound(DefId, String, Span),
 
     /// Occurs when a trait impl extern spec resolves to the trait method.
     ResolvedToDefault(DefId, Span),
@@ -186,8 +193,6 @@ impl<'tcx> ExternSpecResolver<'tcx> {
                 } else {
                     // A call to the extern spec must be possible with the same exact
                     // type substitutions applied.
-                    // TODO: there is more that we could check, e.g. that trait
-                    // constraints are the same (otherwise specs might not make sense)
                     let (resolved_gens, current_gens) = (
                         self.env_query
                             .identity_substs(resolved_def_id)
@@ -217,11 +222,46 @@ impl<'tcx> ExternSpecResolver<'tcx> {
                             ));
                     } else {
                         let tcx = self.env_query.tcx();
+                        let target_env = ty::EarlyBinder::bind(tcx, tcx.param_env(resolved_def_id))
+                            .instantiate(tcx, resolved_substs)
+                            .skip_normalization();
                         let target_sig = self.env_query.get_fn_sig_resolved(
                             resolved_def_id,
                             resolved_substs,
                             current_def_id,
                         );
+                        for bound in tcx
+                            .clauses_of(current_def_id)
+                            .instantiate_identity(tcx)
+                            .clauses
+                        {
+                            let bound = bound.skip_normalization();
+                            // A by-value receiver is legal in an unsized trait
+                            // declaration, but Rust requires Sized at a call.
+                            let sized_value = match bound.kind().skip_binder() {
+                                ty::ClauseKind::Trait(predicate) => {
+                                    Some(predicate.def_id()) == tcx.lang_items().sized_trait()
+                                        && target_sig
+                                            .skip_binder()
+                                            .inputs()
+                                            .contains(&predicate.self_ty())
+                                }
+                                _ => false,
+                            };
+                            if !target_env.caller_bounds().contains(&bound)
+                                && !sized_value
+                                && !self
+                                    .env_query
+                                    .evaluate_predicate(bound.as_predicate(), target_env)
+                            {
+                                self.errors.push(ExternSpecResolverError::InvalidBound(
+                                    resolved_def_id,
+                                    bound.to_string(),
+                                    span,
+                                ));
+                                break;
+                            }
+                        }
                         let spec_sig = self.env_query.get_fn_sig_resolved(
                             current_def_id,
                             self.env_query.identity_substs(current_def_id),
@@ -232,7 +272,8 @@ impl<'tcx> ExternSpecResolver<'tcx> {
                         // types to which its contract will later be applied.
                         // Normalize associated types and erase regions. This
                         // checks type structure, not equivalence of lifetime
-                        // bounds; Rust also checks the generated call itself.
+                        // relationships in the signatures. Explicit bounds
+                        // are checked against the target's environment above.
                         let target_sig = tcx.instantiate_bound_regions_with_erased(target_sig);
                         let spec_sig = tcx.instantiate_bound_regions_with_erased(spec_sig);
                         if target_sig.inputs_and_output != spec_sig.inputs_and_output {
@@ -339,6 +380,18 @@ impl<'tcx> ExternSpecResolver<'tcx> {
                     )
                     .add_note(
                         format!("Type and const parameters must be forwarded unchanged and in declaration order to method '{function_name}'."),
+                        None,
+                    )
+                    .emit(env_diagnostic);
+                }
+                ExternSpecResolverError::InvalidBound(def_id, bound, span) => {
+                    let function_name = self.env_name.get_item_name(*def_id);
+                    PrustiError::incorrect(
+                        "Invalid external specification",
+                        MultiSpan::from_span(*span),
+                    )
+                    .add_note(
+                        format!("External specification requires a bound not guaranteed by the target '{function_name}': {bound}"),
                         None,
                     )
                     .emit(env_diagnostic);

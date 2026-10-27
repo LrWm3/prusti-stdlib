@@ -88,17 +88,25 @@ pub fn for_iterator<I>() -> I {
 /// `body_invariant!`. At a body invariant, `next` has already yielded the
 /// current item. A loop label may precede `for`, as in
 /// `prusti_for!(iter, 'outer: for item in values => { ... })`.
+/// An optional `init { ... }` block before the body runs once after iterator
+/// construction and can capture its initial state for the loop invariant.
 #[macro_export]
 macro_rules! prusti_for {
-    ($iter:ident, $( $label:lifetime : )? for $pattern:pat in $values:expr => $body:block) => {
+    ($iter:ident, $( $label:lifetime : )? for $pattern:pat in $values:expr => init { $($init:tt)* } $body:block) => {
         match ::core::iter::IntoIterator::into_iter($values) {
-            mut $iter => $( $label: )? loop {
-                match ::core::iter::Iterator::next(&mut $iter) {
-                    ::core::option::Option::Some($pattern) => $body,
-                    ::core::option::Option::None => break,
+            mut $iter => {
+                $($init)*
+                $( $label: )? loop {
+                    match ::core::iter::Iterator::next(&mut $iter) {
+                        ::core::option::Option::Some($pattern) => $body,
+                        ::core::option::Option::None => break,
+                    }
                 }
             },
         }
+    };
+    ($iter:ident, $( $label:lifetime : )? for $pattern:pat in $values:expr => $body:block) => {
+        $crate::prusti_for!($iter, $( $label: )? for $pattern in $values => init {} $body)
     };
 }
 

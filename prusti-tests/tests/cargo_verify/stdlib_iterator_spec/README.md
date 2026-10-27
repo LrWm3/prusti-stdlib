@@ -30,6 +30,8 @@ first source reference. Clients verify non-`Copy` elements, source values, and
 exhaustion; the `no_std` library also checks each yielded reference in a
 symbolic traversal. The shared-slice `IntoIterator` contract preserves the
 same source relationships, and `prusti_for!` verifies a symbolic shared count.
+With its optional initializer capturing the initial iterator sequence, the
+shared traversal also checks each yielded reference against its source index.
 Negative probes reject incorrect references, state, and loop invariants.
 
 Ordinary `for` loops over an owned `Vec` can name their compiler-generated
@@ -59,6 +61,19 @@ The opt-in macro exposes the iterator directly:
 prusti_for!(iterator, for item in values => {
     body_invariant!(Int::from(seen) + iterator.remaining().len() + Int::from(1)
         == Int::from(expected));
+    // Process item, then advance seen.
+});
+```
+
+When a proof needs the initial iterator sequence, put a ghost snapshot in the
+initializer. It runs once, after conversion and before the first `next`:
+
+```rust
+prusti_for!(iterator, for item in values => init {
+    let before = ghost! { iterator.remaining() };
+} {
+    body_invariant!(seen < expected);
+    body_invariant!(iterator.remaining() == (*before)[seen + 1..]);
     // Process item, then advance seen.
 });
 ```

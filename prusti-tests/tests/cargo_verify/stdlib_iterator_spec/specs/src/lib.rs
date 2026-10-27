@@ -118,3 +118,22 @@ pub fn count_shared_for<T>(values: &[T], expected: usize) -> usize {
     });
     count
 }
+
+#[requires(expected == values.len())]
+#[ensures(result == expected)]
+pub fn count_shared_for_source<T>(values: &[T], expected: usize) -> usize {
+    let mut count = 0usize;
+    prusti_for!(iterator, for value in values => init {
+        let before = ghost! { iterator.remaining() };
+    } {
+        body_invariant!(expected == old(expected));
+        body_invariant!(count < expected);
+        body_invariant!((*before).len() == Int::from(expected));
+        body_invariant!(iterator.remaining() == (*before)[count + 1..]);
+        body_invariant!(forall(|i: usize| i < expected ==> *(*before)[i] === &values[i]));
+        body_invariant!(value === &values[count]);
+        prusti_assert!(value === &values[count]);
+        count += 1;
+    });
+    count
+}

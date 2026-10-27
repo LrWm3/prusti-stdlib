@@ -504,7 +504,9 @@ Rust implementation was reviewed for constructor state and forward advancement.
 Clients can also call `slice::Iter::next` directly when its model evidence is
 valid for every lifetime. The trusted `IntoIterator` contract for `&[T]`
 connects the resulting iterator to the same source references; a cross-crate
-`prusti_for!` client verifies symbolic shared counting. The pinned Rust
+`prusti_for!` client verifies symbolic shared counting. Its initializer can
+capture the original iterator sequence, enabling a traversal that verifies
+each yielded reference against its source position. The pinned Rust
 implementation delegates this conversion to `slice::iter`.
 
 Selection checks a region-bearing bound by independently quantifying its
@@ -904,7 +906,7 @@ claimed.
 | **M1: unbounded functional Vec** | P1-A through P1-D | Minimal contracts plus reproduced blockers | Verified locally: 21 Vec checks, symbolic append/pop/round-trip and whole-prefix loop proofs for owned non-`Copy` elements, cross-crate clients, and negative cases. |
 | P2-A: Vec and shared slices | M1 | Contracts, sequence lemmas, any slice encoding fixes | Verified locally: 27 checks cover symbolic mutations, shared lookup/ranges, splits, swaps, boundaries, ordering, and framing. |
 | P2-B: mutable collection views | P2-A, two-state snapshots | Pledges, expiry, generic reference framing | Verified locally: 74 checks cover slice and Vec views, lookup, indexing, splits, reborrowing, inclusive range state, and negative framing cases. |
-| P2-C: shared and owned iterators | Sequence model, generic trait probes | Opt-in models, refinement, lifetimes, loop support | In progress: owned and shared traversal, symbolic loops, `prusti_for!`, and ordinary owned `for` loops pass; some lifetime evidence remains open. |
+| P2-C: shared and owned iterators | Sequence model, generic trait probes | Opt-in models, refinement, lifetimes, loop support | In progress: 54 checks cover owned and shared traversal, symbolic loops, `prusti_for!`, and ordinary owned `for` loops; some lifetime evidence remains open. |
 | **M2: Vec/slice phase complete** | P2-A, P2-B, P2-C | Integration and cross-crate validation | Untested; all required gates pass. |
 | P3-A: explicit key models | M2, logical Map/Set | Key-model interfaces and conditional contracts | Untested; equality/hash/model evidence is enforced. |
 | **M3: HashMap/HashSet phase complete** | P3-A, P3-B, P2-B expiry support | Map/set contracts and mutable lookup | Untested; key, cardinality, framing, and mutable-value cases pass. |

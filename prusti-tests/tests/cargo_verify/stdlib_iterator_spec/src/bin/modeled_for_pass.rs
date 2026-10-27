@@ -13,11 +13,15 @@ fn generic_count<T>(values: Vec<T>) {
 #[trusted]
 fn runtime_behavior() {
     let mut evaluations = 0;
+    let mut initializations = 0;
     let mut observed = Vec::new();
     prusti_for!(iterator, 'outer: for value in {
         evaluations += 1;
         [Token(1), Token(2), Token(3), Token(4)]
-    } => {
+    } => init {
+        initializations += 1;
+        assert_eq!(iterator.len(), 4);
+    } {
         if value.0 == 2 {
             continue 'outer;
         }
@@ -27,6 +31,7 @@ fn runtime_behavior() {
         observed.push(value.0);
     });
     assert_eq!(evaluations, 1);
+    assert_eq!(initializations, 1);
     assert_eq!(observed, [1, 3]);
 
     let mut count = 0;

@@ -28,6 +28,33 @@ pub fn first_shared<'a, T>(values: &'a [T]) -> &'a T {
     advance(&mut iterator).unwrap()
 }
 
+#[requires(expected == values.len())]
+#[ensures(result == expected)]
+pub fn count_shared<T>(values: &[T], expected: usize) -> usize {
+    let mut iterator = values.iter();
+    let before = ghost! { iterator.remaining() };
+    let source = ghost! { values };
+    let mut count = 0usize;
+    loop {
+        body_invariant!(expected == old(expected));
+        body_invariant!(count <= expected);
+        body_invariant!((*before).len() == Int::from(expected));
+        body_invariant!(iterator.remaining() == (*before)[count..]);
+        body_invariant!(forall(|i: usize| i < expected ==> *(*before)[i] === &(*source)[i]));
+        match advance(&mut iterator) {
+            Some(value) => {
+                prusti_assert!(value === &(*source)[count]);
+                count += 1;
+            }
+            None => {
+                prusti_assert!(count == expected);
+                break;
+            }
+        }
+    }
+    count
+}
+
 // The explicit length keeps the pre-move value available as a loop invariant.
 #[requires(expected == values.len())]
 #[ensures(result == expected)]

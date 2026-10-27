@@ -22,7 +22,8 @@ The same capability models `slice::Iter`: its constructor records references
 to the source elements, and the verified generic `advance` wrapper exposes the
 head and tail. A cross-crate `first_shared` wrapper returns the first source
 reference. Clients verify non-`Copy` elements, source values, and exhaustion;
-negative probes reject incorrect references and state.
+the `no_std` library also checks each yielded reference in a symbolic traversal.
+Negative probes reject incorrect references, state, and loop invariants.
 
 Run after building Prusti:
 
@@ -38,17 +39,17 @@ reference-containing collection snapshots are outside the tested domain. The
 borrowed-item probe starts with an existing iterator; it does not establish a
 model for constructing a vector of references.
 
-Direct calls where selecting the capability requires region-bearing evidence,
-symbolic shared traversal loops, and symbolic `for`-loop proofs remain open;
-this does not complete P2-C or M2.
+Direct calls where selecting the capability requires region-bearing evidence
+and symbolic `for`-loop proofs remain open; this does not complete P2-C or M2.
 
 The `known_limits/for_count` probe reproduces the current `for`-loop gap: a
 symbolic count does not preserve the relation between the hidden iterator and
 the number of items seen, so the increment may overflow. `borrowed_items` and
 `shared_direct` reproduce conservative rejection of the iterator contract when
-the iterator type contains a lifetime. `shared_loop` reproduces an internal
-loop-encoding error for a shared traversal invariant. Reproduce any after
-building:
+the iterator type contains a lifetime. `shared_loop` shows that directly using
+the source reference in its invariant is not yet established; the verified
+`count_shared` wrapper preserves a ghost snapshot of that reference instead.
+Reproduce any after building:
 
 ```sh
 PRUSTI_CHECK_OVERFLOWS=true PRUSTI_CHECK_PANICS=true PRUSTI_NO_VERIFY_DEPS=true \

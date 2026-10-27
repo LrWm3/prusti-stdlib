@@ -196,6 +196,10 @@ pub(crate) struct PlaceExpr<'vir> {
 }
 
 impl<'vir> PlaceExpr<'vir> {
+    pub(crate) fn is_snapshot(&self) -> bool {
+        self.snap.is_some()
+    }
+
     /// Expects the encoded place to not be behind a shared ref
     pub(crate) fn expect_predicate(&self) -> vir::ExprRef<'vir> {
         assert!(self.snap.is_none());

@@ -54,6 +54,11 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 continue; // No permissions are encoded for places with write capabilities currently
             }
             let (place_res, _snap, _, _) = self.encode_place_with_snap(*place)?;
+            // Places behind a shared reference are observed through its
+            // snapshot and do not have their own heap predicate to preserve.
+            if place_res.expr.is_snapshot() {
+                continue;
+            }
             let ty = (*place).ty(self.pcg_ctxt());
             let task = RustTyDecomposition::from_ty(ty.ty, self.def_id);
             let ty_out = self.deps.require_dep::<TyUseImpureEnc>(task).unwrap();
@@ -80,6 +85,17 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         for edge in state.borrow_pcg().graph().coupled_edges() {
             let mut let_bind = WandOldOuter::LetBind(Vec::new());
             let (wand, _) = self.coupled_wand(edge.value(), &mut let_bind)?;
+            // The empty resource wand is a tautology and does not need a
+            // packaged wand instance at the loop boundary.
+            if matches!(
+                wand.lhs.kind,
+                &vir::ExprKindData::Const(&vir::ConstData::Bool(true))
+            ) && matches!(
+                wand.rhs.kind,
+                &vir::ExprKindData::Const(&vir::ConstData::Bool(true))
+            ) {
+                continue;
+            }
             let mut wand = self.vcx.mk_wand_expr(wand);
             let WandOldOuter::LetBind(let_bind) = let_bind else {
                 unreachable!()

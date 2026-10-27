@@ -23,11 +23,34 @@ impl<T> [T] {
     fn get<I: SliceIndex<Self>>(&self, index: I) -> Option<&I::Output>;
 
     #[trusted]
+    #[ensures(match (result, old(index.get(&*self))) {
+        (None, None) => true,
+        (Some(value), Some(previous)) => Ghost::new_ref(&*value) == Ghost::new_ref(previous),
+        _ => false,
+    })]
+    #[after_expiry(match result {
+        None => Seq::from_slice(&*self) == old(Seq::from_slice(&*self)),
+        Some(value) => self.len() == old(self.len()) && match index.get(&*self) {
+            Some(current) => Ghost::new_ref(current) == before_expiry(Ghost::new_ref(&*value)),
+            None => false,
+        },
+    })]
+    fn get_mut<I: SliceIndex<Self>>(&mut self, index: I) -> Option<&mut I::Output>;
+
+    #[trusted]
     #[pure]
     #[requires(mid <= self.len())]
     #[ensures(Seq::from_slice(result.0) == Seq::from_slice(self)[..mid])]
     #[ensures(Seq::from_slice(result.1) == Seq::from_slice(self)[mid..])]
     fn split_at(&self, mid: usize) -> (&[T], &[T]);
+
+    #[trusted]
+    #[requires(mid <= self.len())]
+    #[ensures(Seq::from_slice(&*result.0) == old(Seq::from_slice(&*self))[..mid])]
+    #[ensures(Seq::from_slice(&*result.1) == old(Seq::from_slice(&*self))[mid..])]
+    #[after_expiry(Seq::from_slice(&*self) == before_expiry(Seq::from_slice(&*result.0))
+        .append(before_expiry(Seq::from_slice(&*result.1))))]
+    fn split_at_mut(&mut self, mid: usize) -> (&mut [T], &mut [T]);
 
     #[trusted]
     #[requires(a < self.len())]

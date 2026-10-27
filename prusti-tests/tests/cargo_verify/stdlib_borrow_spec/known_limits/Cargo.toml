@@ -1,0 +1,29 @@
+[package]
+name = "stdlib_borrow_known_limits"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+prusti-contracts = { path = "../../../../../prusti-contracts/prusti-contracts" }
+
+[lib]
+path = "conditional_model.rs"
+
+[[bin]]
+name = "lookup_frame"
+path = "lookup_frame.rs"
+
+[[bin]]
+name = "conditional_pass"
+path = "conditional_pass.rs"
+
+[[bin]]
+name = "conditional_abstract"
+path = "conditional_abstract.rs"
+
+[[bin]]
+name = "index_mut_probe"
+path = "index_mut_probe.rs"
+
+[workspace]

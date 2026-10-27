@@ -1561,9 +1561,9 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
     }
 
     /// Select trusted free-function or external trait-method postconditions
-    /// only when rustc proves every bound in the caller's environment.
-    /// Region-bearing obligations are excluded: MIR inference regions cannot
-    /// safely be resolved by a fresh solver.
+    /// only when rustc proves every bound in the caller's environment. A bound
+    /// containing MIR regions must hold for all independent lifetimes, without
+    /// any unproved region requirements.
     fn conditional_posts_for_call(
         &self,
         callee: DefId,
@@ -1626,18 +1626,55 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         let instantiated = ty::EarlyBinder::bind(tcx, clause)
                             .instantiate(tcx, args)
                             .skip_normalization();
-                        let mut has_region = false;
-                        let _ = ty::fold_regions(tcx, instantiated, |region, _| {
-                            has_region = true;
-                            region
-                        });
-                        !has_region
-                            && !instantiated.has_non_region_infer()
-                            && instantiated.kind().bound_vars().is_empty()
-                            && prusti_interface::environment::EnvQuery::new(tcx).evaluate_predicate(
-                                instantiated.as_predicate(),
-                                tcx.param_env(self.def_id),
-                            )
+                        if instantiated.has_non_region_infer()
+                            || !instantiated.kind().bound_vars().is_empty()
+                        {
+                            return false;
+                        }
+                        // A fresh solver does not know MIR's inference regions.
+                        // Universally quantify each occurrence independently:
+                        // proving this stronger goal is sufficient for the call.
+                        let mut variables = Vec::new();
+                        let mut unsupported = false;
+                        let kind = ty::fold_regions(
+                            tcx,
+                            instantiated.kind().skip_binder(),
+                            |region, depth| {
+                                if matches!(region.kind(), ty::RegionKind::ReBound(..)) {
+                                    unsupported = true;
+                                    return region;
+                                }
+                                let var = ty::BoundVar::from_usize(variables.len());
+                                variables
+                                    .push(ty::BoundVariableKind::Region(ty::BoundRegionKind::Anon));
+                                ty::Region::new_bound(
+                                    tcx,
+                                    depth,
+                                    ty::BoundRegion {
+                                        var,
+                                        kind: ty::BoundRegionKind::Anon,
+                                    },
+                                )
+                            },
+                        );
+                        if unsupported {
+                            return false;
+                        }
+                        if !variables.is_empty() {
+                            let predicate = tcx.mk_predicate(ty::Binder::bind_with_vars(
+                                ty::PredicateKind::Clause(kind),
+                                tcx.mk_bound_variable_kinds(&variables),
+                            ));
+                            return prusti_interface::environment::EnvQuery::new(tcx)
+                                .prove_poly_trait_without_region_requirements(
+                                    predicate,
+                                    tcx.param_env(self.def_id),
+                                );
+                        }
+                        prusti_interface::environment::EnvQuery::new(tcx).evaluate_predicate(
+                            instantiated.as_predicate(),
+                            tcx.param_env(self.def_id),
+                        )
                     });
                     if bounds_hold {
                         result.push(*post);

@@ -50,6 +50,7 @@ each test command has a 300-second outer timeout.
 | `iterator_capability_unbound`, `iterator_capability_wrong`, `iterator_capability_lifetime` | Reject an iterator claim without model evidence, an incorrect pre-call state, and a trait guarantee available only for a `'static` reference. |
 | `conditional_unbound`, `conditional_lifetime`, `conditional_generic_lifetime`, `conditional_nested_lifetime`, `conditional_lifetime_bound` | Reject conditional guarantees without sufficient evidence, including a hidden `'static` requirement on a reference-containing type and mismatched generic lifetime slots. |
 | `conditional_pre_wrong`, `conditional_state_wrong` | Reject a conditional postcondition when its refinement has a conditional precondition, and reject an incorrect pre-call state. |
+| `conditional_poly_pass`, `conditional_poly_unbound`, `conditional_poly_static`, `conditional_equal_lifetimes` | Prove a universally applicable reference implementation with its non-region `Copy` bound, and reject missing bounds, hidden `'static` requirements, and invented equality between independent lifetimes. |
 | `cross_crate_wrong_value` | Reject a wrong returned value from an imported generic wrapper. |
 | `false_assert` | Reject the false assertion, even with both external contracts loaded. |
 | `overflow` | Reject addition without the necessary overflow precondition. |
@@ -123,9 +124,11 @@ outlives equivalences. They do not silently accept changed lifetime relationship
 
 Conditional postcondition selection is currently limited to trusted free impure
 functions and directly called external trait methods with no conditional
-preconditions. It excludes region-bearing bounds, unresolved inference variables,
-other associated functions, external free functions and impl methods, and pure
-calls; it does not implement conditional expiry pledges.
+preconditions. Region-bearing bounds must hold for all independently quantified
+lifetimes, with no unproved region requirements or lifetime leaks. Unresolved
+inference variables, other associated functions, external free functions and
+impl methods, and pure calls remain excluded; conditional expiry pledges are
+unsupported.
 
 These checks establish the P1-B external-contract foundation, not unrestricted
 collection or reference-containing generic support. Review trusted contracts

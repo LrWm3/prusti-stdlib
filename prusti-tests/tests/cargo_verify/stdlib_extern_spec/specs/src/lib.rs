@@ -8,6 +8,15 @@ impl ConditionalModel for &'static u8 {}
 pub trait StaticModel {}
 impl<T: 'static> StaticModel for T {}
 
+pub trait CopyRefModel {}
+impl<T: Copy> CopyRefModel for &T {}
+
+pub trait StaticRefModel {}
+impl<T: 'static> StaticRefModel for &T {}
+
+pub trait SameLifetimeModel {}
+impl<'a> SameLifetimeModel for (&'a u8, &'a u8) {}
+
 pub trait LifetimeModel<'a> {}
 impl<'a> LifetimeModel<'a> for usize {}
 
@@ -20,6 +29,24 @@ pub fn conditional_observe<Value>(_value: &Value) -> usize {
 #[trusted]
 #[refine_spec(where Value: StaticModel, [ensures(result == 7)])]
 pub fn conditional_static<Value>(_value: &Value) -> usize {
+    7
+}
+
+#[trusted]
+#[refine_spec(where Value: CopyRefModel, [ensures(result == 7)])]
+pub fn conditional_copy_ref<Value>(_value: &Value) -> usize {
+    7
+}
+
+#[trusted]
+#[refine_spec(where Value: StaticRefModel, [ensures(result == 7)])]
+pub fn conditional_static_ref<Value>(_value: &Value) -> usize {
+    7
+}
+
+#[trusted]
+#[refine_spec(where Value: SameLifetimeModel, [ensures(result == 7)])]
+pub fn conditional_same_lifetime<Value>(_value: &Value) -> usize {
     7
 }
 

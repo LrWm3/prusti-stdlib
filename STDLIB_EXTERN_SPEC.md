@@ -490,7 +490,7 @@ also exercises non-`Copy` elements and a symbolic counting loop.
 The separately verified generic `advance` wrapper exports the head-and-tail
 contract for an existing owned iterator of borrowed items. This exercises
 `Item = &T` across crates without establishing general reference-containing
-collection snapshots. Direct calls with the same region-bearing iterator type
+collection snapshots. Direct calls on this region-bearing owned iterator type
 remain conservatively unsupported.
 
 The sealed capability also models `slice::Iter`. Its trusted constructor
@@ -501,22 +501,27 @@ negative clients across crate boundaries. A symbolic shared traversal checks
 each yielded reference against the corresponding source position, using a
 ghost snapshot to retain that relationship in its loop invariant. The pinned
 Rust implementation was reviewed for constructor state and forward advancement.
+Clients can also call `slice::Iter::next` directly when its model evidence is
+valid for every lifetime.
 
-Selection conservatively excludes bounds containing regions or unresolved
-inference variables, refinements with conditional preconditions, associated
-functions other than directly called external trait methods, external free
-functions and impl methods, and pure calls. A
+Selection checks a region-bearing bound by independently quantifying its
+lifetimes, selecting a concrete implementation or builtin, checking its
+region-free nested obligations, and requiring rustc's leak check to succeed.
+It conservatively rejects unproved region requirements, unresolved inference
+variables, refinements with conditional preconditions, associated functions
+other than directly called external trait methods, external free functions and
+impl methods, and pure calls. A
 [reproducer](prusti-tests/tests/cargo_verify/stdlib_borrow_spec/known_limits/)
 retains the conditional-precondition limitation. Conditional expiry pledges are
-also unsupported. Implementation refinement, direct lifetime-sensitive calls,
-and symbolic `for`-loop proofs remain necessary for P2-C. A loop invariant that
+also unsupported. Implementation refinement, some lifetime-sensitive calls, and
+symbolic `for`-loop proofs remain necessary for P2-C. A loop invariant that
 directly refers to the source rather than the captured ghost snapshot remains
 unproved.
 
 An attempted universal-lifetime check using rustc's region-insensitive solver
 was rejected: it accepted an implementation whose nested type argument had a
 hidden `'static` requirement. A negative cross-crate test preserves that case;
-the conservative selection rule remains in effect.
+the stricter universal check retains a conservative boundary.
 
 ## Phase 1 — External-specification support and unbounded Vec
 
@@ -883,7 +888,7 @@ claimed.
 | **M1: unbounded functional Vec** | P1-A through P1-D | Minimal contracts plus reproduced blockers | Verified locally: 21 Vec checks, symbolic append/pop/round-trip and whole-prefix loop proofs for owned non-`Copy` elements, cross-crate clients, and negative cases. |
 | P2-A: Vec and shared slices | M1 | Contracts, sequence lemmas, any slice encoding fixes | Verified locally: 27 checks cover symbolic mutations, shared lookup/ranges, splits, swaps, boundaries, ordering, and framing. |
 | P2-B: mutable collection views | P2-A, two-state snapshots | Pledges, expiry, generic reference framing | Verified locally: 74 checks cover slice and Vec views, lookup, indexing, splits, reborrowing, inclusive range state, and negative framing cases. |
-| P2-C: shared and owned iterators | Sequence model, generic trait probes | Opt-in models, refinement, lifetimes, loop support | In progress: 20 checks and symbolic owned and shared loops pass; direct lifetime-sensitive calls and `for` loops remain open. |
+| P2-C: shared and owned iterators | Sequence model, generic trait probes | Opt-in models, refinement, lifetimes, loop support | In progress: 23 checks cover owned and shared traversal and symbolic loops; some lifetime evidence and `for` loops remain open. |
 | **M2: Vec/slice phase complete** | P2-A, P2-B, P2-C | Integration and cross-crate validation | Untested; all required gates pass. |
 | P3-A: explicit key models | M2, logical Map/Set | Key-model interfaces and conditional contracts | Untested; equality/hash/model evidence is enforced. |
 | **M3: HashMap/HashSet phase complete** | P3-A, P3-B, P2-B expiry support | Map/set contracts and mutable lookup | Untested; key, cardinality, framing, and mutable-value cases pass. |

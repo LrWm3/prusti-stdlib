@@ -19,11 +19,12 @@ The capability is sealed so arbitrary iterator implementations cannot assume
 these finite-sequence or permanent-exhaustion laws.
 
 The same capability models `slice::Iter`: its constructor records references
-to the source elements, and the verified generic `advance` wrapper exposes the
-head and tail. A cross-crate `first_shared` wrapper returns the first source
-reference. Clients verify non-`Copy` elements, source values, and exhaustion;
-the `no_std` library also checks each yielded reference in a symbolic traversal.
-Negative probes reject incorrect references, state, and loop invariants.
+to the source elements. Clients use `next` directly and through the verified
+generic `advance` wrapper. A cross-crate `first_shared` wrapper returns the
+first source reference. Clients verify non-`Copy` elements, source values, and
+exhaustion; the `no_std` library also checks each yielded reference in a
+symbolic traversal. Negative probes reject incorrect references, state, and
+loop invariants.
 
 Run after building Prusti:
 
@@ -39,14 +40,14 @@ reference-containing collection snapshots are outside the tested domain. The
 borrowed-item probe starts with an existing iterator; it does not establish a
 model for constructing a vector of references.
 
-Direct calls where selecting the capability requires region-bearing evidence
-and symbolic `for`-loop proofs remain open; this does not complete P2-C or M2.
+Some lifetime-dependent evidence remains unsupported, as do symbolic `for`-loop
+proofs; this does not complete P2-C or M2.
 
 The `known_limits/for_count` probe reproduces the current `for`-loop gap: a
 symbolic count does not preserve the relation between the hidden iterator and
-the number of items seen, so the increment may overflow. `borrowed_items` and
-`shared_direct` reproduce conservative rejection of the iterator contract when
-the iterator type contains a lifetime. `shared_loop` shows that directly using
+the number of items seen, so the increment may overflow. `borrowed_items`
+reproduces conservative rejection of the iterator contract for an owned
+iterator of borrowed elements. `shared_loop` shows that directly using
 the source reference in its invariant is not yet established; the verified
 `count_shared` wrapper preserves a ghost snapshot of that reference instead.
 Reproduce any after building:

@@ -10,15 +10,15 @@ use prusti_rustc_interface::{
         TypeVisitableExt, Unnormalized,
     },
     span::{
+        Span,
         def_id::{DefId, LocalDefId},
         source_map::SourceMap,
-        Span,
     },
     trait_selection::{
         infer::{InferCtxtExt, TyCtxtInferExt},
         traits::{
-            query::evaluate_obligation::InferCtxtExt as QueryInferCtxtExt, ImplSource, Obligation,
-            ObligationCause, SelectionContext,
+            BuiltinImplSource, ImplSource, Obligation, ObligationCause, SelectionContext,
+            query::evaluate_obligation::InferCtxtExt as QueryInferCtxtExt,
         },
     },
 };
@@ -483,6 +483,69 @@ impl<'tcx> EnvQuery<'tcx> {
 
         self.infer_ctxt()
             .predicate_must_hold_considering_regions(&obligation)
+    }
+
+    /// Conservatively prove a universally quantified trait obligation without
+    /// relying on region constraints. Trait selection must choose an impl or
+    /// builtin; every nested obligation must be region-free and provable in
+    /// the caller's environment. The only accepted region constraints equate
+    /// fresh impl variables with placeholders, and leak checking must succeed.
+    pub fn prove_poly_trait_without_region_requirements(
+        self,
+        predicate: ty::Predicate<'tcx>,
+        param_env: ParamEnv<'tcx>,
+    ) -> bool {
+        let bound = predicate.kind();
+        let ty::PredicateKind::Clause(ty::ClauseKind::Trait(trait_pred)) = bound.skip_binder()
+        else {
+            return false;
+        };
+        if trait_pred.polarity != PredicatePolarity::Positive {
+            return false;
+        }
+        let poly = ty::Binder::bind_with_vars(trait_pred, bound.bound_vars());
+        let obligation = Obligation::new(self.tcx, ObligationCause::dummy(), param_env, poly);
+        let infcx = self.infer_ctxt();
+        let mut selection = SelectionContext::new(&infcx);
+        let Ok(Some(selected)) = selection.poly_select(&obligation) else {
+            return false;
+        };
+        match &selected {
+            ImplSource::UserDefined(_) => {}
+            ImplSource::Builtin(BuiltinImplSource::Misc | BuiltinImplSource::Trivial, _) => {}
+            _ => return false,
+        }
+        for nested in selected.nested_obligations() {
+            let predicate = infcx.resolve_vars_if_possible(nested.predicate);
+            let mut has_region = false;
+            let _ = ty::fold_regions(self.tcx, predicate, |region, _| {
+                has_region = true;
+                region
+            });
+            if has_region
+                || predicate.has_non_region_infer()
+                || !predicate.kind().bound_vars().is_empty()
+            {
+                return false;
+            }
+            let obligation =
+                Obligation::new(self.tcx, ObligationCause::dummy(), param_env, predicate);
+            if !infcx.predicate_must_hold_considering_regions(&obligation) {
+                return false;
+            }
+        }
+        if !infcx.take_registered_region_obligations().is_empty()
+            || infcx.leak_check(ty::UniverseIndex::ROOT, None).is_err()
+        {
+            return false;
+        }
+        let constraints = infcx.take_and_reset_region_constraints();
+        constraints.verifys.is_empty()
+            && constraints.constraints.iter().all(|(constraint, _)| {
+                constraint.kind == prusti_rustc_interface::infer::infer::region_constraints::ConstraintKind::VarEqReg
+                    && constraint.sub.is_var()
+                    && matches!(constraint.sup.kind(), ty::RegionKind::RePlaceholder(..))
+            })
     }
 
     /// Normalizes associated types in foldable types,

@@ -17,8 +17,9 @@ pub fn scalar_index_model<I>(_index: &I) -> Option<usize> {
     unreachable!()
 }
 
-/// Ghost-only half-open range classification. Its intended interpretation is
-/// `Some((start, end))` for `start..end` and `None` for other index types.
+/// Ghost-only half-open range classification. Open ends use `usize::MAX`;
+/// indices outside the supported range types map to `None` in the intended
+/// interpretation. This function must not be called at runtime.
 #[trusted]
 #[pure]
 pub fn range_index_model<I>(_index: &I) -> Option<(usize, usize)> {
@@ -63,9 +64,11 @@ impl<T> [T] {
         None => true,
     })]
     #[after_expiry(match range_index_model(&index) {
-        Some((start, end)) => (start <= end && end <= self.len()) ==>
-            Seq::from_slice(&*self)[..start] == old(Seq::from_slice(&*self))[..start]
-            && Seq::from_slice(&*self)[end..] == old(Seq::from_slice(&*self))[end..],
+        Some((start, end)) => start <= end ==>
+            (start <= self.len() ==>
+                Seq::from_slice(&*self)[..start] == old(Seq::from_slice(&*self))[..start])
+            && (end <= self.len() ==>
+                Seq::from_slice(&*self)[end..] == old(Seq::from_slice(&*self))[end..]),
         None => true,
     })]
     fn get_mut<I: SliceIndex<Self>>(&mut self, index: I) -> Option<&mut I::Output>;
@@ -126,9 +129,11 @@ impl<T, I: SliceIndex<[T]>> IndexMut<I> for [T] {
         None => true,
     })]
     #[after_expiry(match range_index_model(&index) {
-        Some((start, end)) => (start <= end && end <= self.len()) ==>
-            Seq::from_slice(&*self)[..start] == old(Seq::from_slice(&*self))[..start]
-            && Seq::from_slice(&*self)[end..] == old(Seq::from_slice(&*self))[end..],
+        Some((start, end)) => start <= end ==>
+            (start <= self.len() ==>
+                Seq::from_slice(&*self)[..start] == old(Seq::from_slice(&*self))[..start])
+            && (end <= self.len() ==>
+                Seq::from_slice(&*self)[end..] == old(Seq::from_slice(&*self))[end..]),
         None => true,
     })]
     fn index_mut(&mut self, index: I) -> &mut I::Output;
@@ -183,6 +188,10 @@ impl<T> SliceIndex<[T]> for Range<usize> {
 impl<T> SliceIndex<[T]> for RangeFrom<usize> {
     #[trusted]
     #[pure]
+    #[ensures(match range_index_model(&self) {
+        Some((start, end)) => start == self.start && end == usize::MAX,
+        None => false,
+    })]
     #[ensures(match &result {
         None => self.start > slice.len(),
         Some(value) => self.start <= slice.len()
@@ -195,6 +204,10 @@ impl<T> SliceIndex<[T]> for RangeFrom<usize> {
 impl<T> SliceIndex<[T]> for RangeTo<usize> {
     #[trusted]
     #[pure]
+    #[ensures(match range_index_model(&self) {
+        Some((start, end)) => start == 0 && end == self.end,
+        None => false,
+    })]
     #[ensures(match &result {
         None => self.end > slice.len(),
         Some(value) => self.end <= slice.len()
@@ -207,6 +220,10 @@ impl<T> SliceIndex<[T]> for RangeTo<usize> {
 impl<T> SliceIndex<[T]> for RangeFull {
     #[trusted]
     #[pure]
+    #[ensures(match range_index_model(&self) {
+        Some((start, end)) => start == 0 && end == usize::MAX,
+        None => false,
+    })]
     #[ensures(match &result {
         None => false,
         Some(value) => Seq::from_slice(value) == Seq::from_slice(slice),

@@ -150,9 +150,11 @@ impl<T, I: SliceIndex<[T]>, A: core::alloc::Allocator> IndexMut<I> for Vec<T, A>
         None => true,
     })]
     #[after_expiry(match range_index_model(&index) {
-        Some((start, end)) => (start <= end && end <= self.len()) ==>
-            vec_contents(&*self)[..start] == old(vec_contents(&*self))[..start]
-            && vec_contents(&*self)[end..] == old(vec_contents(&*self))[end..],
+        Some((start, end)) => start <= end ==>
+            (start <= self.len() ==>
+                vec_contents(&*self)[..start] == old(vec_contents(&*self))[..start])
+            && (end <= self.len() ==>
+                vec_contents(&*self)[end..] == old(vec_contents(&*self))[end..]),
         None => true,
     })]
     fn index_mut(&mut self, index: I) -> &mut I::Output;

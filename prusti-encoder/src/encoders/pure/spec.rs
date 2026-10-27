@@ -212,6 +212,11 @@ impl TaskEncoder for MirSpecEnc {
             let (pres, pres_inherited) = crate::encoders::spec_items(&specs.pres);
             let (posts, posts_inherited) = crate::encoders::spec_items(&specs.posts);
             let (pledges, pledges_inherited) = crate::encoders::spec_items(&specs.pledges);
+            let pledges = if enc_mode == MirSpecEncMode::Impure {
+                pledges
+            } else {
+                &[]
+            };
             let pre_ctx = SpecEncCtx {
                 extern_spec: specs.extern_spec,
                 enc_mode,

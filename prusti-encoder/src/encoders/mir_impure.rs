@@ -834,9 +834,6 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 //   function call; instead we should figure out which
                 //   wand it is based on the edge info.
                 // TODO: closures
-                let wands = self.deps.require_dep::<WandEnc>(WandEncTask {
-                    data: call.function_data().unwrap(),
-                })?;
                 let bb = &self.body[call.location().block];
                 let terminator = bb.terminator.as_ref().unwrap();
                 match &terminator.kind {
@@ -851,7 +848,11 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         if self.wandless_calls.contains(&call.location().block) {
                             return Ok(());
                         }
-                        let (_, caller_substs, _) = self.get_call_data(func);
+                        let (callee, caller_substs, _) = self.get_call_data(func);
+                        let (callee, call_ctx) = self.gargs(caller_substs).resolve_method(callee);
+                        let wands = self.deps.require_dep::<WandEnc>(WandEncTask {
+                            data: pcg::borrow_pcg::FunctionData::new(callee),
+                        })?;
 
                         let (_, dest_snap, _, _) =
                             self.encode_place_with_snap((*destination).into())?;
@@ -862,7 +863,6 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                                 }))
                                 .collect::<EncodeResult<'vir, Vec<_>, E>>()?;
                         let (label_pre, label_post) = self.call_labels[&call.location().block];
-                        let call_ctx = self.gargs(caller_substs);
                         let wands =
                             wands.call_wands(&wand_args, label_pre, label_post, call_ctx, self);
                         for wand in wands {

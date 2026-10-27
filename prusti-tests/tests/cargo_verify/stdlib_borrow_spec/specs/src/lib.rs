@@ -39,3 +39,26 @@ pub fn optional(owner: &mut usize, present: bool) -> Option<&mut usize> {
         None
     }
 }
+
+pub trait Borrowed {
+    #[pure]
+    fn observe(&self) -> usize;
+    fn borrow(&mut self) -> &mut usize;
+}
+
+pub struct Cell {
+    pub value: usize,
+}
+
+#[refine_trait_spec]
+impl Borrowed for Cell {
+    #[pure]
+    fn observe(&self) -> usize {
+        self.value
+    }
+
+    #[after_expiry(Ghost::new_ref(&self.value) == before_expiry(Ghost::new_ref(&*result)))]
+    fn borrow(&mut self) -> &mut usize {
+        &mut self.value
+    }
+}

@@ -1,5 +1,5 @@
 use prusti_contracts::*;
-use iterator_specs::remaining_len;
+use iterator_specs::{advance_with_lengths, remaining_len};
 
 fn owned<T>(values: Vec<T>) {
     let expected = values.len();
@@ -19,6 +19,8 @@ fn owned<T>(values: Vec<T>) {
             prusti_assert!(after == 0);
         }
     }
+    let (before, after) = advance_with_lengths(&mut iterator);
+    prusti_assert!(after <= before);
 }
 
 fn shared<T>(values: &[T]) {
@@ -39,6 +41,8 @@ fn shared<T>(values: &[T]) {
             prusti_assert!(after == 0);
         }
     }
+    let (before, after) = advance_with_lengths(&mut iterator);
+    prusti_assert!(after <= before);
 }
 
 struct Token(u32);

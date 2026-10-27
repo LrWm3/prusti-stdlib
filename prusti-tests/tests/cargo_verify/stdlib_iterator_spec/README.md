@@ -36,8 +36,11 @@ Negative probes reject incorrect references, state, and loop invariants.
 
 For modeled `ExactSizeIterator` implementations, the `len` contract equals
 the remaining sequence length. The separately verified `remaining_len` helper
-exports that relation across crates. Clients check owned and shared lengths
-before and after advancement, including empty iterators and non-`Copy` values.
+exports that relation across crates. `advance_with_lengths` uses
+`ExactSizeIterator::len(&*iterator)` to select the modeled iterator when its
+generic parameter is `&mut I`, and verifies the length before and after `next`.
+Clients check owned and shared lengths before and after advancement, including
+empty iterators and non-`Copy` values.
 Negative probes reject an incorrect length and a length claim for an iterator
 without model evidence.
 
@@ -108,9 +111,10 @@ gap: a symbolic count does not preserve the relation between the hidden
 iterator and the number of items seen, so the increment may overflow. The
 `for_named` probe shows why naming the iterator does not expose it to the
 invariant: `for` holds its mutable borrow for the entire loop, so Rust rejects
-a second borrow. The `exact_length_mut_ref` probe records a separate loss of
-the length relationship when the generic iterator is accessed through `&mut I`;
-the generic helper with an `&I` receiver is verified.
+a second borrow. The `exact_length_mut_ref` probe records that method syntax
+on `&mut I` selects a forwarding iterator implementation without the sealed
+model capability; explicitly selecting the underlying `I`, as in
+`advance_with_lengths`, verifies the length relationship.
 Shared traversal can use the original source reference directly in its loop
 invariant. Reproduce either probe after building:
 

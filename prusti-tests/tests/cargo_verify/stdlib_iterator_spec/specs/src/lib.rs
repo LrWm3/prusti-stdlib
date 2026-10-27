@@ -26,6 +26,28 @@ pub fn remaining_len<I: ModeledIterator + ExactSizeIterator>(iterator: &I) -> us
     iterator.len()
 }
 
+#[ensures((result.0 == 0 && result.1 == 0)
+    || Int::from(result.1) + Int::from(1) == Int::from(result.0))]
+pub fn advance_with_lengths<I: ModeledIterator + ExactSizeIterator>(
+    iterator: &mut I,
+) -> (usize, usize) {
+    // Method syntax on `&mut I` can select its forwarding implementation,
+    // which does not itself carry the sealed model capability.
+    let before = ExactSizeIterator::len(&*iterator);
+    let result = iterator.next();
+    let after = ExactSizeIterator::len(&*iterator);
+    match result {
+        Some(_) => {
+            prusti_assert!(after + 1 == before);
+        }
+        None => {
+            prusti_assert!(before == 0);
+            prusti_assert!(after == 0);
+        }
+    }
+    (before, after)
+}
+
 #[requires(values.len() > 0)]
 #[ensures(result === &values[0])]
 pub fn first_shared<'a, T>(values: &'a [T]) -> &'a T {

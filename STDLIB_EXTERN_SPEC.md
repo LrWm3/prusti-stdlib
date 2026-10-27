@@ -440,11 +440,14 @@ slice length is stored in pointer metadata. A trusted ghost-only
 `range_index_model` maps `Range<usize>` to its endpoints and other index types
 to `None`; a negative probe prevents treating a scalar index as a range. The
 range fixture took 85 seconds overall in the full run, so its solver
-performance remains a concern; the verifier uses a 90-second per-method limit.
+performance remains a concern; the verifier uses a 90-second limit for the
+whole verification, not for each method. The checked, slice-indexing, and Vec
+indexing examples are now separate fixtures, preserving the same proofs while
+giving each an independent whole-verification budget.
 
 **P2-B remains incomplete for other range forms.** An experimental model using
 separate start/end classifiers verified isolated open-ended examples but caused
-the already passing bounded-range fixture to time out at the 90-second per-method
+the already passing bounded-range fixture to hit the 90-second whole-verification
 limit. A second experiment extending the bounded-range classifier with an
 open-end marker also timed out on that fixture. Neither was retained. The
 `open_range_frame` reproducer shows the missing outside-frame proof under the

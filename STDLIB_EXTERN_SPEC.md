@@ -464,9 +464,14 @@ lookup covers valid empty ranges and `usize::MAX` failures. A negative mutable
 lookup probe rejects inferring a singleton from equal endpoints without a
 freshness guarantee.
 
-Direct `Vec::get_mut` still cannot prove restoration of the Vec model through
-its implicit mutable dereference; `vec_get_mut_probe` reproduces the missing
-postcondition. This remains a P2-B gap.
+**P2-B complete, verified locally on 2026-10-27:** the expanded borrow suite
+passes 74 checks. `Vec::DerefMut` now carries the same entry and expiry relation
+as `as_mut_slice`, matching the pinned standard-library implementation. Direct
+`Vec::get_mut` clients prove scalar, bounded, and inclusive updates, the missing
+branch, reborrowing, and restoration of whole sequences; a separately verified
+generic library and client exercise owned non-`Copy` elements. An additional
+exhausted-inclusive indexing proof and negative framing checks pass. These
+results satisfy the P2-B mutable-view gate; P2-C and M2 remain open.
 
 Type-conditional postconditions are not selected even when their bounds hold,
 and the current refinement syntax does not support conditional expiry pledges.
@@ -842,7 +847,7 @@ claimed.
 | P1-C: sequence observations | P1-B | Model connection, explicit triggers, required generic snapshots | Verified locally: 21 focused checks, arbitrary-index observations, explicit triggers, cross-crate proofs, and precise diagnostics. |
 | **M1: unbounded functional Vec** | P1-A through P1-D | Minimal contracts plus reproduced blockers | Verified locally: 21 Vec checks, symbolic append/pop/round-trip and whole-prefix loop proofs for owned non-`Copy` elements, cross-crate clients, and negative cases. |
 | P2-A: Vec and shared slices | M1 | Contracts, sequence lemmas, any slice encoding fixes | Verified locally: 27 checks cover symbolic mutations, shared lookup/ranges, splits, swaps, boundaries, ordering, and framing. |
-| P2-B: mutable collection views | P2-A, two-state snapshots | Pledges, expiry, generic reference framing | In progress: 65 checks cover slice and Vec views, including inclusive ranges; direct Vec lookup and conditional specifications remain open. |
+| P2-B: mutable collection views | P2-A, two-state snapshots | Pledges, expiry, generic reference framing | Verified locally: 74 checks cover slice and Vec views, lookup, indexing, splits, reborrowing, inclusive range state, and negative framing cases. |
 | P2-C: shared and owned iterators | Sequence model, generic trait probes | Opt-in models, refinement, lifetimes, loop support | Untested; concrete and generic traversal proofs pass. |
 | **M2: Vec/slice phase complete** | P2-A, P2-B, P2-C | Integration and cross-crate validation | Untested; all required gates pass. |
 | P3-A: explicit key models | M2, logical Map/Set | Key-model interfaces and conditional contracts | Untested; equality/hash/model evidence is enforced. |

@@ -1,4 +1,4 @@
-# Mutable collection views (P2-B, in progress)
+# Mutable collection views (P2-B)
 
 Run from the repository root on the pinned toolchain, after building Prusti:
 
@@ -13,7 +13,7 @@ the positive binaries, enables overflow and panic checks, disables verification
 caching, and uses fresh Cargo targets. Logs and positive Viper programs remain
 in `target/stdlib-borrow-spec-logs/`.
 
-The 65 checks cover `Vec::as_mut_slice`, `slice::split_at_mut`, mutable indexing,
+The 74 checks cover `Vec::as_mut_slice`, `slice::split_at_mut`, mutable indexing,
 and the supported parts of `slice::get_mut`. Generic clients verify changes
 through both halves of a split, restoration to a slice or Vec owner, and halves
 that expire separately.
@@ -28,7 +28,9 @@ generic owned elements and a separately verified cross-crate wrapper. Bounded
 `start..end` mutable lookups and indexing also preserve the prefix and suffix
 outside the selected range; their returned slice length is known. Open-ended
 `start..`, `..end`, and full-range views have corresponding proofs, including
-empty views and generic owned Vec elements.
+empty views and generic owned Vec elements. Direct `Vec::get_mut` also restores
+the owner through mutable dereferencing, including missing, reborrowed, and
+inclusive-range cases and a cross-crate non-`Copy` client.
 Trait-borrow probes cover concrete pledges
 and abstract calls without assuming implementation-specific guarantees. Negative
 cases reject incorrect values, framing claims for splits, and invalid bounds.
@@ -45,11 +47,10 @@ intended interpretation for unsupported index types is `None`. Negative tests
 reject a range classification for scalar indices and reject assuming an
 arbitrary inclusive range is fresh merely because its endpoints coincide.
 
-Direct `Vec::get_mut` does not yet restore the Vec's sequence after its implicit
-mutable dereference. Stronger type-conditional contracts remain open. The
-`known_limits` fixture retains reproducers outside the suite:
+P2-B passes its mutable-view gate. Stronger type-conditional contracts remain
+open for subsequent milestones. The `known_limits` fixture retains reproducers
+outside the suite:
 
-- `vec_get_mut_probe` cannot prove the Vec's updated sequence.
 - `conditional_pass` cannot use a type-conditional postcondition even with
   its trait bound; `conditional_abstract` correctly rejects the same claim
   without the bound.
@@ -60,7 +61,7 @@ For example, reproduce the first limitation after building with:
 PRUSTI_CHECK_OVERFLOWS=true PRUSTI_CHECK_PANICS=true PRUSTI_NO_VERIFY_DEPS=true \
   ./x.py exec target/debug/cargo-prusti --manifest-path \
   prusti-tests/tests/cargo_verify/stdlib_borrow_spec/known_limits/Cargo.toml \
-  --bin vec_get_mut_probe
+  --bin conditional_pass
 ```
 
 The element domain and normal-return assumptions remain those documented for

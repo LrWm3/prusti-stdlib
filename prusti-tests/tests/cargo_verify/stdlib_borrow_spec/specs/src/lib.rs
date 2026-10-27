@@ -24,6 +24,18 @@ pub fn replace_index<Element>(values: &mut Vec<Element>, index: usize, replaceme
     values[index] = replacement;
 }
 
+#[requires(index < values.len())]
+#[ensures(view(values) == old(view(&*values))
+    .update(index, &*old(Ghost::new_ref(&replacement))))]
+pub fn replace_lookup<Element>(values: &mut Vec<Element>, index: usize, replacement: Element) {
+    match values.get_mut(index) {
+        Some(value) => *value = replacement,
+        None => {
+            prusti_assert!(false);
+        }
+    }
+}
+
 #[ensures(*result == old(*value))]
 #[after_expiry(*value == before_expiry(*result)
     && Ghost::new_ref(&_marker) == old(Ghost::new_ref(&_marker)))]

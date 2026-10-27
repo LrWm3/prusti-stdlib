@@ -11,10 +11,6 @@ prusti-contracts = { path = "../../../../../prusti-contracts/prusti-contracts" }
 path = "conditional_model.rs"
 
 [[bin]]
-name = "vec_get_mut_probe"
-path = "vec_get_mut_probe.rs"
-
-[[bin]]
 name = "conditional_pass"
 path = "conditional_pass.rs"
 

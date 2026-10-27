@@ -4,7 +4,7 @@ use crate::{
 };
 use alloc::vec::Vec;
 use core::{
-    ops::{Deref, Index, IndexMut},
+    ops::{Deref, DerefMut, Index, IndexMut},
     slice::SliceIndex,
 };
 
@@ -116,6 +116,14 @@ impl<T, A: core::alloc::Allocator> Deref for Vec<T, A> {
     #[pure]
     #[ensures(Seq::from_slice(result) == vec_contents(self))]
     fn deref(&self) -> &Self::Target;
+}
+
+#[extern_spec]
+impl<T, A: core::alloc::Allocator> DerefMut for Vec<T, A> {
+    #[trusted]
+    #[ensures(Seq::from_slice(&*result) == old(vec_contents(&*self)))]
+    #[after_expiry(vec_contents(self) == before_expiry(Seq::from_slice(&*result)))]
+    fn deref_mut(&mut self) -> &mut [T];
 }
 
 #[extern_spec]

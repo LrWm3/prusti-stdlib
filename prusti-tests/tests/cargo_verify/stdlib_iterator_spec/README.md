@@ -8,7 +8,12 @@ returns `None` and preserves an empty sequence. These are trusted normal-return
 contracts reviewed against the pinned standard-library implementation.
 
 The separately verified `no_std` library counts a symbolic number of owned
-elements in a loop and exports its contract. Clients check generic owned values
+elements in both an explicit loop and `prusti_for!`, and exports their
+contracts. `prusti_for!` names the iterator so a body invariant can refer to its
+remaining sequence; the current item has already been removed when the
+invariant is checked. Its runtime test covers an empty iterator, non-`Copy`
+values, a single evaluation of the iterable, and labelled `break` and
+`continue`. Clients check generic owned values
 without `Copy`, `Clone`, or equality bounds, concrete non-`Copy` values, empty
 and repeatedly exhausted iterators, and cross-crate use. Its verified generic
 `advance` wrapper also exports the head-and-tail contract for an iterator of
@@ -26,6 +31,17 @@ exhaustion; the `no_std` library also checks each yielded reference in a
 symbolic traversal. Negative probes reject incorrect references, state, and
 loop invariants.
 
+For example, a body invariant can relate the number already processed, the
+current item, and the remaining elements:
+
+```rust
+prusti_for!(iterator, for item in values => {
+    body_invariant!(Int::from(seen) + iterator.remaining().len() + Int::from(1)
+        == Int::from(expected));
+    // Process item, then advance seen.
+});
+```
+
 Run after building Prusti:
 
 ```sh
@@ -40,9 +56,10 @@ reference-containing collection snapshots are outside the tested domain. The
 borrowed-item probe starts with an existing iterator; it does not establish a
 model for constructing a vector of references.
 
-Some lifetime-dependent evidence remains unsupported, as do symbolic `for`-loop
-proofs; this does not complete P2-C or M2. An existing owned iterator of
-borrowed elements supports both direct `next` calls and the generic wrapper.
+Some lifetime-dependent evidence remains unsupported, as do symbolic proofs
+using ordinary Rust `for` syntax; this does not complete P2-C or M2. An
+existing owned iterator of borrowed elements supports both direct `next` calls
+and the generic wrapper.
 
 The `known_limits/for_count` probe reproduces the current `for`-loop gap: a
 symbolic count does not preserve the relation between the hidden iterator and

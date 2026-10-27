@@ -515,7 +515,11 @@ impl methods, and pure calls. A
 [reproducer](prusti-tests/tests/cargo_verify/stdlib_borrow_spec/known_limits/)
 retains the conditional-precondition limitation. Conditional expiry pledges are
 also unsupported. Implementation refinement, some lifetime-sensitive calls, and
-symbolic `for`-loop proofs remain necessary for P2-C. A named iterator cannot
+symbolic proofs with ordinary `for` syntax remain necessary for P2-C. The
+opt-in `prusti_for!` macro expands to Rust's iterator construction and an
+explicit loop, exposing the iterator by name to the body invariant. A generic,
+cross-crate client proves symbolic counting through this form; runtime checks
+cover labels, early exit, non-`Copy` items, and single evaluation. A named iterator cannot
 be read in a `for`-body invariant because the loop holds its mutable borrow;
 the [probes](prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/)
 record both this Rust error and the hidden-iterator overflow failure. Shared
@@ -891,7 +895,7 @@ claimed.
 | **M1: unbounded functional Vec** | P1-A through P1-D | Minimal contracts plus reproduced blockers | Verified locally: 21 Vec checks, symbolic append/pop/round-trip and whole-prefix loop proofs for owned non-`Copy` elements, cross-crate clients, and negative cases. |
 | P2-A: Vec and shared slices | M1 | Contracts, sequence lemmas, any slice encoding fixes | Verified locally: 27 checks cover symbolic mutations, shared lookup/ranges, splits, swaps, boundaries, ordering, and framing. |
 | P2-B: mutable collection views | P2-A, two-state snapshots | Pledges, expiry, generic reference framing | Verified locally: 74 checks cover slice and Vec views, lookup, indexing, splits, reborrowing, inclusive range state, and negative framing cases. |
-| P2-C: shared and owned iterators | Sequence model, generic trait probes | Opt-in models, refinement, lifetimes, loop support | In progress: 30 checks cover owned and shared traversal and symbolic loops; some lifetime evidence and `for` loops remain open. |
+| P2-C: shared and owned iterators | Sequence model, generic trait probes | Opt-in models, refinement, lifetimes, loop support | In progress: 33 checks cover owned and shared traversal, symbolic loops, and `prusti_for!`; some lifetime evidence and ordinary `for` loops remain open. |
 | **M2: Vec/slice phase complete** | P2-A, P2-B, P2-C | Integration and cross-crate validation | Untested; all required gates pass. |
 | P3-A: explicit key models | M2, logical Map/Set | Key-model interfaces and conditional contracts | Untested; equality/hash/model evidence is enforced. |
 | **M3: HashMap/HashSet phase complete** | P3-A, P3-B, P2-B expiry support | Map/set contracts and mutable lookup | Untested; key, cardinality, framing, and mutable-value cases pass. |

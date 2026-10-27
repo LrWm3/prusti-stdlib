@@ -77,3 +77,16 @@ pub fn count_owned<T>(values: Vec<T>, expected: usize) -> usize {
     }
     count
 }
+
+#[requires(expected == values.len())]
+#[ensures(result == expected)]
+pub fn count_for<T>(values: Vec<T>, expected: usize) -> usize {
+    let mut count = 0usize;
+    prusti_for!(iterator, for _value in values => {
+        body_invariant!(expected == old(expected));
+        // The body starts after `next` has removed the current element.
+        body_invariant!(Int::from(count) + iterator.remaining().len() + Int::from(1) == Int::from(expected));
+        count += 1;
+    });
+    count
+}

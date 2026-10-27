@@ -69,6 +69,28 @@ pub use prusti_contracts_proc_macros::invariant;
 /// A macro for writing a loop body invariant.
 pub use prusti_contracts_proc_macros::body_invariant;
 
+/// Traverse an `IntoIterator` while giving its iterator a name for specifications.
+///
+/// `prusti_for!(iter, for item in values => { ... })` expands to a `match` and
+/// a `loop` with the same iterator construction and advancement as a Rust `for`
+/// loop. The iterator is available inside the body, including in
+/// `body_invariant!`. At a body invariant, `next` has already yielded the
+/// current item. A loop label may precede `for`, as in
+/// `prusti_for!(iter, 'outer: for item in values => { ... })`.
+#[macro_export]
+macro_rules! prusti_for {
+    ($iter:ident, $( $label:lifetime : )? for $pattern:pat in $values:expr => $body:block) => {
+        match ::core::iter::IntoIterator::into_iter($values) {
+            mut $iter => $( $label: )? loop {
+                match ::core::iter::Iterator::next(&mut $iter) {
+                    ::core::option::Option::Some($pattern) => $body,
+                    ::core::option::Option::None => break,
+                }
+            },
+        }
+    };
+}
+
 /// A macro for writing assertions using the full prusti specifications
 pub use prusti_contracts_proc_macros::prusti_assert;
 

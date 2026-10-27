@@ -1,7 +1,7 @@
 use crate::*;
 use alloc::vec::Vec;
 use core::{
-    ops::Index,
+    ops::{Deref, Index},
     slice::SliceIndex,
 };
 
@@ -57,6 +57,57 @@ impl<T, A: core::alloc::Allocator> Vec<T, A> {
         old(vec_contents(&*self))[..Int::from(old(self.len())) - Int::from(1)]
     })]
     fn pop(&mut self) -> Option<T>;
+
+    #[trusted]
+    #[ensures(vec_contents(self) == Seq::new())]
+    fn clear(&mut self);
+
+    #[trusted]
+    #[ensures(vec_contents(self) == if len < old(self.len()) {
+        old(vec_contents(&*self))[..len]
+    } else {
+        old(vec_contents(&*self))
+    })]
+    fn truncate(&mut self, len: usize);
+
+    #[trusted]
+    #[requires(Int::from(self.len()) + Int::from(other.len()) <= Int::from(usize::MAX))]
+    #[ensures(vec_contents(self) == old(vec_contents(&*self)).append(old(vec_contents(&*other))))]
+    #[ensures(vec_contents(other) == Seq::new())]
+    fn append(&mut self, other: &mut Self);
+
+    #[trusted]
+    #[requires(index <= self.len())]
+    #[requires(self.len() < usize::MAX)]
+    #[ensures(vec_contents(self) == old(vec_contents(&*self))[..index]
+        .append(Seq::single_ref(&element)).append(old(vec_contents(&*self))[index..]))]
+    fn insert(&mut self, index: usize, element: T);
+
+    #[trusted]
+    #[requires(index < self.len())]
+    #[ensures(result === *old(vec_contents(&*self))[index])]
+    #[ensures(vec_contents(self) == old(vec_contents(&*self))[..index]
+        .append(old(vec_contents(&*self))[Int::from(index) + Int::from(1)..]))]
+    fn remove(&mut self, index: usize) -> T;
+
+    #[trusted]
+    #[requires(index < self.len())]
+    #[ensures(result === *old(vec_contents(&*self))[index])]
+    #[ensures(vec_contents(self) == if Int::from(index) == Int::from(old(self.len())) - Int::from(1) {
+        old(vec_contents(&*self))[..index]
+    } else {
+        old(vec_contents(&*self))[..Int::from(old(self.len())) - Int::from(1)]
+            .update(index, &*old(vec_contents(&*self))[Int::from(old(self.len())) - Int::from(1)])
+    })]
+    fn swap_remove(&mut self, index: usize) -> T;
+}
+
+#[extern_spec]
+impl<T, A: core::alloc::Allocator> Deref for Vec<T, A> {
+    #[trusted]
+    #[pure]
+    #[ensures(Seq::from_slice(result) == vec_contents(self))]
+    fn deref(&self) -> &Self::Target;
 }
 
 #[extern_spec]
@@ -65,7 +116,7 @@ impl<T, I: SliceIndex<[T]>, A: core::alloc::Allocator> Index<I> for Vec<T, A> {
     #[pure]
     #[requires(matches!(index.get(self.as_slice()), Some(_)))]
     #[ensures(match index.get(self.as_slice()) {
-        Some(value) => *result === *value,
+        Some(value) => result === value,
         None => false,
     })]
     fn index(&self, index: I) -> &Self::Output;

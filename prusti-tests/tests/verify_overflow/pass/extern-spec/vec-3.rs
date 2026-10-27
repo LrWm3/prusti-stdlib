@@ -19,20 +19,6 @@ impl<T> Option<T> {
 
 }
 
-#[extern_spec]
-impl<T, A: std::alloc::Allocator> Vec<T, A> {
-    #[trusted]
-    #[ensures(self.len() == 0)]
-    fn clear(&mut self);
-}
-
-#[extern_spec]
-impl<T, A: std::alloc::Allocator> Vec<T, A> {
-    #[trusted]
-    #[ensures(self.len() == old(self.len()) + other.len())]
-    pub fn append(&mut self, other: &mut Vec<T, A>);
-}
-
 fn main() {
     let mut v = Vec::new();
     v.push(2);

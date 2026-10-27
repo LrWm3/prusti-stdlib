@@ -1,4 +1,4 @@
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use pcg::{
     borrow_pcg::region_projection::{
@@ -13,7 +13,10 @@ use pcg::{
         maybe_remote::MaybeRemotePlace,
     },
 };
-use prusti_rustc_interface::middle::mir;
+use prusti_rustc_interface::{
+    hir::Mutability,
+    middle::{mir, ty},
+};
 
 use task_encoder::TaskEncoder;
 use vir::Reify;
@@ -34,6 +37,7 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         &mut self,
         cfpcs: &PcgBasicBlock<'_, 'vir>,
         loop_place_usages: &PlaceUsages<'vir>,
+        invariant_inputs: &FxHashSet<mir::Local>,
         ctxt: impl HasCompilerCtxt<'a, 'vir>,
     ) -> EncodeResult<
         'vir,
@@ -46,8 +50,25 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         let mut inv = Vec::new();
         let start = &cfpcs.statements[0];
         let state = &start.states[EvalStmtPhase::PreOperands];
-        let loop_invariant_place_capabilities =
+        let mut loop_invariant_place_capabilities =
             cfpcs.loop_invariant_place_capabilities(loop_place_usages, ctxt);
+
+        // The reference local can be absent from loop usages even when its
+        // dereference is present. Preserve it when an invariant reads it and
+        // the PCG has a readable owned capability at the loop boundary.
+        for local in invariant_inputs {
+            let place: Place<'vir> = (*local).into();
+            if loop_invariant_place_capabilities.contains_key(&place)
+                || !matches!(place.ty(ctxt).ty.kind(), ty::Ref(_, _, Mutability::Not))
+            {
+                continue;
+            }
+            if let Some(capability) = state.computed_owned_capability(place, self.pcg_ctxt())
+                && !capability.is_write()
+            {
+                loop_invariant_place_capabilities.insert(place, capability);
+            }
+        }
 
         for (place, capability) in loop_invariant_place_capabilities.iter() {
             if capability.is_write() {

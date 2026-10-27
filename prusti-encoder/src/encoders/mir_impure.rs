@@ -2170,8 +2170,22 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 .clone();
             let invariants = loop_spec.invariants.clone();
             let loop_id = loop_spec.loop_id;
-            let (permissions, place_capabilities) =
-                self.get_loop_inv(&cfpcs, &loop_place_usages, self.pcg_ctxt())?;
+            let mut invariant_inputs = FxHashSet::default();
+            for (spec_block, _) in &invariants {
+                let enc_output = self.deps.require_dep::<MirPureEnc>(MirPureEncTask {
+                    encoding_depth: 0,
+                    parent_def_id: self.def_id,
+                    gargs: GParams::from(self.def_id).identity_args(),
+                    kind: PureKind::SpecBlock(*spec_block),
+                })?;
+                invariant_inputs.extend(enc_output.inputs.iter().copied());
+            }
+            let (permissions, place_capabilities) = self.get_loop_inv(
+                &cfpcs,
+                &loop_place_usages,
+                &invariant_inputs,
+                self.pcg_ctxt(),
+            )?;
             let pcg_state = &cfpcs.statements[0].states[EvalStmtPhase::PreOperands];
             // The Viper loop havocs the edge flags set in the loop, including
             // those set between the loop's first block and the body invariant,

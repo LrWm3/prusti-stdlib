@@ -46,10 +46,9 @@ borrowed elements supports both direct `next` calls and the generic wrapper.
 
 The `known_limits/for_count` probe reproduces the current `for`-loop gap: a
 symbolic count does not preserve the relation between the hidden iterator and
-the number of items seen, so the increment may overflow. `shared_loop` shows
-that directly using the source reference in its invariant is not yet established; the verified
-`count_shared` wrapper preserves a ghost snapshot of that reference instead.
-Reproduce any after building:
+the number of items seen, so the increment may overflow. Shared traversal can
+use the original source reference directly in its loop invariant. Reproduce the
+remaining probe after building:
 
 ```sh
 PRUSTI_CHECK_OVERFLOWS=true PRUSTI_CHECK_PANICS=true PRUSTI_NO_VERIFY_DEPS=true \
@@ -57,5 +56,3 @@ PRUSTI_CHECK_OVERFLOWS=true PRUSTI_CHECK_PANICS=true PRUSTI_NO_VERIFY_DEPS=true 
   prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/Cargo.toml \
   --bin for_count
 ```
-
-Replace `for_count` with the name of another probe to run it.

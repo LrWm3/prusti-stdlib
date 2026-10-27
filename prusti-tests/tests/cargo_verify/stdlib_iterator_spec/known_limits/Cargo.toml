@@ -12,8 +12,4 @@ iterator_specs = { path = "../specs" }
 name = "for_count"
 path = "for_count.rs"
 
-[[bin]]
-name = "shared_loop"
-path = "shared_loop.rs"
-
 [workspace]

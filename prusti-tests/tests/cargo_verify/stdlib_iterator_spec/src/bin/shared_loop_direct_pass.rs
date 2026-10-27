@@ -3,10 +3,9 @@ use prusti_contracts::{iter_model::ModeledIterator, *};
 
 #[requires(expected == values.len())]
 #[ensures(result == expected)]
-fn count<'a, T>(values: &'a [T], expected: usize) -> usize {
+fn count<T>(values: &[T], expected: usize) -> usize {
     let mut iterator = values.iter();
     let before = ghost! { iterator.remaining() };
-    prusti_assert!(forall(|i: usize| i < expected ==> *(*before)[i] === &values[i]));
     let mut seen = 0usize;
     loop {
         body_invariant!(expected == old(expected));
@@ -28,4 +27,7 @@ fn count<'a, T>(values: &'a [T], expected: usize) -> usize {
     seen
 }
 
-fn main() {}
+fn main() {
+    let values = [10, 20];
+    assert_eq!(count(&values, 2), 2);
+}

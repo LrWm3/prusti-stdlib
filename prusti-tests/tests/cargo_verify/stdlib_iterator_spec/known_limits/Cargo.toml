@@ -13,10 +13,6 @@ name = "for_count"
 path = "for_count.rs"
 
 [[bin]]
-name = "borrowed_items"
-path = "borrowed_items.rs"
-
-[[bin]]
 name = "shared_loop"
 path = "shared_loop.rs"
 

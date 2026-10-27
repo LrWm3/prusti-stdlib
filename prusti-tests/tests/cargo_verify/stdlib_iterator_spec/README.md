@@ -41,14 +41,13 @@ borrowed-item probe starts with an existing iterator; it does not establish a
 model for constructing a vector of references.
 
 Some lifetime-dependent evidence remains unsupported, as do symbolic `for`-loop
-proofs; this does not complete P2-C or M2.
+proofs; this does not complete P2-C or M2. An existing owned iterator of
+borrowed elements supports both direct `next` calls and the generic wrapper.
 
 The `known_limits/for_count` probe reproduces the current `for`-loop gap: a
 symbolic count does not preserve the relation between the hidden iterator and
-the number of items seen, so the increment may overflow. `borrowed_items`
-reproduces conservative rejection of the iterator contract for an owned
-iterator of borrowed elements. `shared_loop` shows that directly using
-the source reference in its invariant is not yet established; the verified
+the number of items seen, so the increment may overflow. `shared_loop` shows
+that directly using the source reference in its invariant is not yet established; the verified
 `count_shared` wrapper preserves a ghost snapshot of that reference instead.
 Reproduce any after building:
 

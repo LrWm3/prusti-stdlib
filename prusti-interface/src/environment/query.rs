@@ -487,8 +487,8 @@ impl<'tcx> EnvQuery<'tcx> {
 
     /// Conservatively prove a universally quantified trait obligation without
     /// relying on region constraints. Trait selection must choose an impl or
-    /// builtin; every nested obligation must be region-free and provable in
-    /// the caller's environment. The only accepted region constraints equate
+    /// builtin; nested obligations must be provable without lifetime evidence.
+    /// The only accepted region constraints equate
     /// fresh impl variables with placeholders, and leak checking must succeed.
     pub fn prove_poly_trait_without_region_requirements(
         self,
@@ -522,6 +522,26 @@ impl<'tcx> EnvQuery<'tcx> {
                 has_region = true;
                 region
             });
+            // References are always Sized (and thus MetaSized), independently
+            // of their lifetime or referent. These built-in facts need no
+            // region evidence even when the nested predicate contains regions.
+            let reference_sized = match predicate.kind().skip_binder() {
+                ty::PredicateKind::Clause(ty::ClauseKind::Trait(trait_pred)) => {
+                    let def_id = Some(trait_pred.def_id());
+                    trait_pred.polarity == PredicatePolarity::Positive
+                        && (def_id == self.tcx.lang_items().sized_trait()
+                            || def_id == self.tcx.lang_items().meta_sized_trait())
+                        && matches!(trait_pred.self_ty().kind(), ty::Ref(..))
+                }
+                _ => false,
+            };
+            if has_region
+                && reference_sized
+                && !predicate.has_non_region_infer()
+                && predicate.kind().bound_vars().is_empty()
+            {
+                continue;
+            }
             if has_region
                 || predicate.has_non_region_infer()
                 || !predicate.kind().bound_vars().is_empty()

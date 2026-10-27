@@ -490,8 +490,8 @@ also exercises non-`Copy` elements and a symbolic counting loop.
 The separately verified generic `advance` wrapper exports the head-and-tail
 contract for an existing owned iterator of borrowed items. This exercises
 `Item = &T` across crates without establishing general reference-containing
-collection snapshots. Direct calls on this region-bearing owned iterator type
-remain conservatively unsupported.
+collection snapshots. Direct `next` calls on this iterator type are also
+verified, including head, tail, and exhaustion properties.
 
 The sealed capability also models `slice::Iter`. Its trusted constructor
 connects each remaining reference to the corresponding source element, and
@@ -507,6 +507,7 @@ valid for every lifetime.
 Selection checks a region-bearing bound by independently quantifying its
 lifetimes, selecting a concrete implementation or builtin, checking its
 region-free nested obligations, and requiring rustc's leak check to succeed.
+The always-sized reference case is also accepted without lifetime evidence.
 It conservatively rejects unproved region requirements, unresolved inference
 variables, refinements with conditional preconditions, associated functions
 other than directly called external trait methods, external free functions and
@@ -888,7 +889,7 @@ claimed.
 | **M1: unbounded functional Vec** | P1-A through P1-D | Minimal contracts plus reproduced blockers | Verified locally: 21 Vec checks, symbolic append/pop/round-trip and whole-prefix loop proofs for owned non-`Copy` elements, cross-crate clients, and negative cases. |
 | P2-A: Vec and shared slices | M1 | Contracts, sequence lemmas, any slice encoding fixes | Verified locally: 27 checks cover symbolic mutations, shared lookup/ranges, splits, swaps, boundaries, ordering, and framing. |
 | P2-B: mutable collection views | P2-A, two-state snapshots | Pledges, expiry, generic reference framing | Verified locally: 74 checks cover slice and Vec views, lookup, indexing, splits, reborrowing, inclusive range state, and negative framing cases. |
-| P2-C: shared and owned iterators | Sequence model, generic trait probes | Opt-in models, refinement, lifetimes, loop support | In progress: 23 checks cover owned and shared traversal and symbolic loops; some lifetime evidence and `for` loops remain open. |
+| P2-C: shared and owned iterators | Sequence model, generic trait probes | Opt-in models, refinement, lifetimes, loop support | In progress: 26 checks cover owned and shared traversal and symbolic loops; some lifetime evidence and `for` loops remain open. |
 | **M2: Vec/slice phase complete** | P2-A, P2-B, P2-C | Integration and cross-crate validation | Untested; all required gates pass. |
 | P3-A: explicit key models | M2, logical Map/Set | Key-model interfaces and conditional contracts | Untested; equality/hash/model evidence is enforced. |
 | **M3: HashMap/HashSet phase complete** | P3-A, P3-B, P2-B expiry support | Map/set contracts and mutable lookup | Untested; key, cardinality, framing, and mutable-value cases pass. |

@@ -485,8 +485,11 @@ Selection conservatively excludes bounds containing regions or unresolved
 inference variables, refinements with conditional preconditions, associated
 functions, external specs, and pure calls. A
 [reproducer](prusti-tests/tests/cargo_verify/stdlib_borrow_spec/known_limits/)
-retains the conditional-precondition limitation. Conditional expiry pledges
-are also unsupported. Concrete owned and shared iterator models, trait-method
+retains the conditional-precondition limitation; another compiles a real
+`Iterator::next` external specification but cannot select its conditional
+postcondition in a generic caller. Its capability is an intentionally strong
+test-only assumption, not an iterator model. Conditional expiry pledges are
+also unsupported. Concrete owned and shared iterator models, trait-method
 refinement, lifetime handling, and loop proofs remain necessary for P2-C.
 
 ## Phase 1 — External-specification support and unbounded Vec

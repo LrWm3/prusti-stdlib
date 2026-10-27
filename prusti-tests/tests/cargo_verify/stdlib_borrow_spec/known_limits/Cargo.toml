@@ -14,4 +14,8 @@ path = "conditional_model.rs"
 name = "conditional_pre_pass"
 path = "conditional_pre_pass.rs"
 
+[[bin]]
+name = "iterator_trait_pass"
+path = "iterator_trait_pass.rs"
+
 [workspace]

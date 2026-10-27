@@ -1,7 +1,7 @@
 use crate::*;
 use alloc::vec::Vec;
 use core::{
-    ops::{Deref, Index},
+    ops::{Deref, Index, IndexMut},
     slice::SliceIndex,
 };
 
@@ -125,4 +125,19 @@ impl<T, I: SliceIndex<[T]>, A: core::alloc::Allocator> Index<I> for Vec<T, A> {
         None => false,
     })]
     fn index(&self, index: I) -> &Self::Output;
+}
+
+#[extern_spec]
+impl<T, I: SliceIndex<[T]>, A: core::alloc::Allocator> IndexMut<I> for Vec<T, A> {
+    #[trusted]
+    #[requires(matches!(index.get(self.as_slice()), Some(_)))]
+    #[ensures(match old(index.get(self.as_slice())) {
+        Some(previous) => Ghost::new_ref(&*result) == Ghost::new_ref(previous),
+        None => false,
+    })]
+    #[after_expiry(self.len() == old(self.len()) && match index.get(self.as_slice()) {
+        Some(current) => Ghost::new_ref(current) == before_expiry(Ghost::new_ref(&*result)),
+        None => false,
+    })]
+    fn index_mut(&mut self, index: I) -> &mut I::Output;
 }

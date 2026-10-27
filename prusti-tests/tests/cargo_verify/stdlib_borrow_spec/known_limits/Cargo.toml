@@ -22,8 +22,4 @@ path = "conditional_pass.rs"
 name = "conditional_abstract"
 path = "conditional_abstract.rs"
 
-[[bin]]
-name = "index_mut_probe"
-path = "index_mut_probe.rs"
-
 [workspace]

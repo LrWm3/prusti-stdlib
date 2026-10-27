@@ -33,14 +33,14 @@ use prusti_rustc_interface::{
     index::Idx,
     middle::{
         mir,
-        ty::{self, TyKind},
+        ty::{self, TyKind, TypeVisitableExt},
     },
     span::{Span, Spanned, def_id::DefId},
 };
 use prusti_utils::config;
 use rustc_hash::{FxHashMap, FxHashSet};
 use task_encoder::{EncodeFullError, TaskEncoder, TaskEncoderDependencies};
-use vir::{CastType, CompType, LocalDeclData};
+use vir::{CastType, CompType, LocalDeclData, Reify};
 
 use crate::encoders::{
     self, FunctionCallEnc, MirBuiltinUseCastEnc, MirBuiltinUseCastTask, MirPureEnc, MirPureEncTask,
@@ -48,6 +48,7 @@ use crate::encoders::{
     impure::WandOldOuter,
     mir_fn::{CallTaskDescription, RustSignature, SpecBlockKind, SpecBlocks},
     mir_shared::{EncodeResult, PureRvalueEnc, RustcIntrinsic},
+    pure::spec::MirSpecEncMode,
     ty::{
         RustFieldAddress, RustTyDecomposition, RustTySpecial,
         generics::{GArgs, GParams},
@@ -1555,6 +1556,93 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         (func_def_id, caller_substs, is_pure)
     }
 
+    /// Select conditional postconditions only when rustc proves every bound
+    /// in the caller's environment. Region-bearing obligations are excluded:
+    /// MIR inference regions cannot safely be resolved by a fresh solver.
+    fn conditional_posts_for_call(
+        &self,
+        callee: DefId,
+        args: ty::GenericArgsRef<'vir>,
+    ) -> Vec<DefId> {
+        let tcx = self.vcx.tcx();
+        if tcx.opt_associated_item(callee).is_some() {
+            return Vec::new();
+        }
+        encoders::spec::with_type_spec(|specs| {
+            let Some(graph) = specs.get_proc_spec(&callee) else {
+                return Vec::new();
+            };
+            if graph.base_spec.extern_spec.is_some()
+                || !graph.base_spec.trusted.extract_inherit().unwrap_or(false)
+            {
+                return Vec::new();
+            }
+            let base_posts: Vec<_> = graph
+                .base_spec
+                .posts
+                .extract_with_selective_replacement_iter()
+                .copied()
+                .collect();
+            let mut result = Vec::new();
+            for conditional in graph.specs_with_constraints.values() {
+                // A conditional precondition can make the refined contract
+                // applicable on a different domain; do not assume its posts.
+                if conditional
+                    .pres
+                    .extract_with_selective_replacement_iter()
+                    .next()
+                    .is_some()
+                {
+                    continue;
+                }
+                for post in conditional.posts.extract_with_selective_replacement_iter() {
+                    if base_posts.contains(post) {
+                        continue;
+                    }
+                    // A refinement can make a lifetime early-bound even if it
+                    // is late-bound on the function. Its generic slots then do
+                    // not match the call's substitutions, so skip it.
+                    let spec_args = ty::GenericArgs::identity_for_item(tcx, *post);
+                    if spec_args.len() != args.len()
+                        || spec_args.iter().zip(args).any(|(expected, actual)| {
+                            !matches!(
+                                (expected.kind(), actual.kind()),
+                                (
+                                    ty::GenericArgKind::Lifetime(_),
+                                    ty::GenericArgKind::Lifetime(_)
+                                ) | (ty::GenericArgKind::Type(_), ty::GenericArgKind::Type(_))
+                                    | (ty::GenericArgKind::Const(_), ty::GenericArgKind::Const(_))
+                            )
+                        })
+                    {
+                        continue;
+                    }
+                    let bounds_hold = tcx.param_env(*post).caller_bounds().iter().all(|clause| {
+                        let instantiated = ty::EarlyBinder::bind(tcx, clause)
+                            .instantiate(tcx, args)
+                            .skip_normalization();
+                        let mut has_region = false;
+                        let _ = ty::fold_regions(tcx, instantiated, |region, _| {
+                            has_region = true;
+                            region
+                        });
+                        !has_region
+                            && !instantiated.has_non_region_infer()
+                            && instantiated.kind().bound_vars().is_empty()
+                            && prusti_interface::environment::EnvQuery::new(tcx).evaluate_predicate(
+                                instantiated.as_predicate(),
+                                tcx.param_env(self.def_id),
+                            )
+                    });
+                    if bounds_hold {
+                        result.push(*post);
+                    }
+                }
+            }
+            result
+        })
+    }
+
     fn new_tmp<T: CompType>(&mut self, ty: vir::Type<'vir, T>) -> vir::Expr<'vir, T> {
         let name = vir::vir_format!(self.vcx, "_tmp{}", self.tmp_ctr);
         let local = vir::vir_local_decl! { self.vcx; [name] : [ty] };
@@ -2482,6 +2570,15 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         let call = func_out.call(method_in, dest);
 
                         let label_pre = self.new_label("pre");
+                        let conditional_posts =
+                            self.conditional_posts_for_call(func_def_id, caller_substs);
+                        let conditional_args = if conditional_posts.is_empty() {
+                            Vec::new()
+                        } else {
+                            args.iter()
+                                .map(|arg| self.encode_operand_snap_immediate(&arg.node))
+                                .collect::<EncodeResult<'vir, Vec<_>, E>>()?
+                        };
                         vcx.handle_error(
                             "call.precondition:assertion.false",
                             move |reason_span_opt| {
@@ -2499,6 +2596,34 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         let label_post = self.new_label("post");
                         self.call_labels
                             .insert(location.block, (label_pre, label_post));
+                        if !conditional_posts.is_empty() {
+                            let result = self.encode_place_with_snap((*destination).into())?.1;
+                            let mut spec_args = FxHashMap::default();
+                            for (index, arg) in conditional_args.into_iter().enumerate() {
+                                spec_args.insert(
+                                    mir::Local::from(index + 1),
+                                    vcx.mk_local_labelled_old_expr(arg, label_pre),
+                                );
+                            }
+                            spec_args.insert(mir::Local::from(args.len() + 1), result);
+                            let spec_args = vcx.alloc(spec_args);
+                            for post in conditional_posts {
+                                let spec = self.deps.require_dep::<MirPureEnc>(MirPureEncTask {
+                                    encoding_depth: 0,
+                                    parent_def_id: post,
+                                    gargs: self.gargs(caller_substs),
+                                    kind: PureKind::Spec {
+                                        context: func_def_id,
+                                        mode: MirSpecEncMode::Impure,
+                                    },
+                                })?;
+                                let expr = spec
+                                    .expr
+                                    .downcast_ty::<vir::Bool>()
+                                    .reify(vcx, (post, spec_args, vir::OldLabel::Label(label_pre)));
+                                self.stmt(vcx.mk_inhale_stmt(expr));
+                            }
+                        }
                     }
                     Ok(())
                 })?;

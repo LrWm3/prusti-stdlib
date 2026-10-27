@@ -51,17 +51,16 @@ P2-B passes its mutable-view gate. Stronger type-conditional contracts remain
 open for subsequent milestones. The `known_limits` fixture retains reproducers
 outside the suite:
 
-- `conditional_pass` cannot use a type-conditional postcondition even with
-  its trait bound; `conditional_abstract` correctly rejects the same claim
-  without the bound.
+- `conditional_pre_pass` cannot use a type-conditional postcondition when the
+  same refinement also has a conditional precondition, even if both hold.
 
-For example, reproduce the first limitation after building with:
+Reproduce this limitation after building with:
 
 ```sh
 PRUSTI_CHECK_OVERFLOWS=true PRUSTI_CHECK_PANICS=true PRUSTI_NO_VERIFY_DEPS=true \
   ./x.py exec target/debug/cargo-prusti --manifest-path \
   prusti-tests/tests/cargo_verify/stdlib_borrow_spec/known_limits/Cargo.toml \
-  --bin conditional_pass
+  --bin conditional_pre_pass
 ```
 
 The element domain and normal-return assumptions remain those documented for

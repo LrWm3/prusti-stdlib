@@ -1,6 +1,81 @@
 //! External contracts exported to the separately compiled proof clients.
 use prusti_contracts::*;
 
+pub trait ConditionalModel {}
+impl ConditionalModel for usize {}
+impl ConditionalModel for &'static u8 {}
+
+pub trait StaticModel {}
+impl<T: 'static> StaticModel for T {}
+
+pub trait LifetimeModel<'a> {}
+impl<'a> LifetimeModel<'a> for usize {}
+
+#[trusted]
+#[refine_spec(where Value: ConditionalModel, [ensures(result == 7)])]
+pub fn conditional_observe<Value>(_value: &Value) -> usize {
+    7
+}
+
+#[trusted]
+#[refine_spec(where Value: StaticModel, [ensures(result == 7)])]
+pub fn conditional_static<Value>(_value: &Value) -> usize {
+    7
+}
+
+#[trusted]
+#[refine_spec(where Value: LifetimeModel<'a>, [ensures(result == 7)])]
+pub fn conditional_lifetime_bound<'a, Value>(_value: &Value, _marker: &'a ()) -> usize {
+    7
+}
+
+#[trusted]
+#[refine_spec(where Value: ConditionalModel, [
+    requires(input > 0),
+    ensures(result == 7),
+])]
+pub fn conditional_pre<Value>(_value: &Value, input: usize) -> usize {
+    if input > 0 {
+        7
+    } else {
+        0
+    }
+}
+
+#[trusted]
+#[ensures(*value == 9)]
+#[refine_spec(where Marker: ConditionalModel, [ensures(result == old(*value))])]
+pub fn conditional_replace<Marker>(value: &mut usize, _marker: &Marker) -> usize {
+    let before = *value;
+    *value = 9;
+    before
+}
+
+#[trusted]
+#[refine_spec(where Value: ConditionalModel, [ensures(result === old(value))])]
+pub fn conditional_identity<Value>(value: Value) -> Value {
+    value
+}
+
+/// Test-only assumed capability: `next` returns `None` exactly when `remaining`
+/// is empty. The trusted helper below relies on this assumption; this is not a
+/// verified contract for arbitrary implementations of `Iterator`.
+pub trait ModeledIterator: Iterator {
+    #[pure]
+    fn remaining(&self) -> Seq<Self::Item>;
+}
+
+#[trusted]
+#[refine_spec(where I: ModeledIterator, [
+    ensures(match result {
+        Some(_) => old(iterator.remaining()).len() > Int::from(0),
+        None => old(iterator.remaining()).len() == Int::from(0),
+    })
+])]
+pub fn modeled_advance<I: Iterator>(iterator: &mut I) -> Option<I::Item> {
+    iterator.next()
+}
+
 // These verified wrappers consume bundled contracts and export their own
 // contracts to a third crate. The focused runner verifies this crate explicitly.
 #[ensures(result === value)]

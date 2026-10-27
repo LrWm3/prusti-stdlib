@@ -473,15 +473,21 @@ generic library and client exercise owned non-`Copy` elements. An additional
 exhausted-inclusive indexing proof and negative framing checks pass. These
 results satisfy the P2-B mutable-view gate; P2-C and M2 remain open.
 
-Type-conditional postconditions are not selected even when their bounds hold,
-and the current refinement syntax does not support conditional expiry pledges.
-These are retained as
-[reproducers](prusti-tests/tests/cargo_verify/stdlib_borrow_spec/known_limits/)
-outside the passing suite. The specification encoder caches by function
-definition and the specification query selects only the base contract. A
-conditional-contract solution would need call-site type arguments and the
-caller's trait evidence, as well as conditional expiry pledges; an abstract call
-must not acquire an implementation-specific guarantee.
+### P2-C progress: conditional capability probe
+
+Trusted free impure functions can now provide type-conditional postconditions
+when rustc proves their bounds at the call site. A cross-crate generic client
+uses a test-only assumed iterator capability; other probes check pre-call state
+and reject claims without the required evidence. This helper's contract is
+trusted, and does not establish a contract for `Iterator::next`.
+
+Selection conservatively excludes bounds containing regions or unresolved
+inference variables, refinements with conditional preconditions, associated
+functions, external specs, and pure calls. A
+[reproducer](prusti-tests/tests/cargo_verify/stdlib_borrow_spec/known_limits/)
+retains the conditional-precondition limitation. Conditional expiry pledges
+are also unsupported. Concrete owned and shared iterator models, trait-method
+refinement, lifetime handling, and loop proofs remain necessary for P2-C.
 
 ## Phase 1 — External-specification support and unbounded Vec
 
@@ -848,7 +854,7 @@ claimed.
 | **M1: unbounded functional Vec** | P1-A through P1-D | Minimal contracts plus reproduced blockers | Verified locally: 21 Vec checks, symbolic append/pop/round-trip and whole-prefix loop proofs for owned non-`Copy` elements, cross-crate clients, and negative cases. |
 | P2-A: Vec and shared slices | M1 | Contracts, sequence lemmas, any slice encoding fixes | Verified locally: 27 checks cover symbolic mutations, shared lookup/ranges, splits, swaps, boundaries, ordering, and framing. |
 | P2-B: mutable collection views | P2-A, two-state snapshots | Pledges, expiry, generic reference framing | Verified locally: 74 checks cover slice and Vec views, lookup, indexing, splits, reborrowing, inclusive range state, and negative framing cases. |
-| P2-C: shared and owned iterators | Sequence model, generic trait probes | Opt-in models, refinement, lifetimes, loop support | Untested; concrete and generic traversal proofs pass. |
+| P2-C: shared and owned iterators | Sequence model, generic trait probes | Opt-in models, refinement, lifetimes, loop support | In progress: a trusted free-function capability probe works across crates; concrete and generic traversal remain open. |
 | **M2: Vec/slice phase complete** | P2-A, P2-B, P2-C | Integration and cross-crate validation | Untested; all required gates pass. |
 | P3-A: explicit key models | M2, logical Map/Set | Key-model interfaces and conditional contracts | Untested; equality/hash/model evidence is enforced. |
 | **M3: HashMap/HashSet phase complete** | P3-A, P3-B, P2-B expiry support | Map/set contracts and mutable lookup | Untested; key, cardinality, framing, and mutable-value cases pass. |

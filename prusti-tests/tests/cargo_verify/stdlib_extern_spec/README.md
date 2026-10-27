@@ -46,6 +46,9 @@ each test command has a 300-second outer timeout.
 | `traits_pass` | Generic trait arguments, associated items (owned and shared-reference values), explicit borrow lifetimes, concrete external impl contracts, and a verified local refinement work across crates. |
 | `cross_crate_pass` | Generic wrappers preserve non-`Copy` payloads, return the old destination, and install the new value across crate boundaries. |
 | `lifetimes_pass` | Renamed early/late-bound lifetimes, existing outlives bounds, type aliases, and nested higher-ranked signatures are accepted. |
+| `conditional_pass`, `iterator_capability_pass` | Trusted free-function conditional postconditions are selected with caller evidence, including old-state and cross-crate generic capability probes. The iterator capability and helper are test-only assumptions, not contracts for arbitrary iterators. |
+| `conditional_unbound`, `conditional_lifetime`, `conditional_generic_lifetime`, `conditional_lifetime_bound` | Reject conditional guarantees without sufficient evidence, including lifetime-sensitive bounds and mismatched generic lifetime slots. |
+| `conditional_pre_wrong`, `conditional_state_wrong` | Reject a conditional postcondition when its refinement has a conditional precondition, and reject an incorrect pre-call state. |
 | `cross_crate_wrong_value` | Reject a wrong returned value from an imported generic wrapper. |
 | `false_assert` | Reject the false assertion, even with both external contracts loaded. |
 | `overflow` | Reject addition without the necessary overflow precondition. |
@@ -116,6 +119,11 @@ the full argument list when instantiating spec bodies.
 Both signature and predicate checks are conservative. They may reject valid
 declarations requiring different early-bound parameter layouts or more complex
 outlives equivalences. They do not silently accept changed lifetime relationships.
+
+Conditional postcondition selection is currently limited to trusted free impure
+functions with no conditional preconditions. It excludes region-bearing bounds,
+unresolved inference variables, associated functions, external specs, and pure
+calls; it does not implement conditional expiry pledges.
 
 These checks establish the P1-B external-contract foundation, not unrestricted
 collection or reference-containing generic support. Review trusted contracts

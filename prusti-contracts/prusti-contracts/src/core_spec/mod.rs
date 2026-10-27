@@ -2,6 +2,7 @@ use crate::*;
 
 pub mod eq;
 pub mod float;
+pub mod iter;
 pub mod mem;
 pub mod option;
 pub mod range;

@@ -123,3 +123,9 @@ impl Observe for Zero {
         0
     }
 }
+
+impl Observe for &u8 {
+    fn observe(&self) -> u32 {
+        0
+    }
+}

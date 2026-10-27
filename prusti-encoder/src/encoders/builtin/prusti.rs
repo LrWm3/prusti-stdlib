@@ -170,6 +170,18 @@ impl PrustiBuiltin {
 
             let item_name = tcx.item_name(def_id);
             let item = item_name.as_str();
+            let trait_item = tcx
+                .opt_associated_item(def_id)
+                .and_then(|item| item.trait_item_def_id())
+                .unwrap_or(def_id);
+            if item == "remaining"
+                && tcx.trait_of_assoc(trait_item).is_some_and(|trait_id| {
+                    tcx.crate_name(trait_id.krate).as_str() == "prusti_contracts"
+                        && tcx.item_name(trait_id).as_str() == "ModeledIterator"
+                })
+            {
+                return None;
+            }
             // The self type of the impl the call relies on: the selected
             // trait impl for trait method calls (whether or not it overrides
             // the method), or the enclosing inherent impl otherwise. Matched

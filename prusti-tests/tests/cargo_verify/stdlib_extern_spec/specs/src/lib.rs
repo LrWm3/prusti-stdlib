@@ -63,22 +63,7 @@ pub trait IteratorObservation: Iterator {
     fn remaining(&self) -> Seq<Self::Item>;
 }
 
-/// Test-only assumed capability: `next` returns `None` exactly when `remaining`
-/// is empty. The trusted contracts below rely on this assumption; this is not a
-/// verified contract for arbitrary implementations of `Iterator`.
-pub trait ModeledIterator: IteratorObservation {}
-
-#[extern_spec(core::iter)]
-trait Iterator {
-    #[trusted]
-    #[refine_spec(where Self: ModeledIterator, [
-        ensures(match result {
-            Some(_) => old(self.remaining()).len() > Int::from(0),
-            None => old(self.remaining()).len() == Int::from(0),
-        })
-    ])]
-    fn next(&mut self) -> Option<Self::Item>;
-}
+pub use prusti_contracts::iter_model::ModeledIterator;
 
 #[trusted]
 #[refine_spec(where I: ModeledIterator, [

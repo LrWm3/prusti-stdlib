@@ -8,6 +8,14 @@ use core::{
     slice::SliceIndex,
 };
 
+// Vec::into_iter transfers the initialized elements in their original order.
+#[extern_spec]
+impl<T, A: core::alloc::Allocator> core::iter::IntoIterator for Vec<T, A> {
+    #[trusted]
+    #[ensures(crate::iter_model::ModeledIterator::remaining(&result) == vec_contents(&self))]
+    fn into_iter(self) -> alloc::vec::IntoIter<T, A>;
+}
+
 // These are normal-return contracts for owned elements with stable value
 // snapshots. Allocation/capacity failures and arbitrary Drop behavior remain
 // trusted execution assumptions; the length precondition prevents usize wrap,

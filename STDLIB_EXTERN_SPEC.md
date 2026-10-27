@@ -473,14 +473,19 @@ generic library and client exercise owned non-`Copy` elements. An additional
 exhausted-inclusive indexing proof and negative framing checks pass. These
 results satisfy the P2-B mutable-view gate; P2-C and M2 remain open.
 
-### P2-C progress: conditional capability probe
+### P2-C progress: owned iterator model
 
+**Verified locally on 2026-10-27:** the focused owned-iterator suite passes eight
+checks, including its separately verified `no_std` library and negative cases.
 Trusted free impure functions and directly called external trait methods can
 now provide type-conditional postconditions when rustc proves their bounds at
-the call site. A cross-crate generic client calls `Iterator::next` using a
-test-only assumed capability; other probes check pre-call state and reject
-claims without the required evidence. This fixture does not establish a
-contract for concrete standard-library iterators.
+the call site. The bundled sealed `ModeledIterator` capability observes the
+remaining sequence of a `Vec::IntoIter`. Trusted contracts connect
+`Vec::into_iter` to the original vector and specify the head and tail of
+`Iterator::next`, including an empty iterator that stays exhausted. A generic
+cross-crate client uses the capability, while negative cases reject claims
+without the required evidence. The [owned iterator fixture](prusti-tests/tests/cargo_verify/stdlib_iterator_spec/README.md)
+also exercises non-`Copy` elements and a symbolic counting loop.
 
 Selection conservatively excludes bounds containing regions or unresolved
 inference variables, refinements with conditional preconditions, associated
@@ -488,8 +493,8 @@ functions other than directly called external trait methods, external free
 functions and impl methods, and pure calls. A
 [reproducer](prusti-tests/tests/cargo_verify/stdlib_borrow_spec/known_limits/)
 retains the conditional-precondition limitation. Conditional expiry pledges are
-also unsupported. Concrete owned and shared iterator models, implementation
-refinement, lifetime handling, and loop proofs remain necessary for P2-C.
+also unsupported. Shared iterator models, implementation refinement, lifetime
+handling, and symbolic `for`-loop proofs remain necessary for P2-C.
 
 ## Phase 1 — External-specification support and unbounded Vec
 
@@ -856,7 +861,7 @@ claimed.
 | **M1: unbounded functional Vec** | P1-A through P1-D | Minimal contracts plus reproduced blockers | Verified locally: 21 Vec checks, symbolic append/pop/round-trip and whole-prefix loop proofs for owned non-`Copy` elements, cross-crate clients, and negative cases. |
 | P2-A: Vec and shared slices | M1 | Contracts, sequence lemmas, any slice encoding fixes | Verified locally: 27 checks cover symbolic mutations, shared lookup/ranges, splits, swaps, boundaries, ordering, and framing. |
 | P2-B: mutable collection views | P2-A, two-state snapshots | Pledges, expiry, generic reference framing | Verified locally: 74 checks cover slice and Vec views, lookup, indexing, splits, reborrowing, inclusive range state, and negative framing cases. |
-| P2-C: shared and owned iterators | Sequence model, generic trait probes | Opt-in models, refinement, lifetimes, loop support | In progress: a test-only assumed capability works across crates for `Iterator::next`; concrete traversal and loop proofs remain open. |
+| P2-C: shared and owned iterators | Sequence model, generic trait probes | Opt-in models, refinement, lifetimes, loop support | In progress: eight owned Vec iterator checks and a symbolic counting loop pass; shared traversal and `for` loops remain open. |
 | **M2: Vec/slice phase complete** | P2-A, P2-B, P2-C | Integration and cross-crate validation | Untested; all required gates pass. |
 | P3-A: explicit key models | M2, logical Map/Set | Key-model interfaces and conditional contracts | Untested; equality/hash/model evidence is enforced. |
 | **M3: HashMap/HashSet phase complete** | P3-A, P3-B, P2-B expiry support | Map/set contracts and mutable lookup | Untested; key, cardinality, framing, and mutable-value cases pass. |

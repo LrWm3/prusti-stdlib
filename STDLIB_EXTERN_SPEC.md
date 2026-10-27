@@ -513,6 +513,11 @@ and symbolic `for`-loop proofs remain necessary for P2-C. A loop invariant that
 directly refers to the source rather than the captured ghost snapshot remains
 unproved.
 
+An attempted universal-lifetime check using rustc's region-insensitive solver
+was rejected: it accepted an implementation whose nested type argument had a
+hidden `'static` requirement. A negative cross-crate test preserves that case;
+the conservative selection rule remains in effect.
+
 ## Phase 1 — External-specification support and unbounded Vec
 
 **Exit gate M1:** verified generic clients use real Vec operations to prove exact

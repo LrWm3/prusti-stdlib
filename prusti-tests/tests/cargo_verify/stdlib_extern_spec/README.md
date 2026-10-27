@@ -48,7 +48,7 @@ each test command has a 300-second outer timeout.
 | `lifetimes_pass` | Renamed early/late-bound lifetimes, existing outlives bounds, type aliases, and nested higher-ranked signatures are accepted. |
 | `conditional_pass`, `iterator_capability_pass` | Conditional postconditions are selected with caller evidence for trusted free functions and the external `Iterator::next` trait method, including old-state and cross-crate generic capability probes. The sealed iterator capability is available only to supported implementations. |
 | `iterator_capability_unbound`, `iterator_capability_wrong`, `iterator_capability_lifetime` | Reject an iterator claim without model evidence, an incorrect pre-call state, and a trait guarantee available only for a `'static` reference. |
-| `conditional_unbound`, `conditional_lifetime`, `conditional_generic_lifetime`, `conditional_lifetime_bound` | Reject conditional guarantees without sufficient evidence, including lifetime-sensitive bounds and mismatched generic lifetime slots. |
+| `conditional_unbound`, `conditional_lifetime`, `conditional_generic_lifetime`, `conditional_nested_lifetime`, `conditional_lifetime_bound` | Reject conditional guarantees without sufficient evidence, including a hidden `'static` requirement on a reference-containing type and mismatched generic lifetime slots. |
 | `conditional_pre_wrong`, `conditional_state_wrong` | Reject a conditional postcondition when its refinement has a conditional precondition, and reject an incorrect pre-call state. |
 | `cross_crate_wrong_value` | Reject a wrong returned value from an imported generic wrapper. |
 | `false_assert` | Reject the false assertion, even with both external contracts loaded. |

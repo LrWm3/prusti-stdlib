@@ -28,8 +28,9 @@ to the source elements. Clients use `next` directly and through the verified
 generic `advance` wrapper. A cross-crate `first_shared` wrapper returns the
 first source reference. Clients verify non-`Copy` elements, source values, and
 exhaustion; the `no_std` library also checks each yielded reference in a
-symbolic traversal. Negative probes reject incorrect references, state, and
-loop invariants.
+symbolic traversal. The shared-slice `IntoIterator` contract preserves the
+same source relationships, and `prusti_for!` verifies a symbolic shared count.
+Negative probes reject incorrect references, state, and loop invariants.
 
 Ordinary `for` loops over an owned `Vec` can name their compiler-generated
 iterator in a body invariant with `for_iterator::<std::vec::IntoIter<T>>()`.

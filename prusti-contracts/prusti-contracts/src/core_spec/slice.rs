@@ -28,6 +28,15 @@ pub fn range_index_model<I>(_index: &I) -> Option<(usize, usize)> {
     unreachable!()
 }
 
+// The shared-slice IntoIterator implementation delegates to `slice::iter`.
+#[extern_spec]
+impl<'a, T> core::iter::IntoIterator for &'a [T] {
+    #[trusted]
+    #[ensures(result.remaining().len() == Int::from(self.len()))]
+    #[ensures(forall(|i: usize| i < self.len() ==> *result.remaining()[i] === &self[i]))]
+    fn into_iter(self) -> core::slice::Iter<'a, T>;
+}
+
 #[extern_spec]
 impl<T> [T] {
     #[trusted]

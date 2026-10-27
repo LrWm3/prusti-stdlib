@@ -431,9 +431,19 @@ classification. Clients cannot infer that a range has a scalar classification,
 as tested by a negative probe. A sequence-update pledge avoids the timeout seen
 with an earlier quantified framing condition.
 
-**P2-B is still incomplete for mutable range views.** The scalar model does not
-describe a selected subsequence or its outside frame; a `get_mut(0..2)` probe
-also cannot establish that index 1 is in bounds for the returned slice.
+**Further progress, verified locally on 2026-10-27:** the expanded borrow suite
+passes 40 checks. Mutable lookup and slice and Vec indexing of bounded
+`start..end` ranges expose the returned slice's length and preserve both outside
+regions. Symbolic clients verify mutations and the resulting owner state. The
+entry contract equates pointer metadata as well as referent snapshots, because
+slice length is stored in pointer metadata. A trusted ghost-only
+`range_index_model` maps `Range<usize>` to its endpoints and other index types
+to `None`; a negative probe prevents treating a scalar index as a range. The
+range fixture took 85 seconds overall in the full run, so its solver
+performance remains a concern; the verifier uses a 90-second per-method limit.
+
+**P2-B remains incomplete for other range forms.** An experimental model for
+open-ended ranges caused verification timeouts and was not retained.
 Type-conditional postconditions are not selected even when their bounds hold,
 and the current refinement syntax does not support conditional expiry pledges.
 These are retained as
@@ -808,7 +818,7 @@ claimed.
 | P1-C: sequence observations | P1-B | Model connection, explicit triggers, required generic snapshots | Verified locally: 21 focused checks, arbitrary-index observations, explicit triggers, cross-crate proofs, and precise diagnostics. |
 | **M1: unbounded functional Vec** | P1-A through P1-D | Minimal contracts plus reproduced blockers | Verified locally: 21 Vec checks, symbolic append/pop/round-trip and whole-prefix loop proofs for owned non-`Copy` elements, cross-crate clients, and negative cases. |
 | P2-A: Vec and shared slices | M1 | Contracts, sequence lemmas, any slice encoding fixes | Verified locally: 27 checks cover symbolic mutations, shared lookup/ranges, splits, swaps, boundaries, ordering, and framing. |
-| P2-B: mutable collection views | P2-A, two-state snapshots | Pledges, expiry, generic reference framing | In progress: 36 checks include whole-sequence framing for scalar lookup and indexing; mutable range views and conditional specifications remain open. |
+| P2-B: mutable collection views | P2-A, two-state snapshots | Pledges, expiry, generic reference framing | In progress: 40 checks cover scalar and bounded-range mutable views and framing; other range forms and conditional specifications remain open. |
 | P2-C: shared and owned iterators | Sequence model, generic trait probes | Opt-in models, refinement, lifetimes, loop support | Untested; concrete and generic traversal proofs pass. |
 | **M2: Vec/slice phase complete** | P2-A, P2-B, P2-C | Integration and cross-crate validation | Untested; all required gates pass. |
 | P3-A: explicit key models | M2, logical Map/Set | Key-model interfaces and conditional contracts | Untested; equality/hash/model evidence is enforced. |

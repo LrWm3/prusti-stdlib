@@ -208,7 +208,7 @@ impl PrustiBuiltin {
             Some(match self_ty_name {
                 None => match item {
                     // These helpers are encoded as ordinary pure functions.
-                    "vec_contents" | "scalar_index_model" => return None,
+                    "vec_contents" | "scalar_index_model" | "range_index_model" => return None,
                     // TODO: how to handle this function?
                     "prusti_terminates_trusted" => return None,
                     "forall" => Self::Spec(SpecBuiltin::Forall),

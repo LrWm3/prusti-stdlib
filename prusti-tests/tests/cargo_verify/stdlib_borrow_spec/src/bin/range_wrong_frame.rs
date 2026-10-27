@@ -8,4 +8,5 @@ fn main() {
             prusti_assert!(false);
         }
     }
+    prusti_assert!(values[2] == 9); // expected-error: assertion might not hold
 }

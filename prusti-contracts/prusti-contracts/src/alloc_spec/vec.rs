@@ -1,4 +1,7 @@
-use crate::{core_spec::slice::scalar_index_model, *};
+use crate::{
+    core_spec::slice::{range_index_model, scalar_index_model},
+    *,
+};
 use alloc::vec::Vec;
 use core::{
     ops::{Deref, Index, IndexMut},
@@ -132,7 +135,8 @@ impl<T, I: SliceIndex<[T]>, A: core::alloc::Allocator> IndexMut<I> for Vec<T, A>
     #[trusted]
     #[requires(matches!(index.get(self.as_slice()), Some(_)))]
     #[ensures(match old(index.get(self.as_slice())) {
-        Some(previous) => Ghost::new_ref(&*result) == Ghost::new_ref(previous),
+        Some(previous) => Ghost::new_ref(&*result) == Ghost::new_ref(previous)
+            && core::intrinsics::ptr_metadata(&*result) === core::intrinsics::ptr_metadata(previous),
         None => false,
     })]
     #[after_expiry(self.len() == old(self.len()) && match index.get(self.as_slice()) {
@@ -143,6 +147,12 @@ impl<T, I: SliceIndex<[T]>, A: core::alloc::Allocator> IndexMut<I> for Vec<T, A>
         Some(position) => position < self.len() ==>
             vec_contents(&*self) == old(vec_contents(&*self))
                 .update(position, &*vec_contents(&*self)[position]),
+        None => true,
+    })]
+    #[after_expiry(match range_index_model(&index) {
+        Some((start, end)) => (start <= end && end <= self.len()) ==>
+            vec_contents(&*self)[..start] == old(vec_contents(&*self))[..start]
+            && vec_contents(&*self)[end..] == old(vec_contents(&*self))[end..],
         None => true,
     })]
     fn index_mut(&mut self, index: I) -> &mut I::Output;

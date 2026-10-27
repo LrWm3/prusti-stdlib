@@ -1,4 +1,4 @@
-use crate::*;
+use crate::{core_spec::slice::scalar_index_model, *};
 use alloc::vec::Vec;
 use core::{
     ops::{Deref, Index, IndexMut},
@@ -138,6 +138,12 @@ impl<T, I: SliceIndex<[T]>, A: core::alloc::Allocator> IndexMut<I> for Vec<T, A>
     #[after_expiry(self.len() == old(self.len()) && match index.get(self.as_slice()) {
         Some(current) => Ghost::new_ref(current) == before_expiry(Ghost::new_ref(&*result)),
         None => false,
+    })]
+    #[after_expiry(match scalar_index_model(&index) {
+        Some(position) => position < self.len() ==>
+            vec_contents(&*self) == old(vec_contents(&*self))
+                .update(position, &*vec_contents(&*self)[position]),
+        None => true,
     })]
     fn index_mut(&mut self, index: I) -> &mut I::Output;
 }

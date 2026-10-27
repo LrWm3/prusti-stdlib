@@ -7,6 +7,16 @@ use core::{
     slice::SliceIndex,
 };
 
+/// Ghost-only index classification. Its intended interpretation is `Some(i)`
+/// for a `usize` index `i` and `None` for every other `SliceIndex` type.
+/// The `usize` contract exposes the former fact; callers cannot assume the
+/// classification of another type. This function must not be called at runtime.
+#[trusted]
+#[pure]
+pub fn scalar_index_model<I>(_index: &I) -> Option<usize> {
+    unreachable!()
+}
+
 #[extern_spec]
 impl<T> [T] {
     #[trusted]
@@ -36,6 +46,12 @@ impl<T> [T] {
             Some(current) => Ghost::new_ref(current) == before_expiry(Ghost::new_ref(&*value)),
             None => false,
         },
+    })]
+    #[after_expiry(match scalar_index_model(&index) {
+        Some(position) => position < self.len() ==>
+            Seq::from_slice(&*self) == old(Seq::from_slice(&*self))
+                .update(position, &*Seq::from_slice(&*self)[position]),
+        None => true,
     })]
     fn get_mut<I: SliceIndex<Self>>(&mut self, index: I) -> Option<&mut I::Output>;
 
@@ -87,6 +103,12 @@ impl<T, I: SliceIndex<[T]>> IndexMut<I> for [T] {
         Some(current) => Ghost::new_ref(current) == before_expiry(Ghost::new_ref(&*result)),
         None => false,
     })]
+    #[after_expiry(match scalar_index_model(&index) {
+        Some(position) => position < self.len() ==>
+            Seq::from_slice(&*self) == old(Seq::from_slice(&*self))
+                .update(position, &*Seq::from_slice(&*self)[position]),
+        None => true,
+    })]
     fn index_mut(&mut self, index: I) -> &mut I::Output;
 }
 
@@ -108,6 +130,10 @@ where
 impl<T> SliceIndex<[T]> for usize {
     #[trusted]
     #[pure]
+    #[ensures(match scalar_index_model(&self) {
+        Some(position) => position == self,
+        None => false,
+    })]
     #[ensures(match &result {
         None => self >= slice.len(),
         Some(value) => self < slice.len() && **value === slice[self],

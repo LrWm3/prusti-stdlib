@@ -207,8 +207,8 @@ impl PrustiBuiltin {
             };
             Some(match self_ty_name {
                 None => match item {
-                    // The Vec observation is an ordinary, verified pure body.
-                    "vec_contents" => return None,
+                    // These helpers are encoded as ordinary pure functions.
+                    "vec_contents" | "scalar_index_model" => return None,
                     // TODO: how to handle this function?
                     "prusti_terminates_trusted" => return None,
                     "forall" => Self::Spec(SpecBuiltin::Forall),

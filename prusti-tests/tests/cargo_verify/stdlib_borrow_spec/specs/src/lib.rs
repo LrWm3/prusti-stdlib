@@ -17,6 +17,13 @@ pub fn swap_view<Element>(values: &mut Vec<Element>, first: usize, second: usize
     values.as_mut_slice().swap(first, second);
 }
 
+#[requires(index < values.len())]
+#[ensures(view(values) == old(view(&*values))
+    .update(index, &*old(Ghost::new_ref(&replacement))))]
+pub fn replace_index<Element>(values: &mut Vec<Element>, index: usize, replacement: Element) {
+    values[index] = replacement;
+}
+
 #[ensures(*result == old(*value))]
 #[after_expiry(*value == before_expiry(*result)
     && Ghost::new_ref(&_marker) == old(Ghost::new_ref(&_marker)))]

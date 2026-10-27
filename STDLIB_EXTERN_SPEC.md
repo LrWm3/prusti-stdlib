@@ -419,19 +419,30 @@ calls also carry the indirect permissions and wands required by borrowed
 results. Cross-crate tests exercise concrete and abstract trait calls and reject
 wrong selected values and out-of-bounds indexing.
 
-**P2-B is still incomplete.** Successful `get_mut` and mutable indexing do not
-yet establish framing of unrelated elements. Type-conditional postconditions
-are not selected even when their bounds hold, and the current refinement syntax
-does not support conditional expiry pledges. These are retained as
+**Further progress, verified locally on 2026-10-27:** the expanded borrow suite
+passes 36 checks. Scalar `get_mut` and slice and Vec `IndexMut` describe the
+whole final sequence as the old sequence updated at the selected position.
+Symbolic clients prove both selected values and preservation at any distinct
+index, including generic owned elements and a separately verified cross-crate
+wrapper. This uses a trusted ghost-only `scalar_index_model`: its intended
+interpretation is `Some(i)` for a `usize` index `i` and `None` for other sealed
+`SliceIndex` types. The `usize` `SliceIndex::get` contract exposes its
+classification. Clients cannot infer that a range has a scalar classification,
+as tested by a negative probe. A sequence-update pledge avoids the timeout seen
+with an earlier quantified framing condition.
+
+**P2-B is still incomplete for mutable range views.** The scalar model does not
+describe a selected subsequence or its outside frame; a `get_mut(0..2)` probe
+also cannot establish that index 1 is in bounds for the returned slice.
+Type-conditional postconditions are not selected even when their bounds hold,
+and the current refinement syntax does not support conditional expiry pledges.
+These are retained as
 [reproducers](prusti-tests/tests/cargo_verify/stdlib_borrow_spec/known_limits/)
-outside the passing suite. An experimental scalar-index model with a quantified
-expiry condition timed out and was not retained. These specification-model and
-conditional-selection limitations block the remaining P2-B framing gate.
-The specification encoder currently caches by function definition and the
-specification query selects only the base contract. Supporting this gate needs
-call-site type arguments and the caller's trait evidence to select a constrained
-contract, as well as syntax and encoding for conditional expiry pledges; an
-abstract call must not acquire an implementation-specific guarantee.
+outside the passing suite. The specification encoder caches by function
+definition and the specification query selects only the base contract. A
+conditional-contract solution would need call-site type arguments and the
+caller's trait evidence, as well as conditional expiry pledges; an abstract call
+must not acquire an implementation-specific guarantee.
 
 ## Phase 1 — External-specification support and unbounded Vec
 
@@ -797,7 +808,7 @@ claimed.
 | P1-C: sequence observations | P1-B | Model connection, explicit triggers, required generic snapshots | Verified locally: 21 focused checks, arbitrary-index observations, explicit triggers, cross-crate proofs, and precise diagnostics. |
 | **M1: unbounded functional Vec** | P1-A through P1-D | Minimal contracts plus reproduced blockers | Verified locally: 21 Vec checks, symbolic append/pop/round-trip and whole-prefix loop proofs for owned non-`Copy` elements, cross-crate clients, and negative cases. |
 | P2-A: Vec and shared slices | M1 | Contracts, sequence lemmas, any slice encoding fixes | Verified locally: 27 checks cover symbolic mutations, shared lookup/ranges, splits, swaps, boundaries, ordering, and framing. |
-| P2-B: mutable collection views | P2-A, two-state snapshots | Pledges, expiry, generic reference framing | In progress: 32 checks cover slice splitting, Vec restoration, optional lookup, mutable indexing, reborrowing, and negative cases; successful lookup and indexing framing remain open. |
+| P2-B: mutable collection views | P2-A, two-state snapshots | Pledges, expiry, generic reference framing | In progress: 36 checks include whole-sequence framing for scalar lookup and indexing; mutable range views and conditional specifications remain open. |
 | P2-C: shared and owned iterators | Sequence model, generic trait probes | Opt-in models, refinement, lifetimes, loop support | Untested; concrete and generic traversal proofs pass. |
 | **M2: Vec/slice phase complete** | P2-A, P2-B, P2-C | Integration and cross-crate validation | Untested; all required gates pass. |
 | P3-A: explicit key models | M2, logical Map/Set | Key-model interfaces and conditional contracts | Untested; equality/hash/model evidence is enforced. |

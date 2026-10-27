@@ -69,6 +69,17 @@ pub use prusti_contracts_proc_macros::invariant;
 /// A macro for writing a loop body invariant.
 pub use prusti_contracts_proc_macros::body_invariant;
 
+/// Observe the iterator of the enclosing `for` loop in a body invariant.
+///
+/// This is a specification-only marker. `I` must be the concrete iterator
+/// type selected by the loop; the marker is invalid outside a supported
+/// `for` body invariant and must never be evaluated at runtime. Iterator types
+/// containing explicit lifetimes, nested specification closures, and
+/// old-state or relational uses are not currently supported.
+pub fn for_iterator<I>() -> I {
+    panic!("for_iterator is a specification-only marker")
+}
+
 /// Traverse an `IntoIterator` while giving its iterator a name for specifications.
 ///
 /// `prusti_for!(iter, for item in values => { ... })` expands to a `match` and

@@ -29,6 +29,7 @@ pub enum SpecBuiltin {
     Forall,
     Exists,
     SpecBlock,
+    ForIterator,
     ModeStart(Mode),
     ModeEnd(Mode),
 }
@@ -226,6 +227,7 @@ impl PrustiBuiltin {
                     "forall" => Self::Spec(SpecBuiltin::Forall),
                     "exists" => Self::Spec(SpecBuiltin::Exists),
                     "spec_block" => Self::Spec(SpecBuiltin::SpecBlock),
+                    "for_iterator" => Self::Spec(SpecBuiltin::ForIterator),
                     "ghost_call" => Self::Ghost(GhostOp::Call),
                     "ghost_erased" => Self::Ghost(GhostOp::Erased),
                     "old_start" => Self::Spec(SpecBuiltin::ModeStart(Mode::Old)),

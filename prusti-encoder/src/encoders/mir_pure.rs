@@ -29,6 +29,14 @@ use vir::{CastType, CompType, add_debug_note};
 
 pub struct MirPureEnc;
 
+pub(crate) const FOR_ITERATOR_MARKER: &str = "__prusti_for_iterator_";
+
+pub(crate) fn for_iterator_marker(ty: ty::Ty<'_>) -> String {
+    // Rustc interns types: the address uniquely identifies the exact type
+    // within this compiler invocation, including its generic arguments.
+    format!("{FOR_ITERATOR_MARKER}{:p}", ty.kind())
+}
+
 #[derive(Clone, Debug)]
 pub enum MirPureEncError {
     // UnsupportedStatement,
@@ -1563,6 +1571,43 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                 )?;
                 assert!(qvars.is_empty(), "`spec_block` closures take no arguments");
                 mk_bool(body.downcast_ty::<vir::Bool>())
+            }
+            SpecBuiltin::ForIterator => {
+                if !self.spec_block {
+                    return Err(self.unsupported_rvalue(
+                        "for_iterator is only available in a for-loop body invariant".to_string(),
+                        self.current_span(),
+                    ));
+                }
+                if self.encoding_depth != 1
+                    || self.old_mode
+                    || self.rel0_mode
+                    || self.rel1_mode
+                    || self.before_expiry_mode
+                {
+                    return Err(self.unsupported_rvalue(
+                        "for_iterator cannot be used in nested or old-state specifications"
+                            .to_string(),
+                        self.current_span(),
+                    ));
+                }
+                let iterator_ty = arg_tys.type_at(0);
+                let mut has_region = false;
+                let _ = ty::fold_regions(self.vcx.tcx(), iterator_ty, |region, _| {
+                    has_region = true;
+                    region
+                });
+                if has_region {
+                    return Err(self.unsupported_rvalue(
+                        "for_iterator does not yet support iterator types containing lifetimes"
+                            .to_string(),
+                        self.current_span(),
+                    ));
+                }
+                let name = for_iterator_marker(iterator_ty);
+                let name = vir::vir_format!(self.vcx, "{name}");
+                let snapshot = self.ty_use(iterator_ty).snapshot;
+                return Ok(self.vcx.mk_local_ex(self.vcx.mk_local_decl(name, snapshot)));
             }
             SpecBuiltin::ModeStart(mode) => {
                 match mode {

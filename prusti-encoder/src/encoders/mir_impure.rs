@@ -35,12 +35,12 @@ use prusti_rustc_interface::{
         mir,
         ty::{self, TyKind, TypeVisitableExt},
     },
-    span::{Span, Spanned, def_id::DefId},
+    span::{DesugaringKind, Span, Spanned, def_id::DefId},
 };
 use prusti_utils::config;
 use rustc_hash::{FxHashMap, FxHashSet};
 use task_encoder::{EncodeFullError, TaskEncoder, TaskEncoderDependencies};
-use vir::{CastType, CompType, LocalDeclData, Reify};
+use vir::{CastType, CompType, Foldable, Folder, LocalDeclData, Reify};
 
 use crate::encoders::{
     self, FunctionCallEnc, MirBuiltinUseCastEnc, MirBuiltinUseCastTask, MirPureEnc, MirPureEncTask,
@@ -282,6 +282,43 @@ pub(crate) struct Footprint<'a, 'vir> {
 enum EncodeRvalueError<'vir, E: TaskEncoder> {
     UnsupportedRvalue,
     EncoderError(EncodeFullError<'vir, E>),
+}
+
+struct ForIteratorSubstitution<'vir> {
+    expected: Option<String>,
+    snapshot: Option<vir::ExprSnap<'vir>>,
+    invalid: bool,
+}
+
+impl<'vir> Folder<'vir, (), !> for ForIteratorSubstitution<'vir> {
+    fn fold_expr(&mut self, expr: vir::ExprDyn<'vir>) -> Option<vir::ExprDyn<'vir>> {
+        if matches!(expr.kind, vir::ExprKindData::Old(_))
+            || matches!(expr.kind, vir::ExprKindData::FuncApp(app) if app.target == "rel")
+        {
+            let mut locals = Default::default();
+            vir::collect_locals(expr, &mut locals);
+            if locals
+                .iter()
+                .any(|name| name.starts_with(super::mir_pure::FOR_ITERATOR_MARKER))
+            {
+                self.invalid = true;
+                return None;
+            }
+        }
+        if let vir::ExprKindData::Local(local) = expr.kind
+            && local.name.starts_with(super::mir_pure::FOR_ITERATOR_MARKER)
+        {
+            if self.expected.as_deref() == Some(local.name)
+                && let Some(snapshot) = self.snapshot
+                && snapshot.ty().as_dyn() == expr.ty()
+            {
+                return Some(snapshot.as_dyn());
+            }
+            self.invalid = true;
+            return None;
+        }
+        expr.super_fold_with(self)
+    }
 }
 
 impl<'vir, E: TaskEncoder> From<EncodeFullError<'vir, E>> for EncodeRvalueError<'vir, E> {
@@ -1993,11 +2030,82 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         Ok(())
     }
 
+    /// Find the unique iterator advanced on every path from a loop head to
+    /// its body invariant. Only direct local borrows are supported;
+    /// ambiguous shapes are deliberately rejected.
+    fn find_for_iterator(
+        &self,
+        loop_id: LoopId,
+        invariant_block: mir::BasicBlock,
+    ) -> Option<Place<'vir>> {
+        let tcx = self.vcx.tcx();
+        let dominators = self.body.basic_blocks.dominators();
+        let mut candidates = FxHashSet::default();
+        for (block, data) in self.body.basic_blocks.iter_enumerated() {
+            if self.loop_analysis().innermost_loop(block) != Some(loop_id)
+                || !dominators.dominates(block, invariant_block)
+            {
+                continue;
+            }
+            let mir::TerminatorKind::Call { func, args, .. } = &data.terminator().kind else {
+                continue;
+            };
+            let ty::FnDef(def_id, _) = *func.ty(self.body, tcx).kind() else {
+                continue;
+            };
+            if tcx.item_name(def_id).as_str() != "next"
+                || tcx.trait_of_assoc(def_id) != tcx.lang_items().iterator_trait()
+                || !data
+                    .terminator()
+                    .source_info
+                    .span
+                    .is_desugaring(DesugaringKind::ForLoop)
+            {
+                continue;
+            }
+            let first = args.first()?;
+            let (mir::Operand::Move(arg) | mir::Operand::Copy(arg)) = &first.node else {
+                return None;
+            };
+            if !arg.projection.is_empty() {
+                return None;
+            }
+            let mut borrowed = arg.local;
+            let mut found = false;
+            for statement in data.statements.iter().rev() {
+                let mir::StatementKind::Assign(box (destination, rvalue)) = &statement.kind else {
+                    continue;
+                };
+                if destination.local != borrowed || !destination.projection.is_empty() {
+                    continue;
+                }
+                let mir::Rvalue::Ref(_, _, place) = rvalue else {
+                    break;
+                };
+                if place.projection.is_empty() {
+                    candidates.insert((*place).into());
+                    found = true;
+                    break;
+                }
+                if matches!(place.projection.as_ref(), [mir::ProjectionElem::Deref]) {
+                    borrowed = place.local;
+                } else {
+                    break;
+                }
+            }
+            if !found {
+                return None;
+            }
+        }
+        (candidates.len() == 1).then(|| *candidates.iter().next().unwrap())
+    }
+
     fn encode_spec_block(
         &mut self,
         spec_block: mir::BasicBlock,
         pcg_state: &Pcg<'_, 'vir>,
         place_capabilities: Option<&FxHashMap<Place<'vir>, CapabilityKind>>,
+        for_iterator: Option<Place<'vir>>,
     ) -> EncodeResult<'vir, vir::ExprBool<'vir>, E> {
         let enc_output = self.deps.require_dep::<MirPureEnc>(MirPureEncTask {
             encoding_depth: 0,
@@ -2038,7 +2146,36 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 (self.def_id, self.vcx.alloc(locals), vir::OldLabel::None),
             )
             .downcast_ty();
-        Ok(expr)
+        let mut local_names = Default::default();
+        vir::collect_locals(expr.as_dyn(), &mut local_names);
+        if !local_names
+            .iter()
+            .any(|name| name.starts_with(super::mir_pure::FOR_ITERATOR_MARKER))
+        {
+            return Ok(expr);
+        }
+        let (expected, snapshot) = if let Some(iterator) = for_iterator {
+            let iterator_ty = iterator.ty(self.pcg_ctxt()).ty;
+            let name = super::mir_pure::for_iterator_marker(iterator_ty);
+            let snap = self.encode_place_with_snap(iterator)?.1;
+            (Some(name), Some(snap))
+        } else {
+            (None, None)
+        };
+        let mut substitution = ForIteratorSubstitution {
+            expected,
+            snapshot,
+            invalid: false,
+        };
+        let result = expr.fold_with(&mut substitution).unwrap_or(expr);
+        if substitution.invalid {
+            return Err(self.unsupported_rvalue(
+                "for_iterator requires a unique matching iterator in the enclosing for loop"
+                    .to_string(),
+                self.current_span(),
+            ));
+        }
+        Ok(result)
     }
 
     fn encode_partial_place_snap(
@@ -2187,6 +2324,11 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 self.pcg_ctxt(),
             )?;
             let pcg_state = &cfpcs.statements[0].states[EvalStmtPhase::PreOperands];
+            let for_iterator = self.find_for_iterator(loop_id, block).filter(|place| {
+                place_capabilities
+                    .get(place)
+                    .is_some_and(|capability| !capability.is_write())
+            });
             // The Viper loop havocs the edge flags set in the loop, including
             // those set between the loop's first block and the body invariant,
             // which guards of PCG actions further in the loop still refer to.
@@ -2203,8 +2345,14 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             let functional = invariants
                 .into_iter()
                 .map(|(spec_block, span)| {
-                    let expr =
-                        self.encode_spec_block(spec_block, pcg_state, Some(&place_capabilities))?;
+                    let expr = self.vcx.with_span(span, |_| {
+                        self.encode_spec_block(
+                            spec_block,
+                            pcg_state,
+                            Some(&place_capabilities),
+                            for_iterator,
+                        )
+                    })?;
                     self.vcx.with_span(span, |vcx| {
                         let error_msg = "loop invariant might not be preserved";
                         vcx.handle_error("invariant.not.preserved:assertion.false", move |_| {
@@ -2285,7 +2433,9 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 let current_fpcs = self.current_fpcs.take().unwrap();
                 let pcg_state =
                     &current_fpcs.statements.last().unwrap().states[EvalStmtPhase::PostMain];
-                let spec_expr = self.encode_spec_block(spec.block, pcg_state, None);
+                let spec_expr = self.vcx.with_span(spec.span, |_| {
+                    self.encode_spec_block(spec.block, pcg_state, None, None)
+                });
                 self.current_fpcs = Some(current_fpcs);
                 let spec_expr = spec_expr?;
                 let span = spec.span;

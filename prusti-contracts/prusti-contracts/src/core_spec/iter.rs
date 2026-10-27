@@ -16,3 +16,15 @@ trait Iterator {
     ])]
     fn next(&mut self) -> Option<Self::Item>;
 }
+
+// The sealed models represent exactly the elements still yielded by these
+// concrete iterators. Other ExactSizeIterator implementations need not expose
+// a sequence model.
+#[extern_spec(core::iter)]
+trait ExactSizeIterator {
+    #[trusted]
+    #[refine_spec(where Self: ModeledIterator, [
+        ensures(Int::from(result) == self.remaining().len())
+    ])]
+    fn len(&self) -> usize;
+}

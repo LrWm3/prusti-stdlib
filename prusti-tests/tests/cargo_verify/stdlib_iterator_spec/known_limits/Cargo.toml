@@ -16,4 +16,8 @@ path = "for_count.rs"
 name = "for_named"
 path = "for_named.rs"
 
+[[bin]]
+name = "exact_length_mut_ref"
+path = "exact_length_mut_ref.rs"
+
 [workspace]

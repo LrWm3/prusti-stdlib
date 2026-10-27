@@ -508,6 +508,11 @@ connects the resulting iterator to the same source references; a cross-crate
 capture the original iterator sequence, enabling a traversal that verifies
 each yielded reference against its source position. The pinned Rust
 implementation delegates this conversion to `slice::iter`.
+The conditional `ExactSizeIterator::len` contract relates the returned length
+to the remaining sequence. A verified generic `&I` helper exports the relation,
+and clients check owned and shared iterators before and after `next`. A
+[reproducer](prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/exact_length_mut_ref.rs)
+records that the same generic relationship is not yet retained through `&mut I`.
 
 Selection checks a region-bearing bound by independently quantifying its
 lifetimes, selecting a concrete implementation or builtin, checking its

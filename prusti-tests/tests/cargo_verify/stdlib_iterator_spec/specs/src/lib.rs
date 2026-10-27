@@ -21,6 +21,11 @@ pub fn advance<I: ModeledIterator>(iterator: &mut I) -> Option<I::Item> {
     iterator.next()
 }
 
+#[ensures(Int::from(result) == iterator.remaining().len())]
+pub fn remaining_len<I: ModeledIterator + ExactSizeIterator>(iterator: &I) -> usize {
+    iterator.len()
+}
+
 #[requires(values.len() > 0)]
 #[ensures(result === &values[0])]
 pub fn first_shared<'a, T>(values: &'a [T]) -> &'a T {

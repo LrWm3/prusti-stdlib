@@ -34,6 +34,13 @@ With its optional initializer capturing the initial iterator sequence, the
 shared traversal also checks each yielded reference against its source index.
 Negative probes reject incorrect references, state, and loop invariants.
 
+For modeled `ExactSizeIterator` implementations, the `len` contract equals
+the remaining sequence length. The separately verified `remaining_len` helper
+exports that relation across crates. Clients check owned and shared lengths
+before and after advancement, including empty iterators and non-`Copy` values.
+Negative probes reject an incorrect length and a length claim for an iterator
+without model evidence.
+
 Ordinary `for` loops over an owned `Vec` can name their compiler-generated
 iterator in a body invariant with `for_iterator::<std::vec::IntoIter<T>>()`.
 The library verifies a symbolic count this way, and clients exercise nested
@@ -101,7 +108,9 @@ gap: a symbolic count does not preserve the relation between the hidden
 iterator and the number of items seen, so the increment may overflow. The
 `for_named` probe shows why naming the iterator does not expose it to the
 invariant: `for` holds its mutable borrow for the entire loop, so Rust rejects
-a second borrow.
+a second borrow. The `exact_length_mut_ref` probe records a separate loss of
+the length relationship when the generic iterator is accessed through `&mut I`;
+the generic helper with an `&I` receiver is verified.
 Shared traversal can use the original source reference directly in its loop
 invariant. Reproduce either probe after building:
 
@@ -112,4 +121,5 @@ PRUSTI_CHECK_OVERFLOWS=true PRUSTI_CHECK_PANICS=true PRUSTI_NO_VERIFY_DEPS=true 
   --bin for_count
 ```
 
-Replace `for_count` with `for_named` for the borrow-checking probe.
+Replace `for_count` with `for_named` or `exact_length_mut_ref` for the other
+probes.

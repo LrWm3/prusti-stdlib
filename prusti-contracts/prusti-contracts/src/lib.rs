@@ -220,6 +220,15 @@ mod private_shared {
 
     __dummy_collection_impls__!(Seq: seq, append, $);
 
+    impl<T> Seq<T> {
+        /// Observe a slice as a sequence of element snapshots in specifications
+        /// and ghost code. This borrows the elements; it does not clone them or
+        /// require `T: Copy`, `Clone`, or `PartialEq`.
+        pub fn from_slice(_: &[T]) -> Self {
+            Seq(PhantomData)
+        }
+    }
+
     impl<T: ?Sized> Seq<T> {
         pub fn update<I>(self, _: I, _: impl Value<T>) -> Self
         where

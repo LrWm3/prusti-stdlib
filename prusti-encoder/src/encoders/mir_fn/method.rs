@@ -61,7 +61,7 @@ impl TaskEncoder for MethodCallEnc {
     const ENCODER_NAME: &'static str = "method call encoder";
 
     fn task_to_key<'vir>(task: &Self::TaskDescription<'vir>) -> Self::TaskKey<'vir> {
-        *task
+        task.resolved()
     }
 
     fn do_encode_full<'vir>(

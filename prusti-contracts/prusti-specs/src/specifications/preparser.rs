@@ -88,6 +88,91 @@ fn err<T>(span: Span, msg: &str) -> syn::Result<T> {
     Err(error(span, msg))
 }
 
+/// Variable uses, excluding field/method names, type names and qualified paths.
+/// Bindings and macros are rejected: their scope/expansion could hide a use of
+/// a quantifier variable or introduce a different variable with the same name.
+fn trigger_vars(tokens: &TokenStream) -> syn::Result<Vec<syn::Ident>> {
+    use syn::visit::Visit;
+    #[derive(Default)]
+    struct Vars {
+        names: Vec<syn::Ident>,
+        binding: Option<Span>,
+    }
+    impl<'ast> Visit<'ast> for Vars {
+        fn visit_expr_path(&mut self, path: &'ast syn::ExprPath) {
+            if path.qself.is_none() {
+                if let Some(ident) = path.path.get_ident() {
+                    self.names.push(ident.clone());
+                }
+            }
+        }
+        fn visit_pat(&mut self, pat: &'ast syn::Pat) {
+            self.binding = Some(pat.span());
+        }
+        fn visit_macro(&mut self, mac: &'ast syn::Macro) {
+            self.binding = Some(mac.span());
+        }
+    }
+    let expr = syn::parse2::<syn::Expr>(tokens.clone())?;
+    let mut outer = &expr;
+    loop {
+        outer = match outer {
+            syn::Expr::Paren(p) => &p.expr,
+            syn::Expr::Group(g) => &g.expr,
+            _ => break,
+        };
+    }
+    if !matches!(
+        outer,
+        syn::Expr::Call(_) | syn::Expr::MethodCall(_) | syn::Expr::Index(_)
+    ) {
+        return err(
+            tokens.span(),
+            "triggers must be function calls, method calls, or indexing expressions",
+        );
+    }
+    let mut vars = Vars::default();
+    vars.visit_expr(&expr);
+    if let Some(span) = vars.binding {
+        return err(
+            span,
+            "local bindings and macros are not supported in triggers",
+        );
+    }
+    Ok(vars.names)
+}
+
+/// Checks the trigger sets of a quantifier against what Viper requires of them:
+/// every trigger mentions a bound variable, and every trigger set mentions all
+/// of them. Violating either is rejected by the Viper consistency check, with a
+/// message that does not point back at the offending trigger.
+fn check_triggers(triggers: &[Vec<TokenStream>], bound_vars: &[syn::Ident]) -> syn::Result<()> {
+    for set in triggers {
+        let mut mentioned = Vec::new();
+        for trigger in set {
+            let bound = trigger_vars(trigger)?
+                .into_iter()
+                .filter(|ident| bound_vars.contains(ident))
+                .collect::<Vec<_>>();
+            if bound.is_empty() {
+                return err(
+                    trigger.span(),
+                    "a trigger must mention at least one bound variable",
+                );
+            }
+            mentioned.extend(bound);
+        }
+        if !bound_vars.iter().all(|var| mentioned.contains(var)) {
+            let span = set.first().map(|trigger| trigger.span());
+            return err(
+                span.unwrap_or_else(Span::call_site),
+                "a trigger set must mention all bound variables",
+            );
+        }
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone)]
 struct PrustiTokenStream {
     tokens: VecDeque<PrustiToken>,
@@ -316,16 +401,23 @@ impl PrustiTokenStream {
                     .pop_closure_args()
                     .ok_or_else(|| error(span, "expected quantifier body"))?;
 
-                {
+                let (bound_vars, unnamed_arg) = {
                     // for quantifiers, argument types must be explicit
                     // here we parse the closure with syn and check each
                     // argument has a type annotation
                     let cl_args = args.clone().parse_rust_only()?;
                     let check_cl = quote! { | #cl_args | 0 };
                     let parsed_cl = syn::parse2::<syn::ExprClosure>(check_cl)?;
+                    let mut bound_vars = Vec::new();
+                    let mut unnamed_arg = None;
                     for pat in parsed_cl.inputs {
                         match pat {
-                            syn::Pat::Type(_) => {}
+                            syn::Pat::Type(pat) => match *pat.pat {
+                                syn::Pat::Ident(pat) if pat.subpat.is_none() => {
+                                    bound_vars.push(pat.ident)
+                                }
+                                pat => unnamed_arg = Some(pat.span()),
+                            },
                             _ => {
                                 return err(
                                     pat.span(),
@@ -334,12 +426,22 @@ impl PrustiTokenStream {
                             }
                         }
                     }
+                    (bound_vars, unnamed_arg)
                 };
 
                 let triggers = stream.extract_triggers()?;
                 if args.is_empty() {
                     return err(span, "a quantifier must have at least one argument");
                 }
+                if !triggers.is_empty() {
+                    if let Some(span) = unnamed_arg {
+                        return err(
+                            span,
+                            "quantifier arguments with explicit triggers must be named identifiers",
+                        );
+                    }
+                }
+                check_triggers(&triggers, &bound_vars)?;
                 let args = args.parse()?;
                 let body = stream.parse()?;
                 kind.translate(span, triggers, args, body)
@@ -824,9 +926,11 @@ impl Quantifier {
         let trigger_sets = triggers
             .into_iter()
             .map(|set| {
+                // Each trigger closure is passed by reference, like the body
+                // closure: the encoder relies on the two being encoded alike.
                 let triggers = TokenStream::from_iter(set.into_iter().map(|trigger| {
                     quote_spanned! { trigger.span() =>
-                    #[prusti::spec_only] | #args | ( #trigger ), }
+                    &( #[prusti::spec_only] | #args | ( #trigger ) ), }
                 }));
                 quote_spanned! { full_span => ( #triggers ) }
             })
@@ -1133,6 +1237,52 @@ mod tests {
     }
 
     #[test]
+    fn trigger_variable_coverage() {
+        assert_error!(
+            parse_prusti(
+                "forall(|x: i32, _: i32| true, triggers = [(f(x),)])"
+                    .parse()
+                    .unwrap()
+            ),
+            "quantifier arguments with explicit triggers must be named identifiers"
+        );
+        for (triggers, message) in [
+            (
+                "[(f(x),)]",
+                "a trigger set must mention all bound variables",
+            ),
+            (
+                "[(f(x), g(0))]",
+                "a trigger must mention at least one bound variable",
+            ),
+            ("[()]", "a trigger set must mention all bound variables"),
+            (
+                "[(f(value.x), g(y))]",
+                "a trigger must mention at least one bound variable",
+            ),
+            (
+                "[(value.x(), g(y))]",
+                "a trigger must mention at least one bound variable",
+            ),
+            (
+                "[(f({ let x = 0; x }), g(y))]",
+                "local bindings and macros are not supported in triggers",
+            ),
+            (
+                "[(x == y,)]",
+                "triggers must be function calls, method calls, or indexing expressions",
+            ),
+        ] {
+            let spec = format!("forall(|x: i32, y: i32| true, triggers = {triggers})");
+            assert_error!(parse_prusti(spec.parse().unwrap()), message);
+        }
+        for triggers in ["[(f(x), g(y))]", "[(f(x, y),), (s[x], s[y])]", "[]"] {
+            let spec = format!("forall(|x: i32, y: i32| true, triggers = {triggers})");
+            assert!(parse_prusti(spec.parse().unwrap()).is_ok());
+        }
+    }
+
+    #[test]
     fn test_preparser() {
         assert_eq!(
             parse_prusti("a ==> b".parse().unwrap())
@@ -1175,8 +1325,8 @@ mod tests {
             ":: prusti_contracts :: exists (() , & (# [prusti :: spec_only] | x : i32 | -> bool { (:: prusti_contracts :: Ghost :: new_ref (& (a)) == :: prusti_contracts :: Ghost :: new_ref (& (b))) }) ,)",
         );
         assert_eq!(
-            parse_prusti("forall(|x: i32| a ==> b, triggers = [(c,), (d, e)])".parse().unwrap()).unwrap().to_string(),
-            ":: prusti_contracts :: forall (((# [prusti :: spec_only] | x : i32 | (c) ,) , (# [prusti :: spec_only] | x : i32 | (d) , # [prusti :: spec_only] | x : i32 | (e) ,) ,) , & (# [prusti :: spec_only] | x : i32 | -> bool { ! (a) || (b) }) ,)",
+            parse_prusti("forall(|x: i32| a ==> b, triggers = [(c(x),), (d(x), e(x))])".parse().unwrap()).unwrap().to_string(),
+            ":: prusti_contracts :: forall (((& (# [prusti :: spec_only] | x : i32 | (c (x))) ,) , (& (# [prusti :: spec_only] | x : i32 | (d (x))) , & (# [prusti :: spec_only] | x : i32 | (e (x))) ,) ,) , & (# [prusti :: spec_only] | x : i32 | -> bool { ! (a) || (b) }) ,)",
         );
         assert_eq!(
             parse_prusti("assert!(a === b ==> b)".parse().unwrap())

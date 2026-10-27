@@ -1,7 +1,8 @@
-"""Run the cross-crate stdlib contract milestone, including diagnostic checks.
+"""Run the cross-crate stdlib contract milestones, including diagnostic checks.
 
 From the repository root, after building Prusti:
     ./x.py exec python3 scripts/test_stdlib_extern_spec.py
+    ./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite sequence
 """
 
 import argparse
@@ -17,9 +18,11 @@ import time
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--release", action="store_true", help="use release Prusti binaries")
+    parser.add_argument("--suite", choices=("extern", "sequence"), default="extern")
     args = parser.parse_args()
     root = Path(__file__).resolve().parent.parent
-    fixture = root / "prusti-tests/tests/cargo_verify/stdlib_extern_spec"
+    sequence = args.suite == "sequence"
+    fixture = root / "prusti-tests/tests/cargo_verify" / ("stdlib_" + args.suite + "_spec")
     profile = "release" if args.release else "debug"
     executable = "cargo-prusti.exe" if os.name == "nt" else "cargo-prusti"
     prusti = root / "target" / profile / executable
@@ -27,7 +30,7 @@ def main():
         parser.error("build Prusti first with ./x.py build --all (and --release if selected)")
 
     toolchain = re.search(r'channel\s*=\s*"([^"]+)"', (root / "rust-toolchain").read_text())[1]
-    log_dir = root / "target/stdlib-extern-spec-logs"
+    log_dir = root / "target" / ("stdlib-" + args.suite + "-spec-logs")
     log_dir.mkdir(parents=True, exist_ok=True)
     results = []
 
@@ -53,9 +56,11 @@ def main():
                     and all(re.search(r"^\s*(?:= )?note: .*" + re.escape(note), output, re.MULTILINE) for note in notes)
                 )
             passed = passed and not re.search(
-                r"\[Prusti: (?:internal error|unsupported feature)\]|internal compiler error|"
+                r"\[Prusti: internal error\]|internal compiler error|"
                 r"thread .* panicked|Verification timed out", output,
             )
+            if expected is None or not expected.startswith("[Prusti: unsupported feature]"):
+                passed = passed and "[Prusti: unsupported feature]" not in output
         except subprocess.TimeoutExpired as error:
             output = error.stdout or b""
             if isinstance(output, bytes):
@@ -94,9 +99,11 @@ def main():
         })
         compiled = run("rust-check", ["cargo", "check", "--bins"], env)
         if compiled:
-            run("rust-core-only", ["cargo", "check", "-p", "stdlib_core_only"], env)
-            run("core-only", [str(prusti), "-p", "stdlib_core_only"], env)
-            run("spec-library", [str(prusti), "-p", "stdlib_specs"], env)
+            if args.suite == "extern":
+                run("rust-core-only", ["cargo", "check", "-p", "stdlib_core_only"], env)
+                run("core-only", [str(prusti), "-p", "stdlib_core_only"], env)
+            library = {"extern": "stdlib_specs", "sequence": "sequence_specs"}[args.suite]
+            run("spec-library", [str(prusti), "-p", library], env)
             sources = fixture / "src/bin"
             positive = sorted(p for p in sources.glob("*.rs") if p.stem == "pass" or p.stem.endswith("_pass"))
             for source in positive:
@@ -105,7 +112,7 @@ def main():
                 annotations = [
                     (i, match[1], match[2])
                     for i, line in enumerate(source.read_text().splitlines(), 1)
-                    if (match := re.search(r"// expected-(error|incorrect): (.+)", line))
+                    if (match := re.search(r"// expected-(error|incorrect|parse|unsupported): (.+)", line))
                 ]
                 notes = re.findall(r"// expected-note: (.+)", source.read_text())
                 if source in positive:
@@ -114,15 +121,37 @@ def main():
                 else:
                     assert len(annotations) == 1, "each negative case needs one expected-error annotation"
                     line, kind, message = annotations[0]
-                    category = "verification error" if kind == "error" else "invalid specification"
-                    expected = "[Prusti: {}] {}".format(category, message)
+                    category = {
+                        "error": "verification error", "incorrect": "invalid specification",
+                        "unsupported": "unsupported feature", "parse": None,
+                    }[kind]
+                    expected = message if kind == "parse" else "[Prusti: {}] {}".format(category, message)
                     location = r"--> [^\n]*[/\\]" + re.escape(source.name) + ":" + str(line) + ":"
-                run(source.stem, [str(prusti), "--bin", source.stem], env, expected, location, notes)
+                case_env = env.copy()
+                if args.suite != "extern" and source in positive:
+                    case_env["PRUSTI_DUMP_VIPER_PROGRAM"] = "true"
+                    case_env["PRUSTI_LOG_DIR"] = str(log_dir / "verifier" / source.stem)
+                    program = Path(case_env["PRUSTI_LOG_DIR"]) / "viper_program/program-check.vpr"
+                    program.unlink(missing_ok=True)
+                run(source.stem, [str(prusti), "--bin", source.stem], case_env, expected, location, notes)
+
+            if sequence:
+                program = log_dir / "verifier/triggers_pass/viper_program/program-check.vpr"
+                viper = program.read_text() if program.is_file() else ""
+                for quantifier in ("forall", "exists"):
+                    # The marker occurs only in explicit trigger annotations,
+                    # never in a quantified body; automatic inference cannot
+                    # account for it. Check the trigger braces, not definitions.
+                    passed = re.search(
+                        r"\b" + quantifier + r"\b[^{}]*\{[^{}]*explicit_marker[^{}]*\}", viper,
+                    ) is not None
+                    results.append({"case": "viper-trigger-" + quantifier, "passed": passed, "seconds": 0})
+                    print("Viper {} trigger: {} ({})".format(quantifier, "PASS" if passed else "FAIL", program), flush=True)
 
     (log_dir / "results.json").write_text(json.dumps({"toolchain": toolchain, "cases": results}, indent=2) + "\n")
     if not all(result["passed"] for result in results):
         raise SystemExit(1)
-    print("All stdlib external-specification cases passed.")
+    print("All stdlib {} cases passed ({} checks).".format(args.suite, len(results)))
 
 
 if __name__ == "__main__":

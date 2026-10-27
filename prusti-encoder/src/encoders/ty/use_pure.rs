@@ -533,6 +533,16 @@ impl<'vir> TyUsePureMutRef<'vir> {
 }
 
 impl<'vir> TyUsePureArray<'vir> {
+    /// Observe the elements in the same generic snapshot representation used
+    /// by `Seq<T>`; no runtime element equality or copying is involved.
+    pub fn to_seq<Curr, Next>(
+        &self,
+        snap: vir::ExprGenCSnap<'vir, Curr, Next>,
+        len: vir::ExprGenInt<'vir, Curr, Next>,
+    ) -> vir::ExprGen<'vir, Curr, Next, vir::Seq> {
+        self.pure.to_seq.call()(snap, len)
+    }
+
     pub fn index<Curr, Next>(
         &self,
         snap: vir::ExprGenCSnap<'vir, Curr, Next>,

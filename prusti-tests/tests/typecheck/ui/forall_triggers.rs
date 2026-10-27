@@ -1,3 +1,4 @@
+//@ edition: 2021
 //@ compile-flags: -Pprint_desugared_specs=true -Pprint_typeckd_specs=true -Pverify_mode=compile-only -Phide_uuids=true
 // normalize-stdout-test: "[a-z0-9]{32}" -> "$(NUM_UUID)"
 // normalize-stdout-test: "[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}" -> "$(UUID)"
@@ -6,28 +7,31 @@
 
 use prusti_contracts::*;
 
-#[requires(forall(|a: i32| true, triggers=[(a == a,)]))]
+#[pure]
+fn trigger(value: i32) -> i32 { value }
+
+#[requires(forall(|a: i32| true, triggers=[(trigger(a),)]))]
 fn test1() {}
 
-#[requires(forall(|a: i32| forall(|b: i32| true), triggers=[(a == a && true,)]))]
+#[requires(forall(|a: i32| forall(|b: i32| true), triggers=[(trigger(a),)]))]
 fn test2() {}
 
-#[requires(forall(|a: i32| forall(|b: i32| true, triggers=[(a == a,)]), triggers=[(a == a,)]))]
+#[requires(forall(|a: i32| forall(|b: i32| true, triggers=[(trigger(b),)]), triggers=[(trigger(a),)]))]
 fn test3() {}
 
-#[requires(forall(|a: i32| forall(|b: i32| true, triggers=[(a == b,)]), triggers=[(a == a && true,)]))]
+#[requires(forall(|a: i32| forall(|b: i32| true, triggers=[(trigger(a + b),)]), triggers=[(trigger(a),)]))]
 fn test4() {}
 
-#[requires(exists(|a: i32| true, triggers=[(a == a,)]))]
+#[requires(exists(|a: i32| true, triggers=[(trigger(a),)]))]
 fn test5() {}
 
-#[requires(exists(|a: i32| exists(|b: i32| true), triggers=[(a == a && true,)]))]
+#[requires(exists(|a: i32| exists(|b: i32| true), triggers=[(trigger(a),)]))]
 fn test6() {}
 
-#[requires(exists(|a: i32| exists(|b: i32| true, triggers=[(a == a,)]), triggers=[(a == a,)]))]
+#[requires(exists(|a: i32| exists(|b: i32| true, triggers=[(trigger(b),)]), triggers=[(trigger(a),)]))]
 fn test7() {}
 
-#[requires(exists(|a: i32| exists(|b: i32| true, triggers=[(a == b,)]), triggers=[(a == a && true,)]))]
+#[requires(exists(|a: i32| exists(|b: i32| true, triggers=[(trigger(a + b),)]), triggers=[(trigger(a),)]))]
 fn test8() {}
 
 fn main() {}

@@ -52,6 +52,7 @@ pub enum GhostOp {
 /// The operations of the `Seq` builtin.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum SeqOp {
+    FromSlice,
     Empty,
     Single,
     Append,
@@ -206,6 +207,8 @@ impl PrustiBuiltin {
             };
             Some(match self_ty_name {
                 None => match item {
+                    // The Vec observation is an ordinary, verified pure body.
+                    "vec_contents" => return None,
                     // TODO: how to handle this function?
                     "prusti_terminates_trusted" => return None,
                     "forall" => Self::Spec(SpecBuiltin::Forall),
@@ -230,6 +233,7 @@ impl PrustiBuiltin {
                 },
                 Some("Seq") => match item {
                     "new" => Self::Seq(SeqOp::Empty),
+                    "from_slice" => Self::Seq(SeqOp::FromSlice),
                     "single" | "single_ref" => Self::Seq(SeqOp::Single),
                     "append" => Self::Seq(SeqOp::Append),
                     "update" => Self::Seq(SeqOp::Update),
@@ -603,6 +607,17 @@ impl<'enc, 'vir> BuiltinCtxt<'enc, 'vir> {
     /// Encodes a `Seq` operation.
     fn encode_seq(&mut self, op: SeqOp) -> EncResult<'vir, ExprRet<'vir, vir::Snap>> {
         Ok(match op {
+            SeqOp::FromSlice => {
+                let reference = self.e_input_immref(0)?;
+                let snap = self.operands[0].downcast_ty();
+                let value = reference.value_access(snap);
+                let len = reference.metadata_access(snap);
+                let len = self.index_to_int(len, self.vcx.tcx().types.usize)?;
+                self.e_input_deref(0)?
+                    .expect_array()
+                    .to_seq(value.downcast_ty(), len)
+                    .upcast_ty()
+            }
             SeqOp::Empty => self
                 .vcx
                 .mk_seq_literal_expr::<_, _, vir::PSnap>(&[], vir::TYPE_PSNAP)

@@ -1,4 +1,4 @@
-use prusti_rustc_interface::middle::ty;
+use prusti_rustc_interface::{middle::ty, span::def_id::DefId};
 
 use super::GParams;
 
@@ -33,6 +33,30 @@ impl<'tcx> GArgs<'tcx> {
 
     pub fn args(self) -> &'tcx [ty::GenericArg<'tcx>] {
         self.args
+    }
+
+    /// Select a statically known trait implementation in the caller's context.
+    /// Keep abstract trait calls abstract; an impl's purity and stronger
+    /// contracts must not escape to callers with only a trait bound.
+    pub fn resolve_method(self, def_id: DefId) -> (DefId, Self) {
+        vir::with_vcx(|vcx| {
+            let tcx = vcx.tcx();
+            if tcx
+                .opt_associated_item(def_id)
+                .and_then(|item| item.trait_container(tcx))
+                .is_some()
+            {
+                let args = tcx.erase_and_anonymize_regions(tcx.mk_args(self.args));
+                if let Ok(Some(instance)) = tcx
+                    .resolve_instance_raw(self.context.typing_env().as_query_input((def_id, args)))
+                    && let ty::InstanceKind::Item(resolved) = instance.def
+                    && resolved != def_id
+                {
+                    return (resolved, Self::new(self.context, instance.args));
+                }
+            }
+            (def_id, self)
+        })
     }
 
     /// Drops the generic context, keeping the (ground) `args`. Use when the

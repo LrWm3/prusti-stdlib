@@ -78,6 +78,7 @@ pub fn is_function_trusted(def_id: DefId) -> bool {
 }
 
 pub fn is_function_pure<'tcx>(def_id: DefId, args: GArgs<'tcx>) -> bool {
+    let (def_id, args) = args.resolve_method(def_id);
     with_proc_spec(
         SpecQuery::GetProcKind(def_id, args.args()),
         |proc_spec: &ProcedureSpecification| kind_is_pure(&proc_spec.kind),

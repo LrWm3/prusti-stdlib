@@ -45,10 +45,8 @@ type ExprRetRef<'vir> = vir::ExprGenRef<'vir, ExprInput<'vir>, vir::ExprKind<'vi
 type ExprRetAny<'vir, T> = vir::ExprGen<'vir, ExprInput<'vir>, vir::ExprKind<'vir>, T>;
 /// An encoded spec closure (see `Enc::encode_spec_closure`): the quantified
 /// variables derived from the closure's arguments, and the closure's body.
-type SpecClosure<'vir> = (
-    &'vir [vir::LocalDeclSnap<'vir>],
-    ExprRetAny<'vir, vir::Bool>,
-);
+type SpecClosure<'vir> = (&'vir [vir::LocalDeclSnap<'vir>], ExprRet<'vir>);
+type TriggerRet<'vir> = vir::TriggerGen<'vir, ExprInput<'vir>, vir::ExprKind<'vir>>;
 
 #[derive(Clone, Debug)]
 pub struct MirPureEncOutput<'vir> {
@@ -59,6 +57,9 @@ pub struct MirPureEncOutput<'vir> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PureKind {
     Closure,
+    /// A closure inside a body assertion/invariant. Its captured snapshots
+    /// describe the current heap, unlike the pinned inputs of a contract.
+    SpecBlockClosure,
     /// A specification, attached to the item `context` specifies. That is
     /// not the specified item itself when an `impl` refines the
     /// specification of a trait: there the trait's parameters (notably
@@ -130,7 +131,9 @@ impl TaskEncoder for MirPureEnc {
             // instantiated with the arguments of the encoding.
             let identity = ty::GenericArgs::identity_for_item(vcx.tcx(), def_id);
             let body = match kind {
-                PureKind::Closure => vcx.body_mut().get_closure_body(def_id, identity, None),
+                PureKind::Closure | PureKind::SpecBlockClosure => {
+                    vcx.body_mut().get_closure_body(def_id, identity, None)
+                }
                 PureKind::Spec { context, .. } => {
                     let substs = vcx.tcx().mk_args(gargs.args());
                     vcx.body_mut().get_spec_body(def_id, substs, Some(context))
@@ -253,6 +256,7 @@ impl<'vir> Update<'vir> {
             expr.ty(),
         );
         version.initialised = Some(decl);
+        version.expression = Some(expr);
         self.binds.push(UpdateBind::Local(local, version, expr));
         self.versions.insert(local, version);
     }
@@ -280,6 +284,7 @@ struct Enc<'vir: 'enc, 'enc> {
     encoding_depth: usize,
     def_id: DefId,
     context: GParams<'vir>,
+    spec_block: bool,
     body: &'enc mir::Body<'vir>,
     rev_doms: rev_doms::ReverseDominators,
     /// The `ghost!` blocks of the body (the same detection the impure
@@ -383,6 +388,7 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
             encoding_depth,
             def_id,
             context: gargs.context(),
+            spec_block: matches!(kind, PureKind::SpecBlock(_) | PureKind::SpecBlockClosure),
             body,
             rev_doms,
             ghost: GhostBlocks::new(def_id, body),
@@ -424,7 +430,11 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
     }
 
     fn mk_local_ex(&mut self, _local: mir::Local, version: Version<'vir>) -> ExprRet<'vir> {
-        self.vcx.mk_local_ex(version.initialised.unwrap())
+        if self.spec_block {
+            version.expression.unwrap()
+        } else {
+            self.vcx.mk_local_ex(version.initialised.unwrap())
+        }
     }
 
     fn mk_phi(&self, version: Version<'vir>) -> &'vir str {
@@ -440,7 +450,11 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
     ) -> ExprRet<'vir> {
         tuple_ref.mk_elem(
             self.vcx,
-            self.vcx.mk_local_ex(phi_idx.initialised.unwrap()),
+            if self.spec_block {
+                phi_idx.expression.unwrap()
+            } else {
+                self.vcx.mk_local_ex(phi_idx.initialised.unwrap())
+            },
             elem_idx,
         )
     }
@@ -496,6 +510,7 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
             index,
             location,
             initialised: None,
+            expression: None,
         }
     }
 
@@ -504,6 +519,12 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
         update: Update<'vir>,
         expr: ExprRetAny<'vir, T>,
     ) -> ExprRetAny<'vir, T> {
+        // Inline body-spec temporaries before applying `old`: a let-bound
+        // capture computed in the current state cannot be recovered by putting
+        // `old` around that local later. Contract inputs stay pinned as before.
+        if self.spec_block {
+            return expr;
+        }
         update.binds.iter().rfold(expr, |expr, bind| match bind {
             UpdateBind::Local(local, version, val) => {
                 // skip bindings which were not used
@@ -753,6 +774,7 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                     index: self.phi_ctr,
                     location,
                     initialised: None,
+                    expression: Some(phi_expr),
                 };
                 phi_idx.initialised = Some(
                     self.vcx
@@ -844,6 +866,7 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                     index: self.phi_ctr,
                     location,
                     initialised: None,
+                    expression: Some(phi_expr),
                 };
                 phi_idx.initialised = Some(
                     self.vcx
@@ -930,15 +953,20 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                                 self.context,
                                 arg_tys,
                                 def_id,
-                            ))
-                            .unwrap();
+                            ))?;
                         let snap_args = args
                             .iter()
                             .map(|arg| self.encode_operand_snap(&arg.node, &new_curr_ver))
                             .collect::<Result<Vec<_>, _>>()?;
                         Ok(pure_func.call_pure(snap_args))
                     } else {
-                        panic!("call to unknown non-pure function in pure code ({def_id:?})");
+                        Err(self.unsupported_rvalue(
+                            format!(
+                                "call to impure function `{}` in pure code",
+                                self.vcx.tcx().def_path_str(def_id)
+                            ),
+                            term.source_info.span,
+                        ))
                     }
                 };
 
@@ -1301,9 +1329,9 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
         let mut encoded_place = EncodedPlace::new(expr, None);
         // TODO: factor this out (duplication with impure encoder)?
         for elem in place.projection {
-            // The snapshots of the arguments and the result are pinned to a
-            // state, so the only read of the heap is the dereference of a
-            // mutable reference in an impure context; only that is wrapped.
+            // In contracts, argument/result snapshots are pinned to a state,
+            // so only mutable-reference heap reads need wrapping here. Body
+            // specifications instead wrap their final projected capture below.
             // An `old` around a pinned snapshot is a no-op, but breaks the
             // match with the callee's wand at a call site, where the `old` is
             // labelled. Silicon evaluates the heap-independent parts of a wand
@@ -1314,7 +1342,7 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                 && matches!(place_ty.ty.kind(), TyKind::Ref(.., ty::Mutability::Mut));
             encoded_place = self.encode_place_element(curr_ver, place_ty, *elem, encoded_place)?;
             place_ty = place_ty.projection_ty(self.vcx.tcx(), *elem);
-            if heap_read && self.old_mode {
+            if heap_read && self.old_mode && !self.spec_block {
                 let inner = encoded_place.snap;
                 encoded_place.snap = self.vcx.mk_lazy_expr(
                     "old_mode_wrap",
@@ -1332,6 +1360,21 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
         }
         // Can we ever have the use of a projected place?
         assert!(place_ty.variant_index.is_none());
+
+        // Body-spec captures are read from the current heap. Delay `old` until
+        // after projecting the captured value, so unrelated captures (including
+        // locals that did not exist at entry) are not read in the entry state.
+        if should_wrap && self.old_mode && self.spec_block {
+            let inner = encoded_place.snap;
+            encoded_place.snap = self.vcx.mk_lazy_expr(
+                "old_body_capture",
+                inner.ty(),
+                Box::new(move |vcx, lctx: ExprInput<'vir>| {
+                    use vir::Reify;
+                    vcx.mk_old(inner.reify(vcx, lctx), lctx.2).kind
+                }),
+            );
+        }
 
         if should_wrap {
             if self.rel0_mode {
@@ -1384,50 +1427,80 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                 .collect::<Vec<_>>(),
         );
 
-        let mut reify_args = FxHashMap::default();
-        // TODO: big hack!
-        //   the problem is that we expect this to
-        //   be a simple Expr, but `encode_operand`
-        //   returns an ExprRet; do we need ExprRet
-        //   to be piped throughout this encoder?
-        //   alternatively, can we have an "unlift"
-        //   operation, which will work like reify
-        //   but panicking on a Lazy(..)?
-        let closure_ref = unsafe {
-            std::mem::transmute::<ExprRet<'_>, vir::ExprGen<'_, (), !, vir::Snap>>(closure_snap)
-        };
-        // The arguments to the closure are the closure itself and the qvars.
-        reify_args.insert(1usize.into(), closure_ref);
-        reify_args.extend(
-            qvars
-                .iter()
-                .enumerate()
-                .map(|(idx, qvar)| ((idx + 2).into(), self.vcx.mk_local_ex(qvar))),
-        );
-
-        // TODO: recursively invoke MirPure encoder to encode
-        // the body of the closure; pass the closure as the
-        // variable to use, then closure access = tuple access
-        // (then hope to optimise this away later ...?)
         use vir::Reify;
         let body = self
             .deps
             .require_dep::<MirPureEnc>(MirPureEncTask {
                 encoding_depth: self.encoding_depth + 1,
-                kind: PureKind::Closure,
+                kind: if self.spec_block {
+                    PureKind::SpecBlockClosure
+                } else {
+                    PureKind::Closure
+                },
                 parent_def_id: cl_def_id,
                 gargs: GParams::from(cl_def_id).identity_args(),
             })?
             .expr;
-        let reify_args = self.vcx.alloc(reify_args);
         let body = self.vcx.mk_lazy_expr(
             vir::vir_format!(self.vcx, "spec closure body ({name})"),
             body.ty(),
             Box::new(move |vcx, lctx: ExprInput<'vir>| {
+                // Resolve captures in the enclosing context before supplying
+                // them to the closure. Captures may contain lazy expressions,
+                // particularly when body-spec temporaries are inlined for old.
+                let mut reify_args = FxHashMap::default();
+                reify_args.insert(1usize.into(), closure_snap.reify(vcx, lctx));
+                reify_args.extend(qvars.iter().enumerate().map(|(idx, qvar)| {
+                    ((idx + 2).into(), vcx.mk_local_ex(qvar))
+                }));
+                let reify_args = vcx.alloc(reify_args);
                 body.reify(vcx, (cl_def_id, reify_args, lctx.2)).kind
             }),
         );
-        Ok((qvars, body.downcast_ty::<vir::Bool>()))
+        Ok((qvars, body))
+    }
+
+    /// Encodes the trigger-set argument of a quantifier builtin: a tuple of
+    /// trigger sets, each itself a tuple of spec closures whose arguments are
+    /// the quantified variables and whose body is one trigger expression.
+    fn encode_trigger_sets(
+        &mut self,
+        name: &str,
+        sets_ty: ty::Ty<'vir>,
+        sets_snap: ExprRet<'vir>,
+        qvars: &'vir [vir::LocalDeclSnap<'vir>],
+    ) -> EncodeResult<'vir, &'vir [TriggerRet<'vir>], MirPureEnc> {
+        let TyKind::Tuple(set_tys) = sets_ty.kind() else {
+            panic!("illegal prusti::{name}: expected a trigger-set tuple, got {sets_ty:?}")
+        };
+        if set_tys.is_empty() {
+            return Ok(&[]);
+        }
+        let sets_fields = self.ty_use(sets_ty).expect_structlike();
+        let mut sets = Vec::with_capacity(set_tys.len());
+        for (set_idx, set_ty) in set_tys.iter().enumerate() {
+            let set_snap = sets_fields.fields[set_idx].read(sets_snap.downcast_ty());
+            let TyKind::Tuple(cl_tys) = set_ty.kind() else {
+                panic!("illegal prusti::{name}: expected a trigger tuple, got {set_ty:?}")
+            };
+            let cl_fields = self.ty_use(set_ty).expect_structlike();
+            let mut exprs = Vec::with_capacity(cl_tys.len());
+            for (cl_idx, cl_ty) in cl_tys.iter().enumerate() {
+                let cl_snap = cl_fields.fields[cl_idx].read(set_snap.downcast_ty());
+                // The closures are behind a shared reference, whose snapshot is
+                // what `encode_spec_closure` expects (as for the body closure).
+                let TyKind::Ref(_, cl_ty, _) = cl_ty.kind() else {
+                    panic!("illegal prusti::{name}: expected a trigger closure, got {cl_ty:?}")
+                };
+                let (cl_qvars, expr) = self.encode_spec_closure(name, *cl_ty, cl_snap)?;
+                // The triggers are parsed with the quantifier's own binders, so
+                // they must quantify exactly the same variables as the body.
+                assert_eq!(cl_qvars, qvars);
+                exprs.push(expr);
+            }
+            sets.push(self.vcx.mk_trigger(&exprs));
+        }
+        Ok(self.vcx.alloc_slice(&sets))
     }
 
     /// Encodes the pure-only `prusti_contracts` builtins (quantifiers, spec
@@ -1450,9 +1523,8 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                     .iter()
                     .map(|oper| self.encode_operand_snap(&oper.node, curr_ver))
                     .collect::<Result<Vec<_>, _>>()?;
-                // TODO: for now, let's expect this to give us these two:
-                //   - expression for the triggers
-                //   - expression for the body
+                // The two arguments are the expressions for the trigger sets
+                // and for the body.
                 assert_eq!(encoded_args.len(), 2);
 
                 let name = if builtin == SpecBuiltin::Forall {
@@ -1462,11 +1534,13 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                 };
                 let (qvars, body) =
                     self.encode_spec_closure(name, arg_tys[2].expect_ty(), encoded_args[1])?;
-                // TODO: triggers
+                let body = body.downcast_ty::<vir::Bool>();
+                let triggers =
+                    self.encode_trigger_sets(name, arg_tys[0].expect_ty(), encoded_args[0], qvars)?;
                 let res = if builtin == SpecBuiltin::Forall {
-                    self.vcx.mk_forall_expr(qvars, &[], body)
+                    self.vcx.mk_forall_expr(qvars, triggers, body)
                 } else {
-                    self.vcx.mk_exists_expr(qvars, &[], body)
+                    self.vcx.mk_exists_expr(qvars, triggers, body)
                 };
                 mk_bool(res)
             }
@@ -1485,7 +1559,7 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                     encoded_args[0],
                 )?;
                 assert!(qvars.is_empty(), "`spec_block` closures take no arguments");
-                mk_bool(body)
+                mk_bool(body.downcast_ty::<vir::Bool>())
             }
             SpecBuiltin::ModeStart(mode) => {
                 match mode {
@@ -1623,6 +1697,7 @@ struct Version<'vir> {
     index: usize,
     location: mir::Location,
     initialised: Option<vir::LocalDeclSnap<'vir>>,
+    expression: Option<ExprRet<'vir>>,
 }
 
 impl<'vir> Default for Version<'vir> {
@@ -1631,6 +1706,7 @@ impl<'vir> Default for Version<'vir> {
             index: 0,
             location: mir::Location::START,
             initialised: None,
+            expression: None,
         }
     }
 }

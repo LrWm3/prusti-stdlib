@@ -69,7 +69,7 @@ impl TaskEncoder for FunctionCallEnc {
     type OutputFullDependency<'vir> = FunctionCallEncOutput<'vir>;
 
     fn task_to_key<'vir>(task: &Self::TaskDescription<'vir>) -> Self::TaskKey<'vir> {
-        *task
+        task.resolved()
     }
 
     fn do_encode_full<'vir>(

@@ -68,6 +68,19 @@ impl<'tcx> CallTaskDescription<'tcx> {
         }
     }
 
+    fn resolved(self) -> Self {
+        if self.resolve_trait_calls {
+            let (callee, gargs) = self.gargs.resolve_method(self.callee);
+            Self {
+                callee,
+                gargs,
+                ..self
+            }
+        } else {
+            self
+        }
+    }
+
     fn trait_call<'vir, E: TaskEncoder>(
         &self,
         deps: &mut TaskEncoderDependencies<'vir, E>,

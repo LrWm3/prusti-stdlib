@@ -85,6 +85,8 @@ pub struct TyPureArrayData<'vir> {
     pub ref_to_index_ref: vir::FunctionIdn<'vir, (vir::Ref, vir::Int, vir::ManyTyVal), vir::Ref>,
     /// Function to build the array-like with the elements of a sequence.
     pub(super) from_seq: FunctionIdn<'vir, vir::Seq, vir::CSnap>,
+    /// Observe the first `len` element snapshots as a logical sequence.
+    pub(super) to_seq: FunctionIdn<'vir, (vir::CSnap, vir::Int), vir::Seq>,
 }
 
 #[derive(Debug, Clone, Copy)]

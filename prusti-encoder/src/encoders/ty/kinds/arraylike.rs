@@ -28,6 +28,7 @@ pub(crate) fn ty_pure<'vir>(
     // in pure code. Indices outside the sequence are unspecified.
     let seq_ty = builder.vcx.mk_ty_seq(vir::TYPE_PSNAP);
     let from_seq = builder.function("from_seq", seq_ty, builder.self_type());
+    let to_seq = builder.function("to_seq", (builder.self_type(), vir::TYPE_INT), seq_ty);
     let zero = builder.vcx.mk_uint::<0>();
     builder.axiom(
         "from_seq",
@@ -37,11 +38,47 @@ pub(crate) fn ty_pure<'vir>(
                     ==> (([index_access](([from_seq](s)), i)) == (((s)[i]) as PSnap))
         },
     );
+    // Slice length lives in the shared reference's metadata, not the slice
+    // snapshot. Constrain only nonnegative lengths so arbitrary domain values
+    // cannot force a sequence to have a negative length.
+    let vcx = builder.vcx;
+    let s_decl = vcx.mk_local_decl("s", builder.self_type());
+    let n_decl = vcx.mk_local_decl("n", vir::TYPE_INT);
+    let i_decl = vcx.mk_local_decl("i", vir::TYPE_INT);
+    let s = vcx.mk_local_ex(s_decl);
+    let n = vcx.mk_local_ex(n_decl);
+    let i = vcx.mk_local_ex(i_decl);
+    let seq = to_seq.call()(s, n);
+    let len = vcx.mk_collection_len_expr(seq);
+    let indexed = vcx.mk_seq_index_expr(seq, i).downcast_ty::<vir::PSnap>();
+    let elem = index_access.call()(s, i);
+    builder.axiom(
+        "to_seq_len",
+        vcx.mk_forall_expr(
+            vcx.alloc_slice(&[s_decl.as_dyn(), n_decl.as_dyn()]),
+            vcx.alloc_slice(&[vcx.mk_trigger(&[seq.as_dyn()])]),
+            vir::expr! { (([zero]) <= (n)) ==> ((len) == (n)) },
+        ),
+    );
+    builder.axiom(
+        "to_seq_index",
+        vcx.mk_forall_expr(
+            vcx.alloc_slice(&[s_decl.as_dyn(), n_decl.as_dyn(), i_decl.as_dyn()]),
+            vcx.alloc_slice(&[
+                vcx.mk_trigger(&[indexed.as_dyn()]),
+                vcx.mk_trigger(&[elem.as_dyn(), seq.as_dyn()]),
+            ]),
+            vir::expr! {
+                ((([zero]) <= (i)) && ((i) < (n))) ==> ((indexed) == (elem))
+            },
+        ),
+    );
     Ok(ArrayData::new(
         TyPureArrayData {
             index_access,
             ref_to_index_ref,
             from_seq,
+            to_seq,
         },
         data.slice,
     ))

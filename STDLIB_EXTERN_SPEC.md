@@ -522,8 +522,13 @@ retains the conditional-precondition limitation. Conditional expiry pledges are
 also unsupported. Trait implementation refinements now preserve impl and method
 lifetimes and const-generic parameters across generated specification functions;
 cross-crate tests check borrowed results and reject strengthened preconditions
-and unsupported generic claims. Mutable iterator refinement and some
-lifetime-sensitive calls remain necessary for P2-C. Ordinary owned `for` loops can use the specification
+and unsupported generic claims. Generic calls to impure trait methods now use
+the trait's two-state contract; behavioral-subtyping checks account for the
+mutable arguments' post-state. A concrete owned finite iterator refines its
+sequence contract and a generic cross-crate helper consumes it. Negative cases
+reject a weaker implementation postcondition and an incorrect state claim.
+Borrowed-item refinement and some lifetime-sensitive calls remain necessary for
+P2-C. Ordinary owned `for` loops can use the specification
 marker `for_iterator::<alloc::vec::IntoIter<T>>()` to refer to the actual
 compiler-generated iterator in a body invariant. The symbolic-count proof is
 verified across crates; nested loops, another same-typed iterator, incorrect

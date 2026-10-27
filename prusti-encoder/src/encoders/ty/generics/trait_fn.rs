@@ -233,48 +233,53 @@ impl TaskEncoder for TraitFnEnc {
             );
             let func_ret = local_defs.local_decl_ret();
 
-            let spec = deps.require_dep_spanned::<MirSpecEnc>(
-                (def_id, def_id, MirSpecEncMode::PureWithoutResult),
-                span,
-            )?;
-            let pres = vcx.mk_conj(&spec.pre_exprs().collect::<Vec<_>>());
-            let pre_func_call = pre_func.call()(
-                func_arg_exprs,
-                item_generics.ty_exprs(),
-                item_generics.const_exprs(),
-            );
-            axioms.push(vcx.mk_domain_axiom(
-                vir_format_identifier!(
-                    vcx,
-                    "{trait_name}_fn_pre_{item_name}_base",
-                ),
-                vir::expr! {
-                    forall ..[func_args], ..[item_generics.ty_decls()], ..[item_generics.const_decls()] :: {[pre_func_call]}
-                        (pres) ==> (pre_func_call)
-                },
-            ));
-            // A default body is not part of the trait's contract: impls may
-            // override it with a different result.
-            let posts = vcx.mk_conj(&spec.post_exprs().collect::<Vec<_>>());
-            let post_func_call = post_func.call()(
-                vcx.mk_local_ex(func_ret),
-                func_arg_exprs,
-                item_generics.ty_exprs(),
-                item_generics.const_exprs(),
-            );
-            // Impls may weaken the preconditions, so a call can be valid
-            // outside them; the trait's postconditions are only promised
-            // where they held. `post_func` receives the arguments' pre-state.
-            axioms.push(vcx.mk_domain_axiom(
-                vir_format_identifier!(
-                    vcx,
-                    "{trait_name}_fn_post_{item_name}_base",
-                ),
-                vir::expr! {
-                    forall [func_ret], ..[func_args], ..[item_generics.ty_decls()], ..[item_generics.const_decls()] :: {[post_func_call]}
-                        (post_func_call) ==> ((pres) ==> (posts))
-                },
-            ));
+            // Pure calls use snapshot-domain axioms. An impure call may
+            // change its arguments, so its stub below encodes the trait
+            // contract directly with distinct pre- and post-states.
+            if is_pure {
+                let spec = deps.require_dep_spanned::<MirSpecEnc>(
+                    (def_id, def_id, MirSpecEncMode::PureWithoutResult),
+                    span,
+                )?;
+                let pres = vcx.mk_conj(&spec.pre_exprs().collect::<Vec<_>>());
+                let pre_func_call = pre_func.call()(
+                    func_arg_exprs,
+                    item_generics.ty_exprs(),
+                    item_generics.const_exprs(),
+                );
+                axioms.push(vcx.mk_domain_axiom(
+                    vir_format_identifier!(
+                        vcx,
+                        "{trait_name}_fn_pre_{item_name}_base",
+                    ),
+                    vir::expr! {
+                        forall ..[func_args], ..[item_generics.ty_decls()], ..[item_generics.const_decls()] :: {[pre_func_call]}
+                            (pres) ==> (pre_func_call)
+                    },
+                ));
+                // A default body is not part of the trait's contract: impls may
+                // override it with a different result.
+                let posts = vcx.mk_conj(&spec.post_exprs().collect::<Vec<_>>());
+                let post_func_call = post_func.call()(
+                    vcx.mk_local_ex(func_ret),
+                    func_arg_exprs,
+                    item_generics.ty_exprs(),
+                    item_generics.const_exprs(),
+                );
+                // Impls may weaken the preconditions, so a call can be valid
+                // outside them; the trait's postconditions are only promised
+                // where they held. `post_func` receives the arguments' pre-state.
+                axioms.push(vcx.mk_domain_axiom(
+                    vir_format_identifier!(
+                        vcx,
+                        "{trait_name}_fn_post_{item_name}_base",
+                    ),
+                    vir::expr! {
+                        forall [func_ret], ..[func_args], ..[item_generics.ty_decls()], ..[item_generics.const_decls()] :: {[post_func_call]}
+                            (post_func_call) ==> ((pres) ==> (posts))
+                    },
+                ));
+            }
 
             if is_pure {
                 let mut stub_pres = Vec::new();
@@ -364,28 +369,12 @@ impl TaskEncoder for TraitFnEnc {
                 stub_posts.extend(wands.indirect_posts(vcx, &local_defs, deps));
                 stub_posts.extend(wands.wand_posts(vcx, &local_defs, deps));
 
-                stub_pres.push(pre_func.call()(
-                    vcx.alloc_slice(
-                        &local_defs
-                            .args()
-                            .map(|arg| arg.impure_snap)
-                            .collect::<Vec<_>>(),
-                    ),
-                    item_generics.ty_exprs(),
-                    item_generics.const_exprs(),
-                ));
-                // TODO: mutable arguments should also have a post-state
-                stub_posts.push(post_func.call()(
-                    local_defs.ret().impure_snap,
-                    vcx.alloc_slice(
-                        &local_defs
-                            .args()
-                            .map(|arg| vcx.mk_old_expr(arg.impure_snap))
-                            .collect::<Vec<_>>(),
-                    ),
-                    item_generics.ty_exprs(),
-                    item_generics.const_exprs(),
-                ));
+                let spec = deps.require_dep_spanned::<MirSpecEnc>(
+                    (def_id, def_id, MirSpecEncMode::Impure),
+                    span,
+                )?;
+                stub_pres.extend(spec.pre_exprs());
+                stub_posts.extend(spec.post_exprs());
 
                 methods.push(vcx.mk_method(
                     call_stub_impure.unwrap(),

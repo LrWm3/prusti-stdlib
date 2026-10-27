@@ -230,3 +230,58 @@ impl<'a> Reborrow for Borrowed<'a, u8> {
         self.value
     }
 }
+
+pub trait RefinedFinite {
+    type Item;
+    #[pure]
+    fn remaining(&self) -> Seq<Self::Item>;
+    #[ensures(match &result {
+        Some(value) => old(self.remaining()).len() > Int::from(0)
+            && *value === *old(self.remaining())[0]
+            && self.remaining() == old(self.remaining())[1..],
+        None => old(self.remaining()).len() == Int::from(0)
+            && self.remaining() == old(self.remaining()),
+    })]
+    fn advance(&mut self) -> Option<Self::Item>;
+}
+pub struct RefinedOnce {
+    pub value: u32,
+    pub available: bool,
+}
+#[refine_trait_spec]
+impl RefinedFinite for RefinedOnce {
+    type Item = u32;
+    #[pure]
+    fn remaining(&self) -> Seq<u32> {
+        if self.available {
+            Seq::single(self.value)
+        } else {
+            Seq::new()
+        }
+    }
+    #[ensures(match &result {
+        Some(value) => old(self.remaining()).len() > Int::from(0)
+            && *value === *old(self.remaining())[0]
+            && self.remaining() == old(self.remaining())[1..],
+        None => old(self.remaining()).len() == Int::from(0)
+            && self.remaining() == old(self.remaining()),
+    })]
+    fn advance(&mut self) -> Option<u32> {
+        if self.available {
+            self.available = false;
+            Some(self.value)
+        } else {
+            None
+        }
+    }
+}
+#[ensures(match &result {
+    Some(value) => old(it.remaining()).len() > Int::from(0)
+        && *value === *old(it.remaining())[0]
+        && it.remaining() == old(it.remaining())[1..],
+    None => old(it.remaining()).len() == Int::from(0)
+        && it.remaining() == old(it.remaining()),
+})]
+pub fn refined_advance<I: RefinedFinite>(it: &mut I) -> Option<I::Item> {
+    it.advance()
+}

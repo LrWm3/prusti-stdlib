@@ -53,10 +53,8 @@ outside the suite:
 
 - `conditional_pre_pass` cannot use a type-conditional postcondition when the
   same refinement also has a conditional precondition, even if both hold.
-- `iterator_trait_pass` cannot select a type-conditional postcondition on an
-  external `Iterator::next` trait specification, even with its test capability.
 
-Reproduce either limitation after building (replace the bin name for the other):
+Reproduce this limitation after building with:
 
 ```sh
 PRUSTI_CHECK_OVERFLOWS=true PRUSTI_CHECK_PANICS=true PRUSTI_NO_VERIFY_DEPS=true \

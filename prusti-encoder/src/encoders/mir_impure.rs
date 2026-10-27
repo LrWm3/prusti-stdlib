@@ -1556,23 +1556,24 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         (func_def_id, caller_substs, is_pure)
     }
 
-    /// Select conditional postconditions only when rustc proves every bound
-    /// in the caller's environment. Region-bearing obligations are excluded:
-    /// MIR inference regions cannot safely be resolved by a fresh solver.
+    /// Select trusted free-function or external trait-method postconditions
+    /// only when rustc proves every bound in the caller's environment.
+    /// Region-bearing obligations are excluded: MIR inference regions cannot
+    /// safely be resolved by a fresh solver.
     fn conditional_posts_for_call(
         &self,
         callee: DefId,
         args: ty::GenericArgsRef<'vir>,
     ) -> Vec<DefId> {
         let tcx = self.vcx.tcx();
-        if tcx.opt_associated_item(callee).is_some() {
-            return Vec::new();
-        }
         encoders::spec::with_type_spec(|specs| {
             let Some(graph) = specs.get_proc_spec(&callee) else {
                 return Vec::new();
             };
-            if graph.base_spec.extern_spec.is_some()
+            let external_trait_method =
+                tcx.trait_of_assoc(callee).is_some() && graph.base_spec.extern_spec.is_some();
+            if (tcx.opt_associated_item(callee).is_some() && !external_trait_method)
+                || (graph.base_spec.extern_spec.is_some() && !external_trait_method)
                 || !graph.base_spec.trusted.extract_inherit().unwrap_or(false)
             {
                 return Vec::new();
@@ -2613,7 +2614,9 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                                     parent_def_id: post,
                                     gargs: self.gargs(caller_substs),
                                     kind: PureKind::Spec {
-                                        context: func_def_id,
+                                        // Substitutions refer to caller parameters,
+                                        // including bounds on associated types.
+                                        context: self.def_id,
                                         mode: MirSpecEncMode::Impure,
                                     },
                                 })?;

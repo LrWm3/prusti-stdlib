@@ -475,21 +475,20 @@ results satisfy the P2-B mutable-view gate; P2-C and M2 remain open.
 
 ### P2-C progress: conditional capability probe
 
-Trusted free impure functions can now provide type-conditional postconditions
-when rustc proves their bounds at the call site. A cross-crate generic client
-uses a test-only assumed iterator capability; other probes check pre-call state
-and reject claims without the required evidence. This helper's contract is
-trusted, and does not establish a contract for `Iterator::next`.
+Trusted free impure functions and directly called external trait methods can
+now provide type-conditional postconditions when rustc proves their bounds at
+the call site. A cross-crate generic client calls `Iterator::next` using a
+test-only assumed capability; other probes check pre-call state and reject
+claims without the required evidence. This fixture does not establish a
+contract for concrete standard-library iterators.
 
 Selection conservatively excludes bounds containing regions or unresolved
 inference variables, refinements with conditional preconditions, associated
-functions, external specs, and pure calls. A
+functions other than directly called external trait methods, external free
+functions and impl methods, and pure calls. A
 [reproducer](prusti-tests/tests/cargo_verify/stdlib_borrow_spec/known_limits/)
-retains the conditional-precondition limitation; another compiles a real
-`Iterator::next` external specification but cannot select its conditional
-postcondition in a generic caller. Its capability is an intentionally strong
-test-only assumption, not an iterator model. Conditional expiry pledges are
-also unsupported. Concrete owned and shared iterator models, trait-method
+retains the conditional-precondition limitation. Conditional expiry pledges are
+also unsupported. Concrete owned and shared iterator models, implementation
 refinement, lifetime handling, and loop proofs remain necessary for P2-C.
 
 ## Phase 1 — External-specification support and unbounded Vec
@@ -857,7 +856,7 @@ claimed.
 | **M1: unbounded functional Vec** | P1-A through P1-D | Minimal contracts plus reproduced blockers | Verified locally: 21 Vec checks, symbolic append/pop/round-trip and whole-prefix loop proofs for owned non-`Copy` elements, cross-crate clients, and negative cases. |
 | P2-A: Vec and shared slices | M1 | Contracts, sequence lemmas, any slice encoding fixes | Verified locally: 27 checks cover symbolic mutations, shared lookup/ranges, splits, swaps, boundaries, ordering, and framing. |
 | P2-B: mutable collection views | P2-A, two-state snapshots | Pledges, expiry, generic reference framing | Verified locally: 74 checks cover slice and Vec views, lookup, indexing, splits, reborrowing, inclusive range state, and negative framing cases. |
-| P2-C: shared and owned iterators | Sequence model, generic trait probes | Opt-in models, refinement, lifetimes, loop support | In progress: a trusted free-function capability probe works across crates; concrete and generic traversal remain open. |
+| P2-C: shared and owned iterators | Sequence model, generic trait probes | Opt-in models, refinement, lifetimes, loop support | In progress: a test-only assumed capability works across crates for `Iterator::next`; concrete traversal and loop proofs remain open. |
 | **M2: Vec/slice phase complete** | P2-A, P2-B, P2-C | Integration and cross-crate validation | Untested; all required gates pass. |
 | P3-A: explicit key models | M2, logical Map/Set | Key-model interfaces and conditional contracts | Untested; equality/hash/model evidence is enforced. |
 | **M3: HashMap/HashSet phase complete** | P3-A, P3-B, P2-B expiry support | Map/set contracts and mutable lookup | Untested; key, cardinality, framing, and mutable-value cases pass. |

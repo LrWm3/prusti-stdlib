@@ -46,7 +46,8 @@ each test command has a 300-second outer timeout.
 | `traits_pass` | Generic trait arguments, associated items (owned and shared-reference values), explicit borrow lifetimes, concrete external impl contracts, and a verified local refinement work across crates. |
 | `cross_crate_pass` | Generic wrappers preserve non-`Copy` payloads, return the old destination, and install the new value across crate boundaries. |
 | `lifetimes_pass` | Renamed early/late-bound lifetimes, existing outlives bounds, type aliases, and nested higher-ranked signatures are accepted. |
-| `conditional_pass`, `iterator_capability_pass` | Trusted free-function conditional postconditions are selected with caller evidence, including old-state and cross-crate generic capability probes. The iterator capability and helper are test-only assumptions, not contracts for arbitrary iterators. |
+| `conditional_pass`, `iterator_capability_pass` | Conditional postconditions are selected with caller evidence for trusted free functions and the external `Iterator::next` trait method, including old-state and cross-crate generic capability probes. The iterator capability is a test-only assumption, not a contract for arbitrary iterators. |
+| `iterator_capability_unbound`, `iterator_capability_wrong`, `iterator_capability_lifetime` | Reject an iterator claim without model evidence, an incorrect pre-call state, and a guarantee available only for a `'static` reference. |
 | `conditional_unbound`, `conditional_lifetime`, `conditional_generic_lifetime`, `conditional_lifetime_bound` | Reject conditional guarantees without sufficient evidence, including lifetime-sensitive bounds and mismatched generic lifetime slots. |
 | `conditional_pre_wrong`, `conditional_state_wrong` | Reject a conditional postcondition when its refinement has a conditional precondition, and reject an incorrect pre-call state. |
 | `cross_crate_wrong_value` | Reject a wrong returned value from an imported generic wrapper. |
@@ -121,8 +122,9 @@ declarations requiring different early-bound parameter layouts or more complex
 outlives equivalences. They do not silently accept changed lifetime relationships.
 
 Conditional postcondition selection is currently limited to trusted free impure
-functions with no conditional preconditions. It excludes region-bearing bounds,
-unresolved inference variables, associated functions, external specs, and pure
+functions and directly called external trait methods with no conditional
+preconditions. It excludes region-bearing bounds, unresolved inference variables,
+other associated functions, external free functions and impl methods, and pure
 calls; it does not implement conditional expiry pledges.
 
 These checks establish the P1-B external-contract foundation, not unrestricted

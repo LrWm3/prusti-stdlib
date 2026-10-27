@@ -376,6 +376,21 @@ through direct slice arguments and arrays; restoration through mutable Vec
 views is not established. The next gate is **P2-B**, mutable views and
 borrow-expiry contracts. P2-C iteration and the overall M2 gate remain open.
 
+### P2-B progress: mutable Vec slice restoration
+
+**Verified locally on 2026-10-27:** the initial
+[borrow fixture](prusti-tests/tests/cargo_verify/stdlib_borrow_spec/README.md)
+passes four checks. `Vec::as_mut_slice` exposes the entry sequence and carries
+an expiry pledge restoring the Vec's model from the final slice observation.
+A separately compiled `no_std` library proves a generic swap through that view;
+its client proves length preservation, exchanged values, and restoration after
+two swaps, with a non-`Copy` owned runtime instance. The runner uses the same
+pinned environment and proof settings as P2-A, via `--suite borrow`.
+
+This establishes one mutable-view dependency. **P2-B remains incomplete**:
+mutable indexing, optional mutable lookup, disjoint splitting, reborrowing, and
+negative framing/value checks are still required.
+
 ## Phase 1 — External-specification support and unbounded Vec
 
 **Exit gate M1:** verified generic clients use real Vec operations to prove exact
@@ -740,7 +755,7 @@ claimed.
 | P1-C: sequence observations | P1-B | Model connection, explicit triggers, required generic snapshots | Verified locally: 21 focused checks, arbitrary-index observations, explicit triggers, cross-crate proofs, and precise diagnostics. |
 | **M1: unbounded functional Vec** | P1-A through P1-D | Minimal contracts plus reproduced blockers | Verified locally: 21 Vec checks, symbolic append/pop/round-trip and whole-prefix loop proofs for owned non-`Copy` elements, cross-crate clients, and negative cases. |
 | P2-A: Vec and shared slices | M1 | Contracts, sequence lemmas, any slice encoding fixes | Verified locally: 27 checks cover symbolic mutations, shared lookup/ranges, splits, swaps, boundaries, ordering, and framing. |
-| P2-B: mutable collection views | P2-A, two-state snapshots | Pledges, expiry, generic reference framing | Untested; changes propagate to owners and unrelated elements are preserved. |
+| P2-B: mutable collection views | P2-A, two-state snapshots | Pledges, expiry, generic reference framing | In progress: four checks verify `as_mut_slice` owner restoration through a generic exported swap wrapper; remaining APIs and negative probes are open. |
 | P2-C: shared and owned iterators | Sequence model, generic trait probes | Opt-in models, refinement, lifetimes, loop support | Untested; concrete and generic traversal proofs pass. |
 | **M2: Vec/slice phase complete** | P2-A, P2-B, P2-C | Integration and cross-crate validation | Untested; all required gates pass. |
 | P3-A: explicit key models | M2, logical Map/Set | Key-model interfaces and conditional contracts | Untested; equality/hash/model evidence is enforced. |

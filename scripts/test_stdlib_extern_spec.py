@@ -5,6 +5,7 @@ From the repository root, after building Prusti:
     ./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite sequence
     ./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite vec
     ./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite collections
+    ./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite borrow
 """
 
 import argparse
@@ -20,7 +21,7 @@ import time
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--release", action="store_true", help="use release Prusti binaries")
-    parser.add_argument("--suite", choices=("extern", "sequence", "vec", "collections"), default="extern")
+    parser.add_argument("--suite", choices=("extern", "sequence", "vec", "collections", "borrow"), default="extern")
     args = parser.parse_args()
     root = Path(__file__).resolve().parent.parent
     sequence = args.suite == "sequence"
@@ -104,7 +105,7 @@ def main():
             if args.suite == "extern":
                 run("rust-core-only", ["cargo", "check", "-p", "stdlib_core_only"], env)
                 run("core-only", [str(prusti), "-p", "stdlib_core_only"], env)
-            library = {"extern": "stdlib_specs", "sequence": "sequence_specs", "vec": "vec_specs", "collections": "collection_specs"}[args.suite]
+            library = {"extern": "stdlib_specs", "sequence": "sequence_specs", "vec": "vec_specs", "collections": "collection_specs", "borrow": "borrow_specs"}[args.suite]
             run("spec-library", [str(prusti), "-p", library], env)
             sources = fixture / "src/bin"
             positive = sorted(p for p in sources.glob("*.rs") if p.stem == "pass" or p.stem.endswith("_pass"))

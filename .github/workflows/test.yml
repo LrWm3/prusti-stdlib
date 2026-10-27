@@ -197,6 +197,8 @@ jobs:
         run: python x.py exec python3 scripts/test_stdlib_extern_spec.py --suite vec
       - name: Check expanded Vec and shared slice contracts
         run: python x.py exec python3 scripts/test_stdlib_extern_spec.py --suite collections
+      - name: Check mutable collection view progress
+        run: python x.py exec python3 scripts/test_stdlib_extern_spec.py --suite borrow
       - name: Check prusti-contracts
         run: |
           cd prusti-contracts/prusti-contracts-test/

@@ -36,6 +36,11 @@ impl<T, A: core::alloc::Allocator> Vec<T, A> {
     fn as_slice(&self) -> &[T];
 
     #[trusted]
+    #[ensures(Seq::from_slice(&*result) == old(vec_contents(&*self)))]
+    #[after_expiry(vec_contents(self) == before_expiry(Seq::from_slice(&*result)))]
+    fn as_mut_slice(&mut self) -> &mut [T];
+
+    #[trusted]
     #[pure]
     #[ensures(result == (self.len() == 0))]
     fn is_empty(&self) -> bool;

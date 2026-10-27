@@ -12,4 +12,8 @@ iterator_specs = { path = "../specs" }
 name = "for_count"
 path = "for_count.rs"
 
+[[bin]]
+name = "for_named"
+path = "for_named.rs"
+
 [workspace]

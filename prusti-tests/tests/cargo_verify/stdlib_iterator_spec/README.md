@@ -46,9 +46,11 @@ borrowed elements supports both direct `next` calls and the generic wrapper.
 
 The `known_limits/for_count` probe reproduces the current `for`-loop gap: a
 symbolic count does not preserve the relation between the hidden iterator and
-the number of items seen, so the increment may overflow. Shared traversal can
-use the original source reference directly in its loop invariant. Reproduce the
-remaining probe after building:
+the number of items seen, so the increment may overflow. The `for_named` probe
+shows why naming the iterator does not expose it to the invariant: `for` holds
+its mutable borrow for the entire loop, so Rust rejects a second borrow.
+Shared traversal can use the original source reference directly in its loop
+invariant. Reproduce either probe after building:
 
 ```sh
 PRUSTI_CHECK_OVERFLOWS=true PRUSTI_CHECK_PANICS=true PRUSTI_NO_VERIFY_DEPS=true \
@@ -56,3 +58,5 @@ PRUSTI_CHECK_OVERFLOWS=true PRUSTI_CHECK_PANICS=true PRUSTI_NO_VERIFY_DEPS=true 
   prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/Cargo.toml \
   --bin for_count
 ```
+
+Replace `for_count` with `for_named` for the borrow-checking probe.

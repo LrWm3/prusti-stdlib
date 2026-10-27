@@ -515,8 +515,11 @@ impl methods, and pure calls. A
 [reproducer](prusti-tests/tests/cargo_verify/stdlib_borrow_spec/known_limits/)
 retains the conditional-precondition limitation. Conditional expiry pledges are
 also unsupported. Implementation refinement, some lifetime-sensitive calls, and
-symbolic `for`-loop proofs remain necessary for P2-C. Shared traversal can refer
-directly to the source in its loop invariant.
+symbolic `for`-loop proofs remain necessary for P2-C. A named iterator cannot
+be read in a `for`-body invariant because the loop holds its mutable borrow;
+the [probes](prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/)
+record both this Rust error and the hidden-iterator overflow failure. Shared
+traversal can refer directly to the source in its loop invariant.
 
 An attempted universal-lifetime check using rustc's region-insensitive solver
 was rejected: it accepted an implementation whose nested type argument had a

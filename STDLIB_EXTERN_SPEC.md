@@ -473,9 +473,9 @@ generic library and client exercise owned non-`Copy` elements. An additional
 exhausted-inclusive indexing proof and negative framing checks pass. These
 results satisfy the P2-B mutable-view gate; P2-C and M2 remain open.
 
-### P2-C progress: owned iterator model
+### P2-C progress: owned and shared iterator models
 
-**Verified locally on 2026-10-27:** the focused owned-iterator suite passes 11
+**Verified locally on 2026-10-27:** the focused iterator suite passes 15
 checks, including its separately verified `no_std` library and negative cases.
 Trusted free impure functions and directly called external trait methods can
 now provide type-conditional postconditions when rustc proves their bounds at
@@ -493,14 +493,22 @@ contract for an existing owned iterator of borrowed items. This exercises
 collection snapshots. Direct calls with the same region-bearing iterator type
 remain conservatively unsupported.
 
+The sealed capability also models `slice::Iter`. Its trusted constructor
+connects each remaining reference to the corresponding source element, and
+the verified generic wrapper advances it. A separately verified `no_std` helper
+returns the first source reference, with non-`Copy`, empty, exhausted, and
+negative clients across crate boundaries. The pinned Rust implementation was
+reviewed for constructor state and forward advancement.
+
 Selection conservatively excludes bounds containing regions or unresolved
 inference variables, refinements with conditional preconditions, associated
 functions other than directly called external trait methods, external free
 functions and impl methods, and pure calls. A
 [reproducer](prusti-tests/tests/cargo_verify/stdlib_borrow_spec/known_limits/)
 retains the conditional-precondition limitation. Conditional expiry pledges are
-also unsupported. Shared iterator models, implementation refinement, lifetime
-handling, and symbolic `for`-loop proofs remain necessary for P2-C.
+also unsupported. Shared traversal loops, implementation refinement, direct
+lifetime-sensitive calls, and symbolic `for`-loop proofs remain necessary for
+P2-C; a shared-loop probe currently exposes an internal encoder error.
 
 ## Phase 1 — External-specification support and unbounded Vec
 
@@ -867,7 +875,7 @@ claimed.
 | **M1: unbounded functional Vec** | P1-A through P1-D | Minimal contracts plus reproduced blockers | Verified locally: 21 Vec checks, symbolic append/pop/round-trip and whole-prefix loop proofs for owned non-`Copy` elements, cross-crate clients, and negative cases. |
 | P2-A: Vec and shared slices | M1 | Contracts, sequence lemmas, any slice encoding fixes | Verified locally: 27 checks cover symbolic mutations, shared lookup/ranges, splits, swaps, boundaries, ordering, and framing. |
 | P2-B: mutable collection views | P2-A, two-state snapshots | Pledges, expiry, generic reference framing | Verified locally: 74 checks cover slice and Vec views, lookup, indexing, splits, reborrowing, inclusive range state, and negative framing cases. |
-| P2-C: shared and owned iterators | Sequence model, generic trait probes | Opt-in models, refinement, lifetimes, loop support | In progress: 11 owned iterator checks and a symbolic counting loop pass; shared traversal and `for` loops remain open. |
+| P2-C: shared and owned iterators | Sequence model, generic trait probes | Opt-in models, refinement, lifetimes, loop support | In progress: 15 owned and shared iterator checks and an owned symbolic loop pass; shared loops, direct lifetime-sensitive calls, and `for` loops remain open. |
 | **M2: Vec/slice phase complete** | P2-A, P2-B, P2-C | Integration and cross-crate validation | Untested; all required gates pass. |
 | P3-A: explicit key models | M2, logical Map/Set | Key-model interfaces and conditional contracts | Untested; equality/hash/model evidence is enforced. |
 | **M3: HashMap/HashSet phase complete** | P3-A, P3-B, P2-B expiry support | Map/set contracts and mutable lookup | Untested; key, cardinality, framing, and mutable-value cases pass. |

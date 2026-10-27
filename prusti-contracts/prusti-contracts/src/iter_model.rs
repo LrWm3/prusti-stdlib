@@ -19,6 +19,32 @@ pub trait ModeledIterator: Iterator + sealed::Sealed {
     fn remaining(&self) -> Seq<Self::Item>;
 }
 
+mod shared_slice {
+    use super::*;
+    #[cfg(feature = "prusti")]
+    use crate::{refine_trait_spec, trusted};
+    use core::slice::Iter;
+
+    impl<'a, T> sealed::Sealed for Iter<'a, T> {}
+
+    #[cfg(feature = "prusti")]
+    #[refine_trait_spec]
+    impl<'a, T> ModeledIterator for Iter<'a, T> {
+        #[trusted]
+        #[pure]
+        fn remaining(&self) -> Seq<&'a T> {
+            Seq::new()
+        }
+    }
+
+    #[cfg(not(feature = "prusti"))]
+    impl<'a, T> ModeledIterator for Iter<'a, T> {
+        fn remaining(&self) -> Seq<&'a T> {
+            Seq::new()
+        }
+    }
+}
+
 #[cfg(feature = "alloc")]
 mod owned_vec {
     use super::*;

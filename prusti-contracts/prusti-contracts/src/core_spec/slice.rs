@@ -1,4 +1,4 @@
-use crate::*;
+use crate::{iter_model::ModeledIterator, *};
 
 use core::{
     ops::{
@@ -30,6 +30,11 @@ pub fn range_index_model<I>(_index: &I) -> Option<(usize, usize)> {
 
 #[extern_spec]
 impl<T> [T] {
+    #[trusted]
+    #[ensures(result.remaining().len() == Int::from(self.len()))]
+    #[ensures(forall(|i: usize| i < self.len() ==> *result.remaining()[i] === &self[i]))]
+    fn iter<'a>(&'a self) -> core::slice::Iter<'a, T>;
+
     #[trusted]
     #[pure]
     #[ensures(result == core::intrinsics::ptr_metadata(self))]

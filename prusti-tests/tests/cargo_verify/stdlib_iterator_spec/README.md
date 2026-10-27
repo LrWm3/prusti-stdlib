@@ -1,4 +1,4 @@
-# Owned iterator contract progress
+# Iterator contract progress
 
 This fixture checks the bundled contracts for `Vec::into_iter` and
 `Iterator::next` on `Vec::IntoIter`. The sealed `ModeledIterator` capability
@@ -18,6 +18,12 @@ and permanent exhaustion for an arbitrary `Iterator` without model evidence.
 The capability is sealed so arbitrary iterator implementations cannot assume
 these finite-sequence or permanent-exhaustion laws.
 
+The same capability models `slice::Iter`: its constructor records references
+to the source elements, and the verified generic `advance` wrapper exposes the
+head and tail. A cross-crate `first_shared` wrapper returns the first source
+reference. Clients verify non-`Copy` elements, source values, and exhaustion;
+negative probes reject incorrect references and state.
+
 Run after building Prusti:
 
 ```sh
@@ -32,15 +38,17 @@ reference-containing collection snapshots are outside the tested domain. The
 borrowed-item probe starts with an existing iterator; it does not establish a
 model for constructing a vector of references.
 
-Shared slice iterators, direct calls where selecting the capability requires
-region-bearing evidence, and symbolic `for`-loop proofs remain open; this does
-not complete P2-C or M2.
+Direct calls where selecting the capability requires region-bearing evidence,
+symbolic shared traversal loops, and symbolic `for`-loop proofs remain open;
+this does not complete P2-C or M2.
 
 The `known_limits/for_count` probe reproduces the current `for`-loop gap: a
 symbolic count does not preserve the relation between the hidden iterator and
-the number of items seen, so the increment may overflow. `borrowed_items`
-reproduces conservative rejection of the iterator contract when the owned
-iterator's item type contains a lifetime. Reproduce either after building:
+the number of items seen, so the increment may overflow. `borrowed_items` and
+`shared_direct` reproduce conservative rejection of the iterator contract when
+the iterator type contains a lifetime. `shared_loop` reproduces an internal
+loop-encoding error for a shared traversal invariant. Reproduce any after
+building:
 
 ```sh
 PRUSTI_CHECK_OVERFLOWS=true PRUSTI_CHECK_PANICS=true PRUSTI_NO_VERIFY_DEPS=true \
@@ -49,4 +57,4 @@ PRUSTI_CHECK_OVERFLOWS=true PRUSTI_CHECK_PANICS=true PRUSTI_NO_VERIFY_DEPS=true 
   --bin for_count
 ```
 
-Replace `for_count` with `borrowed_items` for the lifetime case.
+Replace `for_count` with the name of another probe to run it.

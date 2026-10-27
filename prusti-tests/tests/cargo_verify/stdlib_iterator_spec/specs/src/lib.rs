@@ -21,6 +21,13 @@ pub fn advance<I: ModeledIterator>(iterator: &mut I) -> Option<I::Item> {
     iterator.next()
 }
 
+#[requires(values.len() > 0)]
+#[ensures(result === &values[0])]
+pub fn first_shared<'a, T>(values: &'a [T]) -> &'a T {
+    let mut iterator = values.iter();
+    advance(&mut iterator).unwrap()
+}
+
 // The explicit length keeps the pre-move value available as a loop invariant.
 #[requires(expected == values.len())]
 #[ensures(result == expected)]

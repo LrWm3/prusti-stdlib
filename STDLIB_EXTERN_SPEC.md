@@ -14,8 +14,8 @@ The work proceeds in three phases:
    owned iteration.
 3. Add HashMap and HashSet contracts with explicit logical key models.
 
-This document is the immediate deliverable. The implementation tasks and proof
-gates below are planned work; creating this roadmap does not complete them.
+The implementation tasks and proof gates below define the work. The evidence
+sections record completed gates; the roadmap itself does not establish them.
 
 “Unbounded” means verification for arbitrary symbolic finite lengths, with no
 fixed collection-size bound and no loop unrolling. Rust representability limits
@@ -103,12 +103,13 @@ gate.
 
 This completes the small unwrap/replace milestone and the local P1-A runner.
 The P1-B audit has since been extended as recorded below.
-The first major collection milestone M1 has not been attempted. These prototype
-contracts live in the fixture crate and have not been added to bundled contracts.
+The first major collection milestone M1 has not been attempted. At this stage the
+prototype contracts lived in the fixture crate; their bundled integration is
+recorded below.
 
 ### External resolution and generic-trait probes
 
-**Verified locally on 2026-10-26:** the expanded focused suite has 27 checks,
+**Verified locally on 2026-10-26:** this audit expanded the focused suite to 27 checks,
 including ordinary Rust compilation, execution of both positive clients, and
 positive/negative verification with overflow checking enabled. The unannotated
 `target_api` fixture supplies generic traits and implementations; its contracts
@@ -146,14 +147,234 @@ type arguments, and preserves declared supertraits. A by-value `self` still
 requires `Sized` at a Rust call. The bundled `PartialEq` declaration now matches
 the pinned Rust API's `PointeeSized` bounds on both `Self` and `Rhs`.
 
-This does not complete P1-B. General equivalence of lifetime relationships in
-signatures remains **untested**; signature comparison erases regions. The bound
-check is conservative: a requirement must occur in the target environment or
-be established by Rust's predicate checker (apart from call-implied `Sized`).
-It may reject valid implications involving more complex outlives constraints.
-The prototype stdlib contracts still need integration into the bundled modules.
-These small associated-type probes do not establish an iterator model or
-reference-containing collection snapshots. M1 remains **untested**.
+At the end of this audit, lifetime-signature matching and bundled integration
+were still open. The next milestone addresses both, as recorded below.
+
+### P1-B complete: bundled contracts and lifetime-preserving resolution
+
+**Verified locally on 2026-10-26:** all 43 focused checks pass. The contracts for
+[`Option::unwrap`](prusti-contracts/prusti-contracts/src/core_spec/option.rs) and
+[`core::mem::replace`](prusti-contracts/prusti-contracts/src/core_spec/mem.rs) are
+now bundled, with a single authoritative declaration for each target.
+`std::mem::replace` resolves to the same target. The contracts were checked
+against the pinned Rust source: unwrap moves the `Some` payload, and replace
+returns the previous destination after moving in the source without dropping
+either value. Client proofs cover owned non-`Copy` values without `Clone` or
+equality traits, both replacement effects, and missing-precondition/wrong-value
+rejections.
+
+The runner checks direct clients, explicitly verifies a separate library's
+generic wrapper bodies, and verifies clients consuming those exported wrapper
+contracts. A `#![no_std]` library with only the `core` feature also compiles and
+verifies. Duplicate bundled and fixture-library contracts are rejected. Invalid
+declarations are not registered, avoiding secondary duplicate diagnostics.
+Legacy examples now use the bundled contracts instead of redeclaring them.
+
+Three lifetime probes initially **failed**: the old resolver accepted merged
+input lifetimes, a `'static` input restriction, and a shortened `'static` return.
+The resolver now normalizes signatures without erasing regions and anonymizes
+each binder independently. It checks early-bound generic positions, preserves
+early lifetimes when checking bounds, and compares concrete trait specs against
+the public trait call signature. Positive probes cover renamed lifetimes,
+existing outlives bounds, type aliases, and nested higher-ranked callbacks;
+negative probes cover changed relationships and added outlives requirements.
+
+Making the bundled shared-reference equality impl lifetimes explicit exposed
+another **failing** case: spec encoding removed lifetime argument slots and
+shifted subsequent type parameters, causing a compiler panic. The
+[spec encoder](prusti-encoder/src/encoders/pure/spec.rs) now retains those slots.
+The shared-reference equality regression and an exported generic identity
+contract with an early-bound lifetime verify with this fix.
+
+Validation: `./x.py build --all`, all 43 focused checks, all 33 `prusti-specs`
+unit tests, the three existing external-spec regression cases, and the
+overflow-enabled Option regression pass. The environment is `38d7d383e` plus
+this milestone's working-tree changes, PCG
+`e90a8144af97582508ff29e238dabfaa5f01800b`, Rust
+`1.99.0-nightly (d453bdd8f 2026-08-14)`, Viper `v-2026-09-01-0834`, and Z3
+`4.16.0`. Logs remain in `target/stdlib-extern-spec-logs/` and
+`target/stdlib-regressions/`.
+
+This completes the P1-B foundation gate within the tested domain. Matching is
+conservative: early-bound parameters must occupy the same generic positions,
+and complex equivalent outlives constraints may be rejected. These checks do not
+establish unrestricted lifetime equivalence, reference-containing collection
+snapshots, or iterator models. P1-C completion is recorded below. M1 remains **untested**.
+
+### P1-C complete: sequence observations and explicit triggers
+
+**Verified locally on 2026-10-27:** the [sequence fixture](prusti-tests/tests/cargo_verify/stdlib_sequence_spec/README.md)
+passes 21 focused checks, and the earlier external-specification suite still
+passes all 43. The [runner](scripts/test_stdlib_extern_spec.py) selects the new
+suite with `--suite sequence`; CI runs both suites with overflow and panic
+checks enabled, verification caches disabled, and fresh Cargo targets.
+
+`Seq::from_slice(&[T])` now exposes the existing slice element snapshots as a
+logical sequence. The encoder relates its length to the slice reference's
+metadata and every valid index to the slice snapshot's element accessor. The
+length axiom is conditional on a nonnegative length; observation does not add an
+inconsistent negative-length sequence. The indexing axiom has triggers for both
+sequence indexing and the combination of a slice index with an observation.
+This supports direct element proofs from equality of two observations.
+
+The ordinary pure helper `alloc_spec::vec::vec_contents<T, A>` is defined through
+`Vec::as_slice`, outside the external method declarations, with the allocator
+parameter preserved. No element `Copy`, `Clone`, or equality bounds are added.
+Proofs cover generic lengths and indices, quantified element agreement,
+non-Copy structs that remain available after observation, and both effects of
+moving generic Vec values through `mem::replace`. A separately compiled
+`no_std` library, using the `core` and `alloc` contract features, exports verified
+observation and replacement wrappers to the clients. False length, element,
+replacement, and contradiction assertions are rejected at their expected lines.
+
+Explicit trigger sets are forwarded for universal and existential quantifiers,
+adapting [PR #1567](https://github.com/prusti/prusti/pull/1567). The parser validates
+variable uses rather than raw identifier tokens: every term must mention a
+bound variable, and each set must cover all binders. It rejects empty sets,
+unnamed binders, local bindings, macros, and unsupported top-level expression
+forms. Field and method names cannot masquerade as binder uses. Positive cases
+exercise captures and multi-triggers. The runner inspects emitted Viper for an
+`explicit_marker` function appearing inside both kinds of trigger; that function
+never occurs in a quantified body, ruling out automatic trigger inference as
+the explanation. Generated programs remain under
+`target/stdlib-sequence-spec-logs/verifier/`.
+
+**Inspected:** [PR #1573](https://github.com/prusti/prusti/pull/1573) separates
+shallow and deep snapshots and adds two-state trait specifications. It has not
+been imported. Existing owned-value snapshots and pre-state heap reads suffice
+for this gate's replacement proofs. Separate probes on this branch verify
+precise unsupported-feature diagnostics for mutable references in generic fields
+and pure observation of nested mutable references. These are not proofs of
+support for reference-containing elements, interior mutability, or nested
+collection models. An exploratory nested-reference function body also produces
+an insufficient-permission backtranslation error; its
+[reproducer](prusti-tests/tests/cargo_verify/stdlib_sequence_spec/known_limits/nested_mutref_body.rs)
+is retained outside the passing suite and remains **failing**.
+
+Validation: the full build, 21 sequence checks, 43 earlier milestone checks,
+34 `prusti-specs` unit tests, and seven existing sequence/array/trigger regressions
+pass. The trigger UI diagnostics and typechecking snapshot were refreshed.
+The toolchain, PCG, Viper, and Z3 versions remain those recorded for P1-B;
+the checkout is `38d7d383e` plus the P1-B and P1-C working-tree changes.
+Regression logs are in `target/stdlib-p1c-regressions/`.
+
+### P1-D completion evidence: minimal functional Vec / M1
+
+**Verified locally on 2026-10-27:** the
+[Vec gate](prusti-tests/tests/cargo_verify/stdlib_vec_spec/README.md) passes all
+21 checks. Bundled contracts cover `new`, `len`, `is_empty`, `push`, `pop`,
+`as_slice`, and shared scalar indexing. `Index<I>` retains the actual index and
+allocator parameters; its contract uses `SliceIndex::get`, with a supporting
+`usize` implementation contract. Range indexing remains in P2-A.
+
+The explicitly verified `no_std` specification library exports its sequence
+observation and generic append/round-trip wrappers to separately compiled
+clients. Generic proofs establish arbitrary-index append preservation, the
+appended argument snapshot, new length, pop's returned last element and retained
+prefix, and push/pop restoration. A loop constructs a Vec of symbolic length
+with an invariant describing every element of the prefix. Empty, five-element,
+and eight-element executions instantiate owned structs without `Copy`, `Clone`,
+`PartialEq`, or `Eq`. No collection-size bound, unrolling, or known-failure
+exemption is used.
+
+The retained negative cases reject wrong elements, prefixes, lengths, pop
+results, out-of-bounds indexing, `usize` length overflow, and duplicate bundled
+contracts. Two encoder blockers exposed by these proofs have dedicated probes:
+
+- Concrete trait calls now select the implementation and its substituted
+  arguments consistently for purity and call encoding. A generic trait-bound
+  caller cannot inherit a particular implementation's purity. Unsupported pure
+  calls produce a diagnostic instead of a compiler panic.
+- `old(n)` in a body assertion or invariant now reads the entry state. Previously
+  it was treated as a current captured snapshot, making `n == old(n)` a tautology.
+  Body-spec temporaries are inlined before applying the state label, and nested
+  closure captures are resolved in their enclosing context rather than cast
+  unsafely between expression representations. The scalar positive/negative
+  probes and the symbolic Vec loop exercise this fix.
+
+The runner enables overflow and panic checking, disables verification caching,
+and uses fresh Cargo output directories. Ordinary compilation and positive
+runtime execution pass as well. The full build, the earlier 43 external-contract
+and 21 sequence checks, and the seven existing sequence/array regressions pass.
+Legacy Vec and trait-dispatch regression checks also pass; the existing default
+trait-body test retains its usual overflow-disabled configuration. Logs are in
+`target/stdlib-vec-spec-logs/` and `target/stdlib-p1d-regressions/`. The pinned
+toolchain, PCG, Viper, and Z3 versions remain those recorded for P1-B; the checkout
+is `38d7d383e` plus the P1-B through P1-D working-tree changes. CI includes the new
+suite, but a hosted CI run is not claimed.
+
+**M1 is complete for owned values with stable value snapshots.** These are
+normal-return contracts for trusted library implementations. `push` requires
+length below `usize::MAX`; it does not guarantee allocation success or exclude
+capacity-overflow failure. Allocation, unwinding, and arbitrary destructors
+remain execution assumptions. Reference-containing elements, interior mutability,
+nested collection models, mutable views, and iterators remain outside this gate.
+The P2-A expansion is recorded below.
+
+### P2-A complete: expanded Vec and shared slice contracts
+
+**Verified locally on 2026-10-27:** the
+[collection gate](prusti-tests/tests/cargo_verify/stdlib_collections_spec/README.md)
+passes all 27 checks. Bundled contracts now cover `Vec::clear`, `truncate`,
+`append`, `insert`, `remove`, and `swap_remove`. They describe the complete
+resulting sequences, including both entry states and both final states for
+`append`, shifted suffixes for insertion/removal, and replacement by the old
+last element for `swap_remove`. The allocator parameter and generic element
+type retain the actual API's bounds.
+
+Shared slice contracts cover checked lookup, indexing, `split_at`, and
+`is_empty`; `Vec::deref` connects implicit shared coercions to the same sequence
+observation. Supported indices include `usize` and the standard `core::ops`
+range forms `start..end`, `start..`, `..end`, `..`, `..=end`, and freshly
+constructed `start..=end`. Checked lookup describes both success and failure,
+and indexing requires success. The `Index` contracts preserve the entire
+reference snapshot, including slice length metadata. `slice::swap` exchanges
+two element snapshots while preserving every other element, including the
+case where both indices coincide.
+
+The inclusive-range contract accounts for Rust's hidden iterator state. Its
+subsequence law is conditional on equality with the snapshot of
+`RangeInclusive::new(start, end)`. Fresh literal ranges satisfy that condition;
+equal endpoints alone do not establish it. Tests verify singleton ranges,
+valid empty `4..=3`, invalid `5..=3`, and rejection of an inclusive
+`usize::MAX` end. A negative probe rejects inferring a singleton from equal
+endpoints of an arbitrary inclusive range. Modeling its iteration state remains
+outside this gate.
+
+The explicitly verified `no_std` library exports generic append,
+insertion/removal round-trip, and split wrappers. Its symbolic-length builder
+constructs owned values without `Copy`, `Clone`, or equality traits. Clients
+prove arbitrary-index append observations, quantified insertion/removal
+prefixes and suffixes, swap-removal framing, truncation, range lookup branches,
+complementary splits, and restoration after swapping twice. Concrete tests
+cover empty/end cases and lengths five and eight. Some concrete observations
+are asserted before mutation to instantiate the builder's quantified contract;
+these are proved assertions, not assumptions. Boundary checks are separated
+into small functions to avoid accumulating unrelated range facts in one proof.
+No collection-size bound, loop unrolling, or known-failure exemption is used.
+
+The 19 negative probes reject incorrect values, lengths, ordering, source state,
+framing, bounds, and length overflow at their expected source lines. The runner
+performs ordinary compilation and positive runtime execution, enables overflow
+and panic checking, disables verification caching, and uses fresh Cargo output
+directories. CI includes `--suite collections`; a hosted run is not claimed.
+
+Validation: `./x.py build --all`, all 27 new checks, and all 85 earlier focused
+checks pass, for **112 passing focused checks**. The two affected legacy Vec
+tests and the duplicate-specification regression also pass; the latter now
+uses `reserve` because `clear` has an authoritative bundled contract. Logs are
+in `target/stdlib-collections-spec-logs/` and `target/stdlib-p2a-regressions/`.
+The pinned toolchain, PCG, Viper, and Z3 versions remain those recorded for P1-B;
+the checkout is `38d7d383e` plus the P1-B through P2-A working-tree changes.
+This gate required additional external contracts and clients, with no further
+encoder changes beyond the earlier milestones.
+
+**P2-A is complete within the owned, stable-snapshot domain.** These remain
+normal-return contracts with allocation, capacity failure, unwinding, and
+arbitrary destructors outside the proof. Mutable slice swaps are exercised
+through direct slice arguments and arrays; restoration through mutable Vec
+views is not established. The next gate is **P2-B**, mutable views and
+borrow-expiry contracts. P2-C iteration and the overall M2 gate remain open.
 
 ## Phase 1 — External-specification support and unbounded Vec
 
@@ -506,19 +727,19 @@ must name the supported operations, element/key domain, and completed proof gate
 
 ## Dependency and support matrix
 
-Baseline inspection, the local P1-A runner, and the focused unwrap/replace,
-generic-trait, explicit-bound, and diagnostic probes of P1-B are complete.
-Bundled integration, general lifetime matching, and all collection milestones
-remain open; CI wiring has been added but a hosted CI run is not claimed.
+Baseline inspection, P1-A through P1-D, and P2-A are complete locally, including **M1**
+for owned values with stable value snapshots. General outlives equivalence is
+conservatively unsupported. Phases 2 and 3 remain open; a hosted CI run is not
+claimed.
 
 | Gate or capability | Depends on | Expected Prusti work | Baseline status / completion criterion |
 |---|---|---|---|
 | Baseline inventory | Checkout `87487f774` | None | Inspection complete; no new proofs claimed. |
 | P1-A: reproducible test execution | Setup, pinned submodules/toolchain | Focused harness and CI wiring | Verified locally; positive, negative, overflow, and cross-crate execution demonstrated. |
-| P1-B: external-contract foundation | P1-A | Targeted rewriting/resolution/substitution/metadata fixes | Unwrap/replace and focused generic-trait, explicit-bound, signature, duplicate, and refinement probes verified; bundled integration and general lifetime matching remain open. |
-| P1-C: sequence observations | P1-B | Model connection, explicit triggers, required generic snapshots | Untested; generic sequence and arbitrary-index proofs pass. |
-| **M1: unbounded functional Vec** | P1-A through P1-D | Minimal contracts plus reproduced blockers | Untested; symbolic-length and non-`Copy` functional proofs, with negative cases. |
-| P2-A: Vec and shared slices | M1 | Contracts, sequence lemmas, any slice encoding fixes | Untested; mutation, ordering, and boundary cases pass. |
+| P1-B: external-contract foundation | P1-A | Targeted rewriting/resolution/substitution/metadata fixes | Verified locally: 43 focused checks, bundled unwrap/replace, cross-crate and core-only clients, conservative lifetime matching, bounds, duplicates, and refinement. |
+| P1-C: sequence observations | P1-B | Model connection, explicit triggers, required generic snapshots | Verified locally: 21 focused checks, arbitrary-index observations, explicit triggers, cross-crate proofs, and precise diagnostics. |
+| **M1: unbounded functional Vec** | P1-A through P1-D | Minimal contracts plus reproduced blockers | Verified locally: 21 Vec checks, symbolic append/pop/round-trip and whole-prefix loop proofs for owned non-`Copy` elements, cross-crate clients, and negative cases. |
+| P2-A: Vec and shared slices | M1 | Contracts, sequence lemmas, any slice encoding fixes | Verified locally: 27 checks cover symbolic mutations, shared lookup/ranges, splits, swaps, boundaries, ordering, and framing. |
 | P2-B: mutable collection views | P2-A, two-state snapshots | Pledges, expiry, generic reference framing | Untested; changes propagate to owners and unrelated elements are preserved. |
 | P2-C: shared and owned iterators | Sequence model, generic trait probes | Opt-in models, refinement, lifetimes, loop support | Untested; concrete and generic traversal proofs pass. |
 | **M2: Vec/slice phase complete** | P2-A, P2-B, P2-C | Integration and cross-crate validation | Untested; all required gates pass. |

@@ -1,9 +1,10 @@
 use crate::encoders::{
-    EncodeResult, ImpureEncVisitor, MirLocalDefEncOutput, MirSpecEnc,
+    EncodeResult, ImpureEncVisitor, MirLocalDefEncOutput, MirSpecEnc, Pure,
+    mir_fn::RustSignature,
     pure::spec::{EncodedPledge, MirSpecEncMode, PledgeArgs, PledgeExpr},
     ty::{
         RustTyDecomposition,
-        generics::{GArgs, GArgsTyEnc, GParams, GenericParamsEnc},
+        generics::{GArgs, GArgsCastEnc, GArgsTyEnc, GParams, GenericParamsEnc},
         indirect::{IndirectPredicatesEnc, projection_for_generalized_idx},
     },
 };
@@ -313,11 +314,32 @@ impl<'vir> WandEncOutput<'vir> {
     ) -> Option<vir::Wand<'vir>> {
         debug_assert!(!wand_data.lhs.is_empty());
         let generics = self.generics_subst(call_ctx, vcx, deps);
+        let spec_args = if let (Some(call_args), false) = (call_ctx, wand_data.pledges.is_empty()) {
+            let signature = RustSignature::new(self.function_data.def_id());
+            let arguments = signature
+                .inputs
+                .iter()
+                .enumerate()
+                .map(|(index, ty)| {
+                    let normalized = ty.decompose_compare_normalize(signature.gparams, call_args);
+                    let caster = deps.require_dep::<GArgsCastEnc<Pure>>(normalized).unwrap();
+                    caster.cast_to_callee_ctx(pledge_args[(index + 1).into()])
+                })
+                .collect::<Vec<_>>();
+            let normalized = signature
+                .output
+                .decompose_compare_normalize(signature.gparams, call_args);
+            let caster = deps.require_dep::<GArgsCastEnc<Pure>>(normalized).unwrap();
+            let result = caster.cast_to_callee_ctx(pledge_args[mir::RETURN_PLACE]);
+            PledgeExpr::pledge_args(result, arguments)
+        } else {
+            pledge_args
+        };
         let pledge_expr = |pledge: &PledgeExpr<'vir>| match pledge_old_label {
             Some(label) => {
-                vcx.with_local_subst(generics, || pledge.expr_at_label(pledge_args, label))
+                vcx.with_local_subst(generics, || pledge.expr_at_label(spec_args, label))
             }
-            None => pledge.expr(pledge_args),
+            None => pledge.expr(spec_args),
         };
         let rhs = wand_data.rhs.iter().filter_map(|g| {
             self.encode_predicates_for_function_shape_node(vcx, deps, *g, call_ctx, |i| {

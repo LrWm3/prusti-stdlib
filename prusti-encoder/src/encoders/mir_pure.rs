@@ -947,13 +947,13 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                             }
                         }
                     } else if is_pure {
-                        let pure_func = self
-                            .deps
-                            .require_dep::<FunctionCallEnc>(CallTaskDescription::new(
-                                self.context,
-                                arg_tys,
-                                def_id,
-                            ))?;
+                        let pure_func =
+                            self.deps
+                                .require_dep::<FunctionCallEnc>(CallTaskDescription::new(
+                                    self.context,
+                                    arg_tys,
+                                    def_id,
+                                ))?;
                         let snap_args = args
                             .iter()
                             .map(|arg| self.encode_operand_snap(&arg.node, &new_curr_ver))
@@ -1336,13 +1336,13 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
             // match with the callee's wand at a call site, where the `old` is
             // labelled. Silicon evaluates the heap-independent parts of a wand
             // when inhaling it, where `old[lhs]` is undefined.
-            let heap_read = should_wrap
-                && self.impure_context
+            let heap_read = self.impure_context
+                && (should_wrap || self.before_expiry_mode)
                 && matches!(elem, mir::ProjectionElem::Deref)
                 && matches!(place_ty.ty.kind(), TyKind::Ref(.., ty::Mutability::Mut));
             encoded_place = self.encode_place_element(curr_ver, place_ty, *elem, encoded_place)?;
             place_ty = place_ty.projection_ty(self.vcx.tcx(), *elem);
-            if heap_read && self.old_mode && !self.spec_block {
+            if heap_read && should_wrap && self.old_mode && !self.spec_block {
                 let inner = encoded_place.snap;
                 encoded_place.snap = self.vcx.mk_lazy_expr(
                     "old_mode_wrap",
@@ -1450,9 +1450,12 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                 // particularly when body-spec temporaries are inlined for old.
                 let mut reify_args = FxHashMap::default();
                 reify_args.insert(1usize.into(), closure_snap.reify(vcx, lctx));
-                reify_args.extend(qvars.iter().enumerate().map(|(idx, qvar)| {
-                    ((idx + 2).into(), vcx.mk_local_ex(qvar))
-                }));
+                reify_args.extend(
+                    qvars
+                        .iter()
+                        .enumerate()
+                        .map(|(idx, qvar)| ((idx + 2).into(), vcx.mk_local_ex(qvar))),
+                );
                 let reify_args = vcx.alloc(reify_args);
                 body.reify(vcx, (cl_def_id, reify_args, lctx.2)).kind
             }),

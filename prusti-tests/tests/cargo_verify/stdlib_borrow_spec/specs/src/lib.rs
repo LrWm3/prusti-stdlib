@@ -16,3 +16,26 @@ pub fn view<Element>(values: &Vec<Element>) -> Seq<Element> {
 pub fn swap_view<Element>(values: &mut Vec<Element>, first: usize, second: usize) {
     values.as_mut_slice().swap(first, second);
 }
+
+#[ensures(*result == old(*value))]
+#[after_expiry(*value == before_expiry(*result)
+    && Ghost::new_ref(&_marker) == old(Ghost::new_ref(&_marker)))]
+pub fn identity_with_marker<Marker>(value: &mut usize, _marker: Marker) -> &mut usize {
+    value
+}
+
+#[ensures(match result {
+    Some(value) => present && *value == old(*owner),
+    None => !present,
+})]
+#[after_expiry(match result {
+    Some(value) => *owner == before_expiry(*value),
+    None => *owner == old(*owner),
+})]
+pub fn optional(owner: &mut usize, present: bool) -> Option<&mut usize> {
+    if present {
+        Some(owner)
+    } else {
+        None
+    }
+}

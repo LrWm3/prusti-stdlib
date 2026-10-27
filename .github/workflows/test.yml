@@ -193,6 +193,8 @@ jobs:
         run: python x.py exec python3 scripts/test_stdlib_extern_spec.py
       - name: Check sequence observations and explicit triggers
         run: python x.py exec python3 scripts/test_stdlib_extern_spec.py --suite sequence
+      - name: Check symbolic Vec contracts
+        run: python x.py exec python3 scripts/test_stdlib_extern_spec.py --suite vec
       - name: Check prusti-contracts
         run: |
           cd prusti-contracts/prusti-contracts-test/

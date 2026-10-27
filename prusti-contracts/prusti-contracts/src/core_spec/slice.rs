@@ -17,5 +17,20 @@ where
 {
     #[trusted]
     #[pure]
+    fn get(self, slice: &T) -> Option<&Self::Output>;
+
+    #[trusted]
+    #[pure]
     fn index(self, slice: &T) -> &Self::Output;
+}
+
+#[extern_spec]
+impl<T> SliceIndex<[T]> for usize {
+    #[trusted]
+    #[pure]
+    #[ensures(match &result {
+        None => self >= slice.len(),
+        Some(value) => self < slice.len() && **value === slice[self],
+    })]
+    fn get(self, slice: &[T]) -> Option<&T>;
 }

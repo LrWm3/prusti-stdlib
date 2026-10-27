@@ -42,6 +42,7 @@ rejects a range classification for a scalar index.
 P2-B remains incomplete for other range forms and stronger type-conditional
 contracts. The `known_limits` fixture retains reproducers outside the suite:
 
+- `open_range_frame` cannot prove that `start..` preserves the prefix.
 - `conditional_pass` cannot use a type-conditional postcondition even with
   its trait bound; `conditional_abstract` correctly rejects the same claim
   without the bound.
@@ -52,7 +53,7 @@ For example, reproduce the first limitation after building with:
 PRUSTI_CHECK_OVERFLOWS=true PRUSTI_CHECK_PANICS=true PRUSTI_NO_VERIFY_DEPS=true \
   ./x.py exec target/debug/cargo-prusti --manifest-path \
   prusti-tests/tests/cargo_verify/stdlib_borrow_spec/known_limits/Cargo.toml \
-  --bin conditional_pass
+  --bin open_range_frame
 ```
 
 The element domain and normal-return assumptions remain those documented for

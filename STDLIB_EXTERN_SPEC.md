@@ -442,8 +442,13 @@ to `None`; a negative probe prevents treating a scalar index as a range. The
 range fixture took 85 seconds overall in the full run, so its solver
 performance remains a concern; the verifier uses a 90-second per-method limit.
 
-**P2-B remains incomplete for other range forms.** An experimental model for
-open-ended ranges caused verification timeouts and was not retained.
+**P2-B remains incomplete for other range forms.** An experimental model using
+separate start/end classifiers verified isolated open-ended examples but caused
+the already passing bounded-range fixture to time out at the 90-second per-method
+limit. A second experiment extending the bounded-range classifier with an
+open-end marker also timed out on that fixture. Neither was retained. The
+`open_range_frame` reproducer shows the missing outside-frame proof under the
+retained contracts.
 Type-conditional postconditions are not selected even when their bounds hold,
 and the current refinement syntax does not support conditional expiry pledges.
 These are retained as

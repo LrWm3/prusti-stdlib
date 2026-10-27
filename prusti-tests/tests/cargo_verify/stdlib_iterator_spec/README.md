@@ -10,7 +10,9 @@ contracts reviewed against the pinned standard-library implementation.
 The separately verified `no_std` library counts a symbolic number of owned
 elements in a loop and exports its contract. Clients check generic owned values
 without `Copy`, `Clone`, or equality bounds, concrete non-`Copy` values, empty
-and repeatedly exhausted iterators, and cross-crate use. Negative probes reject
+and repeatedly exhausted iterators, and cross-crate use. Its verified generic
+`advance` wrapper also exports the head-and-tail contract for an iterator of
+borrowed items. Negative probes reject
 an incorrect yielded value, an unchanged nonempty state, an incorrect `None`,
 and permanent exhaustion for an arbitrary `Iterator` without model evidence.
 The capability is sealed so arbitrary iterator implementations cannot assume
@@ -25,8 +27,10 @@ Run after building Prusti:
 The suite runs ordinary Rust and runtime checks, explicitly verifies the library,
 and checks diagnostic locations with overflow and panic checks enabled. It is
 also included in the `all-tests` CI job. As with the other collection contracts,
-allocation, unwinding, arbitrary destructors, interior mutability, and
-reference-containing element snapshots are outside the tested domain.
+allocation, unwinding, arbitrary destructors, interior mutability, and general
+reference-containing collection snapshots are outside the tested domain. The
+borrowed-item probe starts with an existing iterator; it does not establish a
+model for constructing a vector of references.
 
 Shared slice iterators, direct calls where selecting the capability requires
 region-bearing evidence, and symbolic `for`-loop proofs remain open; this does

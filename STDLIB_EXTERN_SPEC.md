@@ -332,14 +332,14 @@ reference snapshot, including slice length metadata. `slice::swap` exchanges
 two element snapshots while preserving every other element, including the
 case where both indices coincide.
 
-The inclusive-range contract accounts for Rust's hidden iterator state. Its
-subsequence law is conditional on equality with the snapshot of
-`RangeInclusive::new(start, end)`. Fresh literal ranges satisfy that condition;
-equal endpoints alone do not establish it. Tests verify singleton ranges,
-valid empty `4..=3`, invalid `5..=3`, and rejection of an inclusive
-`usize::MAX` end. A negative probe rejects inferring a singleton from equal
-endpoints of an arbitrary inclusive range. Modeling its iteration state remains
-outside this gate.
+The inclusive-range contract accounts for Rust's hidden iterator state. The
+snapshot of `RangeInclusive::new(start, end)` distinguishes a fresh range from
+an exhausted one; an exhausted range selects an empty slice. Fresh literal
+ranges satisfy the freshness condition, but equal endpoints alone do not
+establish it. Tests verify singleton ranges, valid empty `4..=3`, invalid
+`5..=3`, and rejection of an inclusive `usize::MAX` end. A negative probe rejects
+inferring a singleton from equal endpoints of an arbitrary inclusive range.
+General iterator state remains outside this gate.
 
 The explicitly verified `no_std` library exports generic append,
 insertion/removal round-trip, and split wrappers. Its symbolic-length builder
@@ -454,7 +454,20 @@ verify exact updates, outside framing, empty views, and generic owned Vec
 elements. Splitting the bounded fixtures also avoids requiring all their proofs
 to complete within one whole-verification timeout.
 
-**P2-B remains incomplete for inclusive range forms.**
+**Further progress, verified locally on 2026-10-27:** the expanded borrow suite
+passes 65 checks. Inclusive ranges with representable exclusive endpoints
+are classified using their actual state. Fresh ranges use their start and
+incremented end; exhausted ranges use an empty range at the incremented end.
+The shared lookup contract also describes the exhausted case. Symbolic slice
+and generic owned Vec clients prove updates and outside framing, and checked
+lookup covers valid empty ranges and `usize::MAX` failures. A negative mutable
+lookup probe rejects inferring a singleton from equal endpoints without a
+freshness guarantee.
+
+Direct `Vec::get_mut` still cannot prove restoration of the Vec model through
+its implicit mutable dereference; `vec_get_mut_probe` reproduces the missing
+postcondition. This remains a P2-B gap.
+
 Type-conditional postconditions are not selected even when their bounds hold,
 and the current refinement syntax does not support conditional expiry pledges.
 These are retained as
@@ -829,7 +842,7 @@ claimed.
 | P1-C: sequence observations | P1-B | Model connection, explicit triggers, required generic snapshots | Verified locally: 21 focused checks, arbitrary-index observations, explicit triggers, cross-crate proofs, and precise diagnostics. |
 | **M1: unbounded functional Vec** | P1-A through P1-D | Minimal contracts plus reproduced blockers | Verified locally: 21 Vec checks, symbolic append/pop/round-trip and whole-prefix loop proofs for owned non-`Copy` elements, cross-crate clients, and negative cases. |
 | P2-A: Vec and shared slices | M1 | Contracts, sequence lemmas, any slice encoding fixes | Verified locally: 27 checks cover symbolic mutations, shared lookup/ranges, splits, swaps, boundaries, ordering, and framing. |
-| P2-B: mutable collection views | P2-A, two-state snapshots | Pledges, expiry, generic reference framing | In progress: 56 checks cover scalar, bounded, and open-ended mutable views and framing; inclusive ranges and conditional specifications remain open. |
+| P2-B: mutable collection views | P2-A, two-state snapshots | Pledges, expiry, generic reference framing | In progress: 65 checks cover slice and Vec views, including inclusive ranges; direct Vec lookup and conditional specifications remain open. |
 | P2-C: shared and owned iterators | Sequence model, generic trait probes | Opt-in models, refinement, lifetimes, loop support | Untested; concrete and generic traversal proofs pass. |
 | **M2: Vec/slice phase complete** | P2-A, P2-B, P2-C | Integration and cross-crate validation | Untested; all required gates pass. |
 | P3-A: explicit key models | M2, logical Map/Set | Key-model interfaces and conditional contracts | Untested; equality/hash/model evidence is enforced. |

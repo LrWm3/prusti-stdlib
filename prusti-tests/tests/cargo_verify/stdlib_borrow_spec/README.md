@@ -13,7 +13,7 @@ the positive binaries, enables overflow and panic checks, disables verification
 caching, and uses fresh Cargo targets. Logs and positive Viper programs remain
 in `target/stdlib-borrow-spec-logs/`.
 
-The 56 checks cover `Vec::as_mut_slice`, `slice::split_at_mut`, mutable indexing,
+The 65 checks cover `Vec::as_mut_slice`, `slice::split_at_mut`, mutable indexing,
 and the supported parts of `slice::get_mut`. Generic clients verify changes
 through both halves of a split, restoration to a slice or Vec owner, and halves
 that expire separately.
@@ -39,12 +39,17 @@ implementation exposes its classification; other index types remain opaque to
 clients. A negative test rejects deriving a scalar classification for a range.
 The trusted ghost-only `range_index_model` maps bounded ranges to their endpoints,
 `start..` to `(start, usize::MAX)`, `..end` to `(0, end)`, and `..` to
-`(0, usize::MAX)`; its intended interpretation for other index types is `None`.
-Negative tests reject a range classification for scalar and inclusive indices.
+`(0, usize::MAX)`. Inclusive ranges with representable exclusive endpoints are
+also classified, and exhausted inclusive ranges denote an empty range. Its
+intended interpretation for unsupported index types is `None`. Negative tests
+reject a range classification for scalar indices and reject assuming an
+arbitrary inclusive range is fresh merely because its endpoints coincide.
 
-P2-B remains incomplete for inclusive range forms and stronger type-conditional
-contracts. The `known_limits` fixture retains reproducers outside the suite:
+Direct `Vec::get_mut` does not yet restore the Vec's sequence after its implicit
+mutable dereference. Stronger type-conditional contracts remain open. The
+`known_limits` fixture retains reproducers outside the suite:
 
+- `vec_get_mut_probe` cannot prove the Vec's updated sequence.
 - `conditional_pass` cannot use a type-conditional postcondition even with
   its trait bound; `conditional_abstract` correctly rejects the same claim
   without the bound.
@@ -55,7 +60,7 @@ For example, reproduce the first limitation after building with:
 PRUSTI_CHECK_OVERFLOWS=true PRUSTI_CHECK_PANICS=true PRUSTI_NO_VERIFY_DEPS=true \
   ./x.py exec target/debug/cargo-prusti --manifest-path \
   prusti-tests/tests/cargo_verify/stdlib_borrow_spec/known_limits/Cargo.toml \
-  --bin conditional_pass
+  --bin vec_get_mut_probe
 ```
 
 The element domain and normal-return assumptions remain those documented for

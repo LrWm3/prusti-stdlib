@@ -17,9 +17,11 @@ pub fn scalar_index_model<I>(_index: &I) -> Option<usize> {
     unreachable!()
 }
 
-/// Ghost-only half-open range classification. Open ends use `usize::MAX`;
-/// indices outside the supported range types map to `None` in the intended
-/// interpretation. This function must not be called at runtime.
+/// Ghost-only half-open range classification. Open ends use `usize::MAX`.
+/// Inclusive ends below `usize::MAX` are incremented; an exhausted inclusive
+/// range is classified as empty at that incremented end. An unrepresentable
+/// inclusive end and indices outside the supported range types map to `None`
+/// in the intended interpretation. This function must not be called at runtime.
 #[trusted]
 #[pure]
 pub fn range_index_model<I>(_index: &I) -> Option<(usize, usize)> {
@@ -235,6 +237,10 @@ impl<T> SliceIndex<[T]> for RangeFull {
 impl<T> SliceIndex<[T]> for RangeToInclusive<usize> {
     #[trusted]
     #[pure]
+    #[ensures(self.end < usize::MAX ==> match range_index_model(&self) {
+        Some((start, end)) => start == 0 && end == self.end + 1,
+        None => false,
+    })]
     #[ensures(match &result {
         None => self.end >= slice.len(),
         Some(value) => self.end < slice.len()
@@ -247,14 +253,26 @@ impl<T> SliceIndex<[T]> for RangeToInclusive<usize> {
 impl<T> SliceIndex<[T]> for RangeInclusive<usize> {
     #[trusted]
     #[pure]
+    #[ensures(*self.end() < usize::MAX ==> match range_index_model(&self) {
+        Some((start, end)) => end == *self.end() + 1
+            && (self === RangeInclusive::new(*self.start(), *self.end())
+                ==> start == *self.start())
+            && (!(self === RangeInclusive::new(*self.start(), *self.end()))
+                ==> start == end),
+        None => false,
+    })]
     // The constructor snapshot distinguishes a fresh range from an exhausted
-    // iterator even when their endpoints coincide. Iterator state is P2-C.
+    // iterator even when their endpoints coincide.
     #[ensures(self === RangeInclusive::new(*self.start(), *self.end()) ==> match &result {
         None => *self.end() >= slice.len()
             || Int::from(*self.start()) > Int::from(*self.end()) + Int::from(1),
         Some(value) => *self.end() < slice.len()
             && Int::from(*self.start()) <= Int::from(*self.end()) + Int::from(1)
             && Seq::from_slice(value) == Seq::from_slice(slice)[Int::from(*self.start())..Int::from(*self.end()) + Int::from(1)],
+    })]
+    #[ensures(!(self === RangeInclusive::new(*self.start(), *self.end())) ==> match &result {
+        None => *self.end() >= slice.len(),
+        Some(value) => *self.end() < slice.len() && Seq::from_slice(value) == Seq::new(),
     })]
     fn get(self, slice: &[T]) -> Option<&[T]>;
 }

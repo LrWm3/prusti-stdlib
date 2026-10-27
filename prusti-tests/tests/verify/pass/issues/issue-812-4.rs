@@ -1,18 +1,12 @@
-// ignore-test
-// FIXME: this test passes for the original encoder, but it fails on a todo!() in the new vir high encoder
-// FIXME: see https://github.com/viperproject/prusti-dev/issues/812
-
+// Every explicit trigger term must mention a bound variable. Captured-only
+// terms such as slice.len() are covered by the malformed-trigger tests.
 use prusti_contracts::*;
 
 fn main() {}
 
 #[pure]
-#[requires(forall(|i: usize| (0 <= i && i < slice.len()) ==> (slice[i] > 10), triggers=[(slice[i],slice.len(),baz(slice))]))]
+#[requires(forall(|i: usize| (0 <= i && i < slice.len()) ==> (slice[i] > 10), triggers=[(slice[i],)]))]
 fn foo(slice: &[i32]) {}
 
-#[requires(forall(|i: usize| (0 <= i && i < array.len()) ==> (array[i] > 10), triggers=[(array[i],array.len(),baz(array),)]))]
+#[requires(forall(|i: usize| (0 <= i && i < array.len()) ==> (array[i] > 10), triggers=[(array[i],)]))]
 fn bar(array: &[i32; 10]) {}
-
-#[pure]
-#[trusted]
-fn baz(slice: &[i32]) {}

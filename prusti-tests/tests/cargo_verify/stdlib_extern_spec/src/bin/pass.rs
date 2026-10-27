@@ -1,5 +1,4 @@
-// Force the specification crate to be loaded, even though it exports no runtime API.
-extern crate stdlib_specs;
+// Consume the bundled contracts directly, without importing the fixture specs.
 use prusti_contracts::*;
 
 // Deliberately has no Copy, Clone, PartialEq, or Eq implementation.
@@ -29,7 +28,7 @@ fn replace_generic<T>(first: T, second: T) -> (T, T) {
 #[ensures(result === *old(&*dest))]
 #[ensures(*dest === src)]
 fn replace_borrowed<T>(dest: &mut T, src: T) -> T {
-    std::mem::replace(dest, src)
+    core::mem::replace(dest, src)
 }
 
 #[requires(value < u8::MAX)]

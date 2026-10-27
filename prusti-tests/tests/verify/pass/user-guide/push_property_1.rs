@@ -20,11 +20,7 @@ struct Node {
 }
 
 //// ANCHOR: extern_spec
-#[extern_spec(std::mem)]
-#[trusted]
-#[ensures(*dest === src)]
-#[ensures(result === *old(&*dest))]
-fn replace<T>(dest: &mut T, src: T) -> T;
+// The mem::replace contract is bundled with prusti-contracts.
 //// ANCHOR_END: extern_spec
 
 //// ANCHOR: property_1

@@ -13,7 +13,10 @@ use crate::{
 };
 use prusti_rustc_interface::{
     data_structures::fx::FxHashMap,
-    middle::ty::{self, GenericArgsRef},
+    middle::ty::{
+        self, GenericArgsRef, TyCtxt, TypeFoldable, TypeFolder, TypeSuperFoldable, Unnormalized,
+    },
+    trait_selection::traits::{ObligationCause, ObligationCtxt},
 };
 use prusti_specs::ExternSpecKind;
 use std::cmp::{Eq, PartialEq};
@@ -41,6 +44,10 @@ pub enum ExternSpecResolverError {
     /// A generated call can typecheck through coercions even when the external
     /// declaration has different parameter or return types from its target.
     InvalidSignature(DefId, Span),
+
+    /// A call may shorten or merge borrows even though the target's contract
+    /// must retain the original lifetime relationships.
+    InvalidLifetimes(DefId, Span),
 
     /// Equal generic counts do not allow specializing a target parameter, for
     /// example declaring an Option<T> method only for Option<Vec<T>>.
@@ -157,6 +164,7 @@ impl<'tcx> ExternSpecResolver<'tcx> {
         visitor.visit_fn(fn_kind, fn_decl, body_id, span, local_id);
         let current_def_id = local_id.to_def_id();
         if let Some((target_def_id, substs, span)) = visitor.spec_found {
+            let errors_before = self.errors.len();
             let extern_spec_decl = ExternSpecDeclaration::from_method_call(
                 current_def_id,
                 target_def_id,
@@ -222,8 +230,15 @@ impl<'tcx> ExternSpecResolver<'tcx> {
                             ));
                     } else {
                         let tcx = self.env_query.tcx();
+                        let spec_args = self.env_query.identity_substs(current_def_id);
+                        let target_args = if same_generic_kinds(resolved_substs, spec_args) {
+                            spec_args
+                        } else {
+                            // The lifetime check below rejects this mismatch.
+                            resolved_substs
+                        };
                         let target_env = ty::EarlyBinder::bind(tcx, tcx.param_env(resolved_def_id))
-                            .instantiate(tcx, resolved_substs)
+                            .instantiate(tcx, target_args)
                             .skip_normalization();
                         let target_sig = self.env_query.get_fn_sig_resolved(
                             resolved_def_id,
@@ -270,14 +285,17 @@ impl<'tcx> ExternSpecResolver<'tcx> {
                         // The stub only checks that the target can be called.
                         // Coercions such as &mut T to &T must not change the
                         // types to which its contract will later be applied.
-                        // Normalize associated types and erase regions. This
-                        // checks type structure, not equivalence of lifetime
-                        // relationships in the signatures. Explicit bounds
-                        // are checked against the target's environment above.
+                        // Check type structure first, then compare signatures
+                        // with their regions preserved below.
                         let target_sig = tcx.instantiate_bound_regions_with_erased(target_sig);
                         let spec_sig = tcx.instantiate_bound_regions_with_erased(spec_sig);
                         if target_sig.inputs_and_output != spec_sig.inputs_and_output {
                             self.errors.push(ExternSpecResolverError::InvalidSignature(
+                                resolved_def_id,
+                                span,
+                            ));
+                        } else if !self.lifetimes_match(resolved_def_id, current_def_id) {
+                            self.errors.push(ExternSpecResolverError::InvalidLifetimes(
                                 resolved_def_id,
                                 span,
                             ));
@@ -286,6 +304,12 @@ impl<'tcx> ExternSpecResolver<'tcx> {
                 }
             }
 
+            // Do not register an invalid declaration. In particular, a bad
+            // signature for a bundled target should report that error without
+            // cascading into an imported-contract duplicate diagnostic.
+            if self.errors.len() != errors_before {
+                return;
+            }
             if self.extern_fn_map.contains_key(&extern_spec_decl) {
                 self.register_duplicate_spec(target_def_id, current_def_id, span);
             } else {
@@ -294,6 +318,50 @@ impl<'tcx> ExternSpecResolver<'tcx> {
                     .insert(extern_spec_decl.clone(), current_def_id);
             }
         }
+    }
+
+    fn lifetimes_match(&self, target: DefId, declaration: DefId) -> bool {
+        let tcx = self.env_query.tcx();
+        let target_args = self.env_query.identity_substs(target);
+        let spec_args = self.env_query.identity_substs(declaration);
+        // Resolved call substitutions have erased early-bound lifetimes. Rebuild
+        // them from the declaration, requiring the same generic parameter
+        // kinds in the same positions (type/const forwarding is checked above).
+        if !same_generic_kinds(target_args, spec_args) {
+            return false;
+        }
+        // A trait implementation is called through its trait signature. The
+        // concrete implementation may accept more general borrows (e.g. the
+        // RHS of PartialEq for references), but that is not the caller's API.
+        let target_sig = if let Some((trait_method, trait_args)) =
+            self.env_query.find_trait_method_substs(target, spec_args)
+        {
+            self.env_query.get_fn_sig(trait_method, trait_args)
+        } else {
+            self.env_query.get_fn_sig(target, spec_args)
+        };
+        let spec_sig = self.env_query.get_fn_sig(declaration, spec_args);
+        let target_env = ty::EarlyBinder::bind(tcx, tcx.param_env(target))
+            .instantiate(tcx, spec_args)
+            .skip_normalization();
+        // Unlike get_fn_sig_resolved, this normalization keeps regions,
+        // including those inside associated types and nested function types.
+        let infcx = self.env_query.infer_ctxt();
+        let ocx = ObligationCtxt::new(&infcx);
+        let Ok((target_sig, spec_sig)) = ocx.deeply_normalize(
+            &ObligationCause::dummy(),
+            target_env,
+            Unnormalized::new((target_sig, spec_sig)),
+        ) else {
+            return false;
+        };
+        let mut anonymize = AnonymizeLifetimes { tcx };
+        target_sig
+            .map_bound(|sig| sig.inputs_and_output)
+            .fold_with(&mut anonymize)
+            == spec_sig
+                .map_bound(|sig| sig.inputs_and_output)
+                .fold_with(&mut anonymize)
     }
 
     fn register_duplicate_spec(&mut self, decl_def_id: DefId, dup_spec_def_id: DefId, span: Span) {
@@ -384,6 +452,18 @@ impl<'tcx> ExternSpecResolver<'tcx> {
                     )
                     .emit(env_diagnostic);
                 }
+                ExternSpecResolverError::InvalidLifetimes(def_id, span) => {
+                    let function_name = self.env_name.get_item_name(*def_id);
+                    PrustiError::incorrect(
+                        "Invalid external specification",
+                        MultiSpan::from_span(*span),
+                    )
+                    .add_note(
+                        format!("Lifetime relationships must match method '{function_name}' exactly; renaming bound lifetimes is supported, but shortening or merging them is not."),
+                        None,
+                    )
+                    .emit(env_diagnostic);
+                }
                 ExternSpecResolverError::InvalidBound(def_id, bound, span) => {
                     let function_name = self.env_name.get_item_name(*def_id);
                     PrustiError::incorrect(
@@ -411,6 +491,34 @@ impl<'tcx> ExternSpecResolver<'tcx> {
             )
             .emit(env_diagnostic);
         }
+    }
+}
+
+fn same_generic_kinds<'tcx>(target: GenericArgsRef<'tcx>, spec: GenericArgsRef<'tcx>) -> bool {
+    target.len() == spec.len()
+        && target.iter().zip(spec).all(|(target, spec)| {
+            std::mem::discriminant(&target.kind()) == std::mem::discriminant(&spec.kind())
+        })
+}
+
+/// Canonicalize each binder independently, including higher-ranked function
+/// arguments. Names and declaration order do not matter; repeated occurrences
+/// of a lifetime and the scope that binds it do.
+struct AnonymizeLifetimes<'tcx> {
+    tcx: TyCtxt<'tcx>,
+}
+
+impl<'tcx> TypeFolder<TyCtxt<'tcx>> for AnonymizeLifetimes<'tcx> {
+    fn cx(&self) -> TyCtxt<'tcx> {
+        self.tcx
+    }
+
+    fn fold_binder<T: TypeFoldable<TyCtxt<'tcx>>>(
+        &mut self,
+        binder: ty::Binder<'tcx, T>,
+    ) -> ty::Binder<'tcx, T> {
+        let binder = binder.super_fold_with(self);
+        self.tcx.anonymize_bound_vars(binder)
     }
 }
 

@@ -60,6 +60,7 @@ fn main() {
     assert!(generic_bound::<[u32]>(8) <= 10);
     assert!(target_api::copied(19_u32) == 19);
     assert!(target_api::static_value(Token { value: 27 }).value == 27);
+    assert!(target_api::bounded_identity(Token { value: 43 }, &()).value == 43);
     assert!(Owned::<u32>::copy(31) == 31);
     assert!(*target_api::first(&3, &5) == 3);
     assert!(generic_observe(&Zero) == 0);

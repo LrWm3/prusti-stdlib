@@ -1,19 +1,18 @@
 //! External contracts exported to the separately compiled proof clients.
 use prusti_contracts::*;
 
-#[extern_spec]
-impl<T> Option<T> {
-    #[trusted]
-    #[requires(matches!(self, Some(_)))]
-    #[ensures(old(self) === Some(result))]
-    pub fn unwrap(self) -> T;
+// These verified wrappers consume bundled contracts and export their own
+// contracts to a third crate. The focused runner verifies this crate explicitly.
+#[ensures(result === value)]
+pub fn unwrap_owned<T>(value: T) -> T {
+    Some(value).unwrap()
 }
 
-#[extern_spec(std::mem)]
-#[trusted]
-#[ensures(*dest === src)]
 #[ensures(result === *old(&*dest))]
-fn replace<T>(dest: &mut T, src: T) -> T;
+#[ensures(*dest === src)]
+pub fn replace_owned<T>(dest: &mut T, src: T) -> T {
+    core::mem::replace(dest, src)
+}
 
 #[extern_spec(target_api)]
 trait Identity {
@@ -58,6 +57,11 @@ fn copied<T: Copy + Clone>(value: T) -> T;
 #[trusted]
 #[ensures(result === value)]
 fn static_value<T: 'static>(value: T) -> T;
+
+#[extern_spec(target_api)]
+#[trusted]
+#[ensures(result === value)]
+fn bounded_identity<'a, T: 'a>(value: T, marker: &'a ()) -> T;
 
 #[extern_spec(target_api)]
 trait Copier<T: Copy> {

@@ -17,9 +17,6 @@ impl<T> Option<T> {
     #[ensures(!self.is_some() ==> result)]
     pub fn is_none(&self) -> bool;
 
-    #[trusted]
-    #[requires(self.is_some())]
-    pub fn unwrap(self) -> T;
 }
 
 #[extern_spec]

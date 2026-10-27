@@ -17,10 +17,6 @@ impl<T> std::option::Option<T> {
 
     #[trusted]
     #[requires(self.is_some())]
-    pub fn unwrap(self) -> T;
-
-    #[trusted]
-    #[requires(self.is_some())]
     pub fn expect(self, msg: &str) -> T;
 }
 

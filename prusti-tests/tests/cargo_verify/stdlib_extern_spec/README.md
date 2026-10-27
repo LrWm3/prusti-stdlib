@@ -1,18 +1,20 @@
 # Standard-library external-contract milestone
 
-This fixture checks real `Option::unwrap` and `std::mem::replace` calls using
-contracts exported by the separate `stdlib_specs` crate. The positive clients
-contain no external declarations, trusted functions, or assumptions. The
-contracts are prototype specifications for this fixture; they are not installed
-as bundled standard-library contracts.
+This fixture checks real `Option::unwrap`, `core::mem::replace`, and
+`std::mem::replace` calls using the contracts bundled in `prusti_contracts`.
+`pass` consumes those contracts directly; `cross_crate_pass` consumes verified
+generic wrappers exported by `stdlib_specs`. Neither client contains external
+declarations, trusted functions, or assumptions. `core_only` checks generic
+clients in a `#![no_std]` library with only the `core` contracts feature enabled.
 
 The unannotated `target_api` crate supplies small traits for testing resolution
 and refinement independently of any collection model. Their external contracts
 live in `stdlib_specs`, so positive generic clients depend on exported metadata.
 `Identity` preserves an associated item or a shared borrow, `Relay<T>` preserves
 a trait type argument, and `Bounded` permits a result at most ten. Its `Zero`
-implementation has a stronger contract. Negative declaration probes deliberately
-place external specs in their client crate to check diagnostics.
+implementation has a stronger contract. `lifetimes_pass` declares additional
+valid external signatures locally. Negative declaration probes deliberately
+place invalid external specs in their client crate to check diagnostics.
 
 After following the repository setup instructions and building with
 `./x.py build --all`, run from the repository root:
@@ -30,15 +32,21 @@ The test is wired into the `all-tests` CI job separately from the legacy Cargo
 harness, which is currently disabled. It uses a fresh target directory on each
 invocation, exports dependency contracts without verifying dependency bodies,
 disables the verification cache, and explicitly enables overflow and panic
-checks. Verifier calls have a 90-second timeout; each test command has a
-300-second outer timeout.
+checks. It explicitly verifies the `stdlib_specs` wrapper bodies and the
+`core_only` library as separate packages. Verifier calls have a 90-second timeout;
+each test command has a 300-second outer timeout.
 
 | Case | Expected result |
 |---|---|
 | Ordinary Rust check | All client binaries compile without verification. |
+| `rust-core-only`, `core-only` | The core-only library compiles normally and verifies without requiring std or alloc features. |
+| `spec-library` | The separately compiled generic wrapper bodies verify using the bundled contracts. |
 | Runtime positive clients | Concrete assertions agree with the actual standard-library and target API behavior. |
 | `pass` | Generic unwrap and replacement postconditions, a non-`Copy` token with no equality traits, both replacement effects, and bounded arithmetic verify. |
 | `traits_pass` | Generic trait arguments, associated items (owned and shared-reference values), explicit borrow lifetimes, concrete external impl contracts, and a verified local refinement work across crates. |
+| `cross_crate_pass` | Generic wrappers preserve non-`Copy` payloads, return the old destination, and install the new value across crate boundaries. |
+| `lifetimes_pass` | Renamed early/late-bound lifetimes, existing outlives bounds, type aliases, and nested higher-ranked signatures are accepted. |
+| `cross_crate_wrong_value` | Reject a wrong returned value from an imported generic wrapper. |
 | `false_assert` | Reject the false assertion, even with both external contracts loaded. |
 | `overflow` | Reject addition without the necessary overflow precondition. |
 | `unwrap_none` | Reject unwrapping a known `None`. |
@@ -52,7 +60,9 @@ checks. Verifier calls have a 90-second timeout; each test command has a
 | `refinement_stronger_pre` | Reject a local implementation that strengthens an imported trait's precondition. |
 | `refinement_weaker_post` | Reject a local implementation that weakens an imported trait's postcondition. |
 | `duplicate_local` | Reject two external declarations for the same target in one crate. |
-| `duplicate_imported` | Reject a local declaration that duplicates an imported contract. |
+| `duplicate_imported` | Reject a local declaration that duplicates bundled `Option::unwrap`. |
+| `duplicate_bundled_replace` | Reject a local std declaration that duplicates bundled `core::mem::replace`. |
+| `duplicate_imported_trait` | Reject a local declaration that duplicates a trait contract exported by `stdlib_specs`. |
 | `signature_generics` | Reject a monomorphic declaration for a generic target. |
 | `signature_specialized` | Reject specialization of a target's type parameter while retaining the same parameter count. |
 | `signature_coercion` | Reject a parameter type mismatch hidden by a mutable-to-shared reference coercion. |
@@ -61,6 +71,12 @@ checks. Verifier calls have a 90-second timeout; each test command has a
 | `bounds_stronger_associated` | Reject an added `Copy` requirement on a trait's associated item. |
 | `bounds_stronger_supertrait` | Reject an added `Copy` supertrait on an externally specified trait. |
 | `bounds_stronger_lifetime` | Reject an added `T: 'static` requirement on `mem::replace`. |
+| `bounds_stronger_outlives` | Reject an added reverse outlives requirement between early-bound lifetimes. |
+| `lifetime_merged` | Reject merging two independent input lifetimes. |
+| `lifetime_static_input` | Reject restricting an arbitrary borrow to `'static`. |
+| `lifetime_shortened_output` | Reject shortening a target's `'static` result to the input lifetime. |
+| `lifetime_early_bound` | Reject replacing early-bound outlives parameters with one late-bound lifetime. |
+| `lifetime_nested` | Reject changing a callback's higher-ranked lifetime requirements. |
 
 Each negative case has one `expected-error` (verification) or
 `expected-incorrect` (invalid specification) annotation. Passing requires the
@@ -85,15 +101,23 @@ The resolver also checks declaration bounds against the target environment,
 rejecting added requirements unless Rust can establish them from that
 environment. The positive trait client covers a redundant `Clone` bound implied
 by `Copy`, an existing `'static` bound, bounded trait arguments, a generic
-`?Sized` caller, and by-value receivers. The trait rewriter preserves supertraits
+`?Sized` caller, by-value receivers, and a type parameter following an early-bound
+lifetime. The trait rewriter preserves supertraits
 and permits unsized `Self`, adding `Sized` only for a by-value receiver.
 
-The predicate check is conservative and can reject valid implications it cannot
-establish, particularly complex outlives relationships. Signature comparison
-still erases regions; it does not establish general equivalence of lifetime
-relationships between a declaration and its target.
+The lifetime comparison normalizes associated types while preserving regions,
+then anonymizes each binder independently. Early-bound lifetime parameters must
+occupy the target's generic positions. Concrete trait implementations are checked
+against the trait's public call signature. The bundled reference-equality specs
+now make those impl lifetimes explicit. This exposed a spec-encoding bug: removing
+lifetime slots shifted subsequent type/const indices. The encoder now retains
+the full argument list when instantiating spec bodies.
 
-These checks establish the small external-contract milestone, not unrestricted
+Both signature and predicate checks are conservative. They may reject valid
+declarations requiring different early-bound parameter layouts or more complex
+outlives equivalences. They do not silently accept changed lifetime relationships.
+
+These checks establish the P1-B external-contract foundation, not unrestricted
 collection or reference-containing generic support. Review trusted contracts
 against the pinned Rust implementation; passing clients alone cannot establish
 their soundness.

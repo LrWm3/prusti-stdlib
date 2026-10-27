@@ -13,10 +13,6 @@ impl<T> std::option::Option<T> {
     pub fn is_none(&self) -> bool;
 
     #[trusted]
-    #[requires(self.is_some())]
-    pub fn unwrap(self) -> T;
-
-    #[trusted]
     pub fn unwrap_or(self, default: T) -> T;
 
     #[trusted]

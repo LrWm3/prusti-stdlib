@@ -80,6 +80,30 @@ pub fn first<'a, 'b>(first: &'a u32, _second: &'b u32) -> &'a u32 {
     first
 }
 
+pub fn static_ref(_value: &u32) -> &'static u32 {
+    &37
+}
+
+pub fn outlives<'a: 'b, 'b>(first: &'a u32, _second: &'b u32) -> &'b u32 {
+    first
+}
+
+pub type Borrow<'a, T> = &'a T;
+
+pub fn aliased<'a, T>(value: Borrow<'a, T>) -> Borrow<'a, T> {
+    value
+}
+
+pub fn callback(value: for<'a> fn(&'a u32) -> &'a u32) -> for<'b> fn(&'b u32) -> &'b u32 {
+    value
+}
+
+pub fn static_callback(_value: fn(&'static u32) -> &'static u32) {}
+
+pub fn bounded_identity<'a, T: 'a>(value: T, _marker: &'a ()) -> T {
+    value
+}
+
 pub trait Consume {
     fn consume(self) -> u32;
 }

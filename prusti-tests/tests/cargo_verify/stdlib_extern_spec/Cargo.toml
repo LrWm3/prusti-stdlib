@@ -10,4 +10,4 @@ stdlib_specs = { path = "specs" }
 target_api = { path = "target_api" }
 
 [workspace]
-members = ["specs", "target_api"]
+members = ["specs", "target_api", "core_only"]

@@ -17,22 +17,12 @@ struct Node<T> {
     next: Link<T>,
 }
 
-#[extern_spec(std::mem)]
-#[trusted]
-#[ensures(*dest === src)]
-#[ensures(result === *old(&*dest))]
-fn replace<T>(dest: &mut T, src: T) -> T;
+// The mem::replace contract is bundled with prusti-contracts.
 
-// Specs for std::option::Option<T>::unwrap(self) (and others) can be found here (work in progress):
-// https://github.com/viperproject/prusti-dev/pull/1249/files#diff-bccda07f8a48357687e26408251041072c7470c188092fb58439de39974bdab5R47-R49
+// The Option::unwrap contract is bundled with prusti-contracts.
 
 #[extern_spec]
 impl<T> std::option::Option<T> {
-    #[trusted]
-    #[requires(self.is_some())]
-    #[ensures(old(self) === Some(result))]
-    pub fn unwrap(self) -> T;
-    
     #[trusted]
     #[pure]
     #[ensures(result == matches!(self, None))]

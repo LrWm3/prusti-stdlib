@@ -18,11 +18,7 @@ struct Node {
     next: Link,
 }
 
-#[extern_spec(std::mem)]
-#[trusted]
-#[ensures(*dest === src)]
-#[ensures(result === *old(&*dest))]
-fn replace<T>(dest: &mut T, src: T) -> T;
+// The mem::replace contract is bundled with prusti-contracts.
 
 //// ANCHOR: lookup
 impl List {

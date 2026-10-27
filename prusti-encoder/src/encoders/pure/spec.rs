@@ -186,12 +186,10 @@ impl TaskEncoder for MirSpecEnc {
                 // if the spec is not inherited and we are currently building the spec for the actual function we're encoding,
                 // do not use substitution
                 if !inherited && def_id == context_def_id {
-                    vcx.tcx().mk_args_from_iter(
-                        context_params
-                            .rust_params()
-                            .iter()
-                            .filter(|arg| arg.as_region().is_none()),
-                    )
+                    // Lifetimes occupy generic argument slots even when the
+                    // body's regions are erased. Dropping them shifts type
+                    // and const indices and can panic during instantiation.
+                    context_params.rust_params()
                 } else {
                     substs
                 }

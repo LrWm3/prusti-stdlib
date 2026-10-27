@@ -46,7 +46,8 @@ pure method `len` introduced in the [previous chapter](new.md):
 {{#rustdoc_include ../../../../prusti-tests/tests/verify/pass/user-guide/push_property_1.rs:property_1}}
 ```
 
-Even though the above implementation of `push` is correct, attempting to verify it with Prusti still yields a verification error:
+Without a contract for the `mem::replace` call, even a correct implementation of
+`push` would produce a verification error:
 
 ```plain
 [Prusti: verification error] postcondition might not hold.
@@ -67,28 +68,23 @@ function body into account.
 
 ### Adding external specifications to library code
 
-In our case, the function `std::mem::replace` is neither marked as `pure` nor does it
-come with a specification. Hence, Prusti assumes that it is memory safe and nothing else.
-That is, Prusti uses `true` as both pre- and postcondition of `replace`,
-which is too weak to prove the specification of `push`. According to its specification,
-`replace` could arbitrarily change the original list and thus also its length.
-Hence, we cannot conclude that the length the list returned by
-`replace(&mut self.head, Link::Empty)` coincides with the length of the original 
-list.
+Prusti bundles the contract for `core::mem::replace`, which is also re-exported
+as `std::mem::replace`. It describes both the returned old value and the updated
+destination. The following declaration is already in `prusti_contracts`; it is
+shown here to explain [external specifications](../verify/external.md). Do not
+copy it into a client, since duplicate contracts are rejected.
 
-We can remedy this issue by strengthening the specification of `replace`.
-In this tutorial, we will assume that the standard library is correct, that is, we 
-do not attempt to verify specifications for functions in external crates, 
-like `replace`. To this end, we have to add the specification to the function.
-This can be done with another piece of Prusti syntax, the [extern_spec](../verify/external.md):
-
-```rust,noplaypen
-{{#rustdoc_include ../../../../prusti-tests/tests/verify/pass/user-guide/push_property_1.rs:extern_spec}}
+```rust,noplaypen,ignore
+#[extern_spec(core::mem)]
+#[trusted]
+#[ensures(*dest === src)]
+#[ensures(result === *old(&*dest))]
+fn replace<T>(dest: &mut T, src: T) -> T;
 ```
 
 Let's break this snippet down step by step:
 - First, we write the Prusti annotation `#[extern_spec]` to denote that we are writing an external specification. This requires `prusti_contracts::*` to be imported first.
-- Next, we need to declare where the original function is located. In this case it is the module `std::mem`, so we put its path in  the parameter: `#[extern_spec(std::mem)]`
+- Next, we need to declare where the original function is located. In this case it is the module `core::mem`, so we use `#[extern_spec(core::mem)]`
 - After a quick search for *\"rust std mem replace\"* we can find the [documentation for std::mem::replace](https://doc.rust-lang.org/std/mem/fn.replace.html). Here we can get the function signature: `pub fn replace<T>(dest: &mut T, src: T) -> T`. We then write down the signature in the inner module, followed by a `;`.
 - Prusti cannot check that `replace` actually satisfies the specification we are about to write, so we have to mark it as [`#[trusted]`](../verify/trusted.md). Every function in an external specification must be marked like this.
 - Since there are no preconditions to `replace`, we can use the (implicit) default `#[requires(true)]`.
@@ -104,15 +100,6 @@ Since `result` is structurally equal to `dest` from before the function call, Pr
 
 
 An important thing to note here is that Prusti does ***not*** check if `replace` actually does what the external specification says it does. This is what the `#[trusted]` annotation states: any postconditions are just accepted and used by Prusti.
-
-### Future
-
-There is currently new functionality planned for Prusti-assistant, which should enable the user to automatically generate parts of the `extern_spec` syntax.
-
-There is also work being done for providing external specifications for the Rust standard library. Depending on when you are reading this, the `std::mem::replace` function might be annotated already, in that case this `extern_spec` may not be needed anymore.
-You can track the progress and find some already completed specifications [in this Pull Request](https://github.com/prusti/prusti/pull/1249).
-
-Specifications for the standard library should eventually be available in the [prusti-std crate](https://crates.io/crates/prusti-std). Any specifications in this crate will be available by adding it to your project's dependencies.
 
 ## Trusted functions
 
@@ -158,7 +145,7 @@ fn wrong() {}
 
 ### Checking the `extern_spec`
 
-Let's get back to our code. After adding the external specification for `std::mem::replace`, we can finally verify the first property of our `push` function:
+Let's get back to our code. Using the bundled external specification for `std::mem::replace`, we can finally verify the first property of our `push` function:
 
 ```rust,noplaypen
 {{#rustdoc_include ../../../../prusti-tests/tests/verify/pass/user-guide/push_property_1.rs:property_1}}

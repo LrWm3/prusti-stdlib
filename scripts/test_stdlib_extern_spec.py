@@ -94,6 +94,9 @@ def main():
         })
         compiled = run("rust-check", ["cargo", "check", "--bins"], env)
         if compiled:
+            run("rust-core-only", ["cargo", "check", "-p", "stdlib_core_only"], env)
+            run("core-only", [str(prusti), "-p", "stdlib_core_only"], env)
+            run("spec-library", [str(prusti), "-p", "stdlib_specs"], env)
             sources = fixture / "src/bin"
             positive = sorted(p for p in sources.glob("*.rs") if p.stem == "pass" or p.stem.endswith("_pass"))
             for source in positive:

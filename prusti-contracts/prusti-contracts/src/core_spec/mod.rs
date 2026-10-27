@@ -2,6 +2,8 @@ use crate::*;
 
 pub mod eq;
 pub mod float;
+pub mod mem;
+pub mod option;
 pub mod slice;
 
 pub use eq::PureEq;

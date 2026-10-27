@@ -47,7 +47,9 @@ Since we will need to check if a list is empty, we can implement a `#[pure]` fun
 
 ### Writing the external specifications for `Option`
 
-Since we use `Option::unwrap`, we will need an external specification for it. While we're at it, let's also write the `#[extern_spec]` for `Option::is_some` and `Option::is_none`:
+The contract for `Option::unwrap` is bundled with `prusti_contracts`: it requires
+`Some` and returns its payload. The example only needs local declarations for
+`Option::is_some` and `Option::is_none`:
 
 ```rust,noplaypen
 {{#rustdoc_include ../../../../prusti-tests/tests/verify/pass/user-guide/pop.rs:extern_spec}}
@@ -55,7 +57,6 @@ Since we use `Option::unwrap`, we will need an external specification for it. Wh
 
 The syntax for writing external specifications for functions associated with `Option` is slightly different to that of `std::mem::replace`, which was a standalone function.
 
-Note: In the future, you should just be able to import these external specifications using the [`prusti-std` crate](https://crates.io/crates/prusti-std). It should be available after [this PR](https://github.com/prusti/prusti/pull/1249) is merged. Until then, you can find the work in progress specifications in the PR (e.g., for [`Option::unwrap`](https://github.com/prusti/prusti/pull/1249/files#diff-bccda07f8a48357687e26408251041072c7470c188092fb58439de39974bdab5R47-R49)).
 
 ## Implementing the specification
 

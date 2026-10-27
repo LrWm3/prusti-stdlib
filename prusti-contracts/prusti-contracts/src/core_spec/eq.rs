@@ -93,7 +93,7 @@ impl<T: PartialEq> PartialEq for Option<T> {
 macro_rules! impl_partial_eq_ref {
     ($lhs:ty, $rhs:ty) => {
         #[extern_spec]
-        impl<A: PointeeSized, B: PointeeSized> PartialEq<$rhs> for $lhs
+        impl<'b, 'a, A: PointeeSized, B: PointeeSized> PartialEq<$rhs> for $lhs
         where
             A: PartialEq<B>,
         {
@@ -110,13 +110,15 @@ macro_rules! impl_partial_eq_ref {
     };
 }
 
-impl_partial_eq_ref!(&A, &B);
+// Keep the impl lifetimes in the target's trait-argument/self order, rather
+// than turning them into fresh method lifetimes in the generated wrapper.
+impl_partial_eq_ref!(&'a A, &'b B);
 // TODO: restore once `&mut` is supported in specifications. `*self` and
 // `*other` relate the result to an unconstrained value rather than to the
 // referents, and these are encoded for every program mentioning `PartialEq`.
-// impl_partial_eq_ref!(&mut A, &mut B);
-// impl_partial_eq_ref!(&A, &mut B);
-// impl_partial_eq_ref!(&mut A, &B);
+// impl_partial_eq_ref!(&'a mut A, &'b mut B);
+// impl_partial_eq_ref!(&'a A, &'b mut B);
+// impl_partial_eq_ref!(&'a mut A, &'b B);
 
 /// Specifies that `PartialEq::eq`, if implemented, is a pure method, allowing its usage in specs.
 pub auto trait PureEq {}

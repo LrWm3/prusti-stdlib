@@ -44,6 +44,8 @@ each test command has a 300-second outer timeout.
 | Runtime positive clients | Concrete assertions agree with the actual standard-library and target API behavior. |
 | `pass` | Generic unwrap and replacement postconditions, a non-`Copy` token with no equality traits, both replacement effects, and bounded arithmetic verify. |
 | `traits_pass` | Generic trait arguments, associated items (owned and shared-reference values), explicit borrow lifetimes, concrete external impl contracts, and a verified local refinement work across crates. |
+| `refinement_lifetime_pass` | Refined implementation contracts preserve impl and method lifetimes and const generics across crates. |
+| `refinement_lifetime_generic_wrong`, `refinement_lifetime_stronger_pre`, `refinement_const_wrong` | Reject a concrete-only guarantee in an unconstrained generic caller, a strengthened implementation precondition, and an incorrect const-generic result. |
 | `cross_crate_pass` | Generic wrappers preserve non-`Copy` payloads, return the old destination, and install the new value across crate boundaries. |
 | `lifetimes_pass` | Renamed early/late-bound lifetimes, existing outlives bounds, type aliases, and nested higher-ranked signatures are accepted. |
 | `conditional_pass`, `iterator_capability_pass` | Conditional postconditions are selected with caller evidence for trusted free functions and the external `Iterator::next` trait method, including old-state and cross-crate generic capability probes. The sealed iterator capability is available only to supported implementations. |

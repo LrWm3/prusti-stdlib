@@ -130,6 +130,7 @@ struct SpecEncCtx<'vir> {
     enc_mode: MirSpecEncMode,
     context_def_id: DefId,
     substs: ty::GenericArgsRef<'vir>,
+    remap_from: Option<DefId>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -209,6 +210,11 @@ impl TaskEncoder for MirSpecEnc {
             )?;
             let specs = deps
                 .require_dep::<crate::encoders::SpecEnc>(crate::encoders::SpecEncTask { def_id })?;
+            let is_trait_impl_method = vcx
+                .tcx()
+                .opt_associated_item(def_id)
+                .and_then(|item| item.trait_item_def_id())
+                .is_some();
             let (pres, pres_inherited) = crate::encoders::spec_items(&specs.pres);
             let (posts, posts_inherited) = crate::encoders::spec_items(&specs.posts);
             let (pledges, pledges_inherited) = crate::encoders::spec_items(&specs.pledges);
@@ -222,18 +228,30 @@ impl TaskEncoder for MirSpecEnc {
                 enc_mode,
                 context_def_id,
                 substs: substs_for(pres_inherited),
+                remap_from: (!pres_inherited
+                    && specs.extern_spec.is_none()
+                    && is_trait_impl_method)
+                    .then_some(def_id),
             };
             let post_ctx = SpecEncCtx {
                 extern_spec: specs.extern_spec,
                 enc_mode,
                 context_def_id,
                 substs: substs_for(posts_inherited),
+                remap_from: (!posts_inherited
+                    && specs.extern_spec.is_none()
+                    && is_trait_impl_method)
+                    .then_some(def_id),
             };
             let pledge_ctx = SpecEncCtx {
                 extern_spec: specs.extern_spec,
                 enc_mode,
                 context_def_id,
                 substs: substs_for(pledges_inherited),
+                remap_from: (!pledges_inherited
+                    && specs.extern_spec.is_none()
+                    && is_trait_impl_method)
+                    .then_some(def_id),
             };
 
             let local_iter = (1..=local_defs.arg_count).map(mir::Local::from);
@@ -379,6 +397,43 @@ impl MirSpecEnc {
         type_: &str,
     ) -> Option<MirPureEncOutput<'vir>> {
         let span = vcx.tcx().def_span(def_id);
+        let tcx = vcx.tcx();
+        let substs = if let Some(source_def) = ctx.remap_from {
+            // Refinement specs are generated as free functions. A lifetime
+            // early-bound on the impl can become late-bound on that function,
+            // removing its argument slot. Match the remaining parameters by
+            // name and kind instead of forwarding shifted positional slots.
+            let source = tcx.generics_of(source_def);
+            let target = tcx.generics_of(def_id);
+            let mapped = (0..target.count())
+                .map(|i| {
+                    let dst = target.param_at(i, tcx);
+                    let matches = (0..source.count())
+                        .filter(|&j| {
+                            let src = source.param_at(j, tcx);
+                            src.name == dst.name
+                                && std::mem::discriminant(&src.kind)
+                                    == std::mem::discriminant(&dst.kind)
+                        })
+                        .collect::<Vec<_>>();
+                    if matches.len() == 1 {
+                        ctx.substs.get(matches[0]).copied()
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Option<Vec<_>>>();
+            let Some(mapped) = mapped else {
+                vcx.emit_early_error(PrustiError::unsupported(
+                    "cannot match generic parameters in trait refinement specification".to_string(),
+                    span.into(),
+                ));
+                return None;
+            };
+            tcx.mk_args(&mapped)
+        } else {
+            ctx.substs
+        };
         let spec = deps.require_dep::<MirPureEnc>(crate::encoders::MirPureEncTask {
             encoding_depth: 0,
             kind: PureKind::Spec {
@@ -388,7 +443,7 @@ impl MirSpecEnc {
             parent_def_id: def_id,
             gargs: GArgs::new(
                 GParams::new_maybe_extern(ctx.context_def_id, ctx.extern_spec),
-                ctx.substs,
+                substs,
             ),
         });
         spec.inspect_err(|err| {

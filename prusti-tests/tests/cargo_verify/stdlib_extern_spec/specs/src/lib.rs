@@ -190,3 +190,43 @@ trait Observe {
     #[ensures(result == 0)]
     fn observe(&self) -> u32;
 }
+
+pub trait ReadRef<'a> {
+    type Item;
+    fn get(&self) -> &'a Self::Item;
+}
+pub struct Borrowed<'a, T> {
+    pub value: &'a T,
+}
+#[refine_trait_spec]
+impl<'a, T> ReadRef<'a> for Borrowed<'a, T> {
+    type Item = T;
+    #[ensures(result === self.value)]
+    fn get(&self) -> &'a T {
+        self.value
+    }
+}
+pub trait ReadSize {
+    fn size(&self) -> usize;
+}
+pub struct BorrowedArray<'a, const N: usize> {
+    pub value: &'a [u8; N],
+}
+#[refine_trait_spec]
+impl<'a, const N: usize> ReadSize for BorrowedArray<'a, N> {
+    #[ensures(result == N)]
+    fn size(&self) -> usize {
+        N
+    }
+}
+
+pub trait Reborrow {
+    fn reborrow<'b>(&'b self) -> &'b u8;
+}
+#[refine_trait_spec]
+impl<'a> Reborrow for Borrowed<'a, u8> {
+    #[ensures(*result == *self.value)]
+    fn reborrow<'b>(&'b self) -> &'b u8 {
+        self.value
+    }
+}

@@ -519,8 +519,11 @@ other than directly called external trait methods, external free functions and
 impl methods, and pure calls. A
 [reproducer](prusti-tests/tests/cargo_verify/stdlib_borrow_spec/known_limits/)
 retains the conditional-precondition limitation. Conditional expiry pledges are
-also unsupported. Implementation refinement and some lifetime-sensitive calls
-remain necessary for P2-C. Ordinary owned `for` loops can use the specification
+also unsupported. Trait implementation refinements now preserve impl and method
+lifetimes and const-generic parameters across generated specification functions;
+cross-crate tests check borrowed results and reject strengthened preconditions
+and unsupported generic claims. Mutable iterator refinement and some
+lifetime-sensitive calls remain necessary for P2-C. Ordinary owned `for` loops can use the specification
 marker `for_iterator::<alloc::vec::IntoIter<T>>()` to refer to the actual
 compiler-generated iterator in a body invariant. The symbolic-count proof is
 verified across crates; nested loops, another same-typed iterator, incorrect

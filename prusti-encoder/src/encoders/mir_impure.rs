@@ -834,6 +834,12 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 //   function call; instead we should figure out which
                 //   wand it is based on the edge info.
                 // TODO: closures
+                // Keep the edge's original dependency, even for wandless calls:
+                // it contributes declarations needed by existing proofs.
+                let original_data = call.function_data().unwrap();
+                let original_wands = self.deps.require_dep::<WandEnc>(WandEncTask {
+                    data: original_data,
+                })?;
                 let bb = &self.body[call.location().block];
                 let terminator = bb.terminator.as_ref().unwrap();
                 match &terminator.kind {
@@ -850,9 +856,13 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         }
                         let (callee, caller_substs, _) = self.get_call_data(func);
                         let (callee, call_ctx) = self.gargs(caller_substs).resolve_method(callee);
-                        let wands = self.deps.require_dep::<WandEnc>(WandEncTask {
-                            data: pcg::borrow_pcg::FunctionData::new(callee),
-                        })?;
+                        let wands = if callee == original_data.def_id() {
+                            original_wands
+                        } else {
+                            self.deps.require_dep::<WandEnc>(WandEncTask {
+                                data: pcg::borrow_pcg::FunctionData::new(callee),
+                            })?
+                        };
 
                         let (_, dest_snap, _, _) =
                             self.encode_place_with_snap((*destination).into())?;

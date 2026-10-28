@@ -1037,7 +1037,8 @@ Subsequent untrusted slice-backed iterator experiments establish element
 restoration, rather than just the length of the remaining slice. For a
 nonempty tail, two simultaneously live results can be mutated and expired in
 either order; the original slice is then proved to contain both mutations.
-A generic variant also restores a non-`Copy` element. Negative cases reject
+A generic variant also restores two non-`Copy` elements in both use orders.
+Negative cases reject
 incorrect restored values. The `after_call` pledge expression captures the
 post-call tail separately from its state at expiry; mutable-slice observations
 require permission and respect the requested heap state. The separate
@@ -1048,7 +1049,8 @@ empty and nonempty tails remains a solver timeout, recorded under
 The complete borrow and iterator suites subsequently passed 91 and 109 checks,
 respectively, using the `after_call` encoder before the later generic-lifetime
 fix and diagnostic changes. The generic non-`Copy` positive and wrong-value
-cases were verified separately with the generic-lifetime fix.
+cases, including two simultaneously live yields, were verified separately with
+the generic-lifetime fix.
 
 This evidence does not yet give `core::slice::IterMut` an element-restoration
 contract: its raw-pointer representation does not carry the slice-backed

@@ -74,7 +74,9 @@ rejected. The `mut_region_reassembly_pass` case and its reverse-order
 counterpart use `after_call` to retain each call's post-call tail snapshot and
 prove the final values of two simultaneously live yields. The untrusted `next` contract
 applies to an arbitrary nonempty tail; incorrect values and a false assertion
-are rejected. The separate functional regression covers exhaustion.
+are rejected. Generic two-yield tests also restore non-`Copy` elements in both
+use orders and reject an incorrect value. The separate functional regression
+covers exhaustion.
 
 `region_full_reassembly` combines that expiry pledge with the `Some`/`None`
 contract in a single `next`. The implementation verifies on its own, but the

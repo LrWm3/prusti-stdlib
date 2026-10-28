@@ -99,7 +99,9 @@ def main():
             "PRUSTI_CHECK_PANICS": "true",
             "PRUSTI_NO_VERIFY_DEPS": "true",
             "PRUSTI_ENABLE_CACHE": "false",
-            "PRUSTI_EXTRA_VERIFIER_ARGS": "--timeout=90",
+            # The timeout covers the whole generated program, including
+            # generic conversion methods and the untrusted iterator body.
+            "PRUSTI_EXTRA_VERIFIER_ARGS": "--timeout=180 --numberOfParallelVerifiers 1",
             "PRUSTI_LOG_DIR": str(log_dir / "verifier"),
         })
         compiled = run("rust-check", ["cargo", "check", "--bins"], env)

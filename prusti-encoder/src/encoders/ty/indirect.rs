@@ -6,6 +6,7 @@ use prusti_rustc_interface::{
     index::IndexVec,
     middle::ty::{self, TyCtxt},
 };
+use std::cell::RefCell;
 use task_encoder::{EncodeFullResult, TaskEncoder, TaskEncoderDependencies};
 use vir::{CastType, Reify};
 
@@ -37,7 +38,28 @@ impl<'tcx> ExtractRegionsCtxt<'tcx, RustTyDecomposition<'tcx>, PcgRegion<'tcx>> 
 
 pub struct IndirectPredicatesEnc;
 
-type ExprInput<'vir> = vir::ExprSnap<'vir>;
+/// Heap reads that must be captured outside a wand when its resources refer
+/// to a mutable argument's post-call state.
+pub(crate) type SnapshotBindings<'vir> =
+    RefCell<Vec<(vir::LocalDeclSnap<'vir>, vir::ExprSnap<'vir>)>>;
+#[derive(Clone, Copy)]
+pub(crate) struct ExprInput<'vir> {
+    pub snap: vir::ExprSnap<'vir>,
+    pub heap_label: Option<vir::OldLabel<'vir>>,
+    pub bindings: Option<&'vir SnapshotBindings<'vir>>,
+    pub guard: Option<vir::ExprBool<'vir>>,
+}
+
+impl<'vir> ExprInput<'vir> {
+    pub fn current(snap: vir::ExprSnap<'vir>) -> Self {
+        Self {
+            snap,
+            heap_label: None,
+            bindings: None,
+            guard: None,
+        }
+    }
+}
 type ExprOutput<'vir> = vir::ExprGenBool<'vir, ExprInput<'vir>, vir::ExprKind<'vir>>;
 
 #[derive(Clone)]
@@ -136,8 +158,8 @@ impl TaskEncoder for IndirectPredicatesEnc {
                         predicate_applications.push(vcx.mk_lazy_expr(
                             "ref_indirect",
                             vir::TYPE_BOOL,
-                            Box::new(move |vcx, self_expr: vir::ExprSnap<'vir>| {
-                                let addr = ref_domain.deref_access(self_expr.downcast_ty());
+                            Box::new(move |vcx, input: ExprInput<'vir>| {
+                                let addr = ref_domain.deref_access(input.snap.downcast_ty());
                                 inner_impure.ref_to_pred(vcx, addr, None).kind
                             }),
                         ));
@@ -150,30 +172,54 @@ impl TaskEncoder for IndirectPredicatesEnc {
                     {
                         let inner_indirect =
                             deps.require_dep::<IndirectPredicatesEnc>(new_projection)?;
-                        predicate_applications.extend(
-                            inner_indirect
-                                .predicate_applications
-                                .into_iter()
-                                .map(|inner_expr| {
-                                    vcx.mk_lazy_expr(
-                                        "ref_inner_indirect",
-                                        vir::TYPE_BOOL,
-                                        Box::new(move |vcx, self_expr: vir::ExprGenSnap<_, _>| {
-                                            let inner_snap = inner_impure.ref_to_snap(
-                                                ref_domain.deref_access(self_expr.downcast_ty()),
-                                            );
-                                            inner_expr
-                                                .reify(
-                                                    vcx,
-                                                    ref_domain.cast_to_caller_ctx(
-                                                        inner_snap.downcast_ty(),
-                                                    ),
-                                                )
-                                                .kind
-                                        }),
-                                    )
+                        for inner_expr in inner_indirect.predicate_applications {
+                            predicate_applications.push(vcx.mk_lazy_expr(
+                                "ref_inner_indirect",
+                                vir::TYPE_BOOL,
+                                Box::new(move |vcx, input: ExprInput<'vir>| {
+                                    let inner_snap = inner_impure.ref_to_snap(
+                                        ref_domain.deref_access(input.snap.downcast_ty()),
+                                    );
+                                    let inner_snap =
+                                        vcx.maybe_apply_label(inner_snap, input.heap_label);
+                                    // A reference inside an inactive enum variant has no
+                                    // referent permission. Use its arbitrary snapshot field
+                                    // on that branch, which is ignored by the variant test.
+                                    let inner_snap = if let Some(guard) = input.guard {
+                                        let fallback = ref_domain
+                                            .cast_to_callee_ctx(
+                                                ref_domain.value_access(input.snap.downcast_ty()),
+                                            )
+                                            .upcast_ty();
+                                        vcx.mk_ternary_expr(guard, inner_snap, fallback)
+                                    } else {
+                                        inner_snap
+                                    };
+                                    let inner_snap = if let Some(bindings) = input.bindings {
+                                        let name = vir::vir_format!(
+                                            vcx,
+                                            "_wand_snapshot_{}",
+                                            bindings.borrow().len()
+                                        );
+                                        let decl = vcx.mk_local_decl(name, inner_snap.ty());
+                                        bindings.borrow_mut().push((decl, inner_snap));
+                                        vcx.mk_local_ex(decl)
+                                    } else {
+                                        inner_snap
+                                    };
+                                    inner_expr
+                                        .reify(
+                                            vcx,
+                                            ExprInput {
+                                                snap: ref_domain
+                                                    .cast_to_caller_ctx(inner_snap.downcast_ty()),
+                                                ..input
+                                            },
+                                        )
+                                        .kind
                                 }),
-                        );
+                            ));
+                        }
                     }
                 }
                 TySpecifics::StructLike(data) => {
@@ -183,9 +229,15 @@ impl TaskEncoder for IndirectPredicatesEnc {
                         predicate_applications.push(vcx.mk_lazy_expr(
                             "struct_field_indirect",
                             vir::TYPE_BOOL,
-                            Box::new(move |vcx, self_expr: vir::ExprGenSnap<_, _>| {
+                            Box::new(move |vcx, input: ExprInput<'vir>| {
                                 inner_expr
-                                    .reify(vcx, accessor.read(self_expr.downcast_ty()))
+                                    .reify(
+                                        vcx,
+                                        ExprInput {
+                                            snap: accessor.read(input.snap.downcast_ty()),
+                                            ..input
+                                        },
+                                    )
                                     .kind
                             }),
                         ));
@@ -210,15 +262,29 @@ impl TaskEncoder for IndirectPredicatesEnc {
                     predicate_applications.push(vcx.mk_lazy_expr(
                         "enum_variant_indirect",
                         vir::TYPE_BOOL,
-                        Box::new(move |vcx, self_expr: vir::ExprGenSnap<_, _>| {
-                            let self_csnap = self_expr.downcast_ty();
+                        Box::new(move |vcx, input: ExprInput<'vir>| {
+                            let self_csnap = input.snap.downcast_ty();
                             let self_discr = snap_to_discr_snap.call()(self_csnap);
                             let variant_conjs: Vec<_> = variant_preds
                                 .iter()
                                 .map(|(discr, fields)| {
+                                    let is_variant = vcx.mk_eq_expr(self_discr, *discr);
+                                    let inner_guard =
+                                        Some(input.guard.map_or(is_variant, |guard| {
+                                            vcx.mk_conj(&[guard, is_variant])
+                                        }));
                                     let preds: Vec<_> = fields
                                         .iter()
-                                        .map(|(acc, expr)| expr.reify(vcx, acc.read(self_csnap)))
+                                        .map(|(acc, expr)| {
+                                            expr.reify(
+                                                vcx,
+                                                ExprInput {
+                                                    snap: acc.read(self_csnap),
+                                                    guard: inner_guard,
+                                                    ..input
+                                                },
+                                            )
+                                        })
                                         .collect();
                                     (discr, vcx.mk_conj(&preds))
                                 })

@@ -23,7 +23,11 @@ use vir::Reify;
 
 use crate::encoders::{
     EncodeResult, ImpureEncVisitor, TyUseImpureEnc,
-    ty::{RustTyDecomposition, indirect::IndirectPredicatesEnc, use_impure::TyUseImpure},
+    ty::{
+        RustTyDecomposition,
+        indirect::{ExprInput, IndirectPredicatesEnc},
+        use_impure::TyUseImpure,
+    },
 };
 
 pub(crate) enum WandOldOuter<'vir> {
@@ -97,7 +101,7 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 inv.extend(indirect.predicate_applications.iter().map(|p| {
                     p.reify(
                         self.vcx,
-                        ty_out.ref_to_snap(place_res.expr.expect_predicate()),
+                        ExprInput::current(ty_out.ref_to_snap(place_res.expr.expect_predicate())),
                     )
                 }));
             }
@@ -179,7 +183,7 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         Ok(indirect
             .predicate_applications
             .into_iter()
-            .map(|expr| expr.reify(self.vcx, place_snap))
+            .map(|expr| expr.reify(self.vcx, ExprInput::current(place_snap)))
             .collect::<Vec<_>>())
     }
 

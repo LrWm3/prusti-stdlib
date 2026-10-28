@@ -127,6 +127,16 @@ pub fn mut_iter_tail<'a, T>(_iterator: &core::slice::IterMut<'a, T>) -> Ghost<&'
     panic!("mut_iter_tail is a specification-only marker")
 }
 
+/// Specification-only identities of the references still to be yielded by a
+/// mutable slice iterator, in order. These snapshots do not grant permission
+/// to read or mutate their referents, nor imply distinct physical addresses.
+#[pure]
+#[trusted]
+#[ensures(result.len() == Int::from(mut_slice_len(&*mut_iter_tail(_iterator))))]
+pub fn mut_iter_refs<'a, T>(_iterator: &core::slice::IterMut<'a, T>) -> Seq<&'a mut T> {
+    panic!("mut_iter_refs is a specification-only observation")
+}
+
 /// Traverse an `IntoIterator` while giving its iterator a name for specifications.
 ///
 /// `prusti_for!(iter, for item in values => { ... })` expands to a `match` and

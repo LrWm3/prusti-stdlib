@@ -2,9 +2,11 @@
 
 These historical probes record the steps leading to the current native
 iterator model. The `mut_native_*` regressions in `../src/bin` now exercise a
-logical borrowed tail for `core::slice::IterMut`, with test-only contracts for
-yielding elements and restoring their source. The older identity-only probes
-below do not supply those contracts. Pure mutable-reference snapshots still
+logical borrowed tail for `core::slice::IterMut`, with bundled contracts for
+yielding elements and restoring their source. The older `mutable_ref_snapshot`
+and `expiry_ref_heap` probes below define their own contracts for the same
+methods; their historical commands apply to revisions before bundling, since
+those definitions now conflict with the bundled contracts. Pure mutable-reference snapshots still
 cannot read referent values without permission. A functional invariant for an
 arbitrary updated prefix and reference-containing generic elements remain
 outside the established examples.

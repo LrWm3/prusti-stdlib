@@ -7,6 +7,7 @@ pub mod mem;
 pub mod option;
 pub mod range;
 pub mod slice;
+mod slice_iter_mut;
 
 pub use eq::PureEq;
 

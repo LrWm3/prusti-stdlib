@@ -1009,7 +1009,7 @@ unsupported; a hosted CI run is not claimed.
 | P3-A: explicit key models | M2, logical Map/Set | Key-model interfaces and conditional contracts | Passed locally: 20 checks cover projections, explicitly trusted key laws, collisions, and conditional empty map/set observations. |
 | P3-B: core hash collection operations | P3-A, P2-B expiry support | Conditional map/set contracts and mutable value restoration | Passed locally within the modeled key domain, including generic, non-`Copy`, collision, and negative clients. |
 | **M3: HashMap/HashSet phase complete** | P3-A, P3-B, P2-B expiry support | Map/set contracts and mutable lookup | Passed locally: 51 hash checks cover the modeled core operations and mutable lookup with explicit key laws and same-type queries. |
-| `IterMut` | P2-B and iterator models | Yielded-reference tracking and owner restoration | In progress: a logical borrowed tail gives the native iterator element permissions and expiry restoration under test-only contracts. Bundled contracts remain to be added. |
+| `IterMut` | P2-B and iterator models | Yielded-reference tracking and owner restoration | Core contracts bundled: native construction, forward next, exact length, mutable-slice IntoIterator, simultaneous yields, and source restoration. Whole-prefix loop values and reference-containing elements remain outside this gate. |
 | Adapters, closures, callbacks, general `collect` | Iterator and higher-order contracts | Separate closure/callback and composition work | Deferred from all three gates. |
 | Reference-containing elements, interior mutability, nested collections | Snapshot and ownership extensions | Additional modeling and permission support | Deferred; no unrestricted nested-generic support claim. |
 | Entry APIs, hash-collection iteration, heterogeneous lookup | M3 and additional models | API-specific state, representative, and borrowed-key contracts | Deferred from M3. |
@@ -1093,3 +1093,30 @@ quantified-`old` capture fix also passed all 97 borrow checks on the preceding
 PCG revision. These runs disabled caching and used a 180-second verifier
 limit with one parallel verifier. Native contracts are still test-only at
 this checkpoint.
+
+The subsequent bundled contracts cover `slice::iter_mut`, `IterMut::next`,
+`ExactSizeIterator::len`, and mutable-slice `IntoIterator`. The former fixture
+contracts have been removed. `mut_iter_refs` records reference identities
+without granting referent permissions; element values use the heap-aware tail
+observation. The verified `no_std` helper `set_first_native` exports a first
+element mutation and unchanged-tail guarantee to separate clients. Ordinary
+mutable-slice `for` loops restore source ownership.
+
+The expanded integration run exposed an empty-resource enum case after the
+PCG lifetime fix: `Option<&T>` produced a discriminant-guarded `true` instead
+of no indirect resources. Shared loop invariants consequently demanded a wand
+that had never been packaged. The indirect-predicate encoder now omits the
+enum resource when every variant has no indirect resources. The complete
+specification library and the shared loop proofs verify with this fix.
+
+Bundled integration evidence combines 43 native/legacy checks with the
+18-check shared/loop rerun after the empty-enum fix, plus four vector and four
+zero-sized-loop checks. Replacing superseded results and deduplicating common
+checks leaves 61 passing iterator checks. The initial library failure is
+replaced by its successful complete verification in the shared/loop rerun;
+no timeout or internal error counts as a negative success. A separate
+13-check borrow run also passes after the PCG change. All runs use fresh
+targets, disabled verification caching, overflow and panic checks, and the
+180-second single-verifier configuration. The native gate covers the listed
+core operations and ownership restoration; whole-prefix loop value proofs,
+reference-containing elements, and further iterator methods remain deferred.

@@ -234,7 +234,7 @@ impl PrustiBuiltin {
                 None => match item {
                     // These helpers are encoded as ordinary pure functions.
                     "vec_contents" | "scalar_index_model" | "range_index_model"
-                    | "map_contents" | "set_contents" => return None,
+                    | "map_contents" | "set_contents" | "mut_iter_refs" => return None,
                     // TODO: how to handle this function?
                     "prusti_terminates_trusted" => return None,
                     "forall" => Self::Spec(SpecBuiltin::Forall),

@@ -1,6 +1,4 @@
 use prusti_contracts::*;
-#[path = "../support/native_mut.rs"]
-mod native;
 
 #[requires(mut_slice_len(&*mut_iter_tail(&*it)) == 2)]
 fn wrong(it: &mut core::slice::IterMut<'_, u32>) {

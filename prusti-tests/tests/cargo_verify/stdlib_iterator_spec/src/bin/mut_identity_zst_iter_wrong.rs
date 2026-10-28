@@ -1,10 +1,9 @@
-use iterator_specs::mut_remaining;
 use prusti_contracts::*;
 
 #[requires(values.len() == 2)]
 fn wrong(values: &mut [()]) {
     let mut iterator = values.iter_mut();
-    prusti_assert!(mut_remaining(&iterator).len() == Int::from(2));
+    prusti_assert!(mut_slice_len(&*mut_iter_tail(&iterator)) == 2);
     let first = iterator.next();
     let second = iterator.next();
     if let (Some(first), Some(second)) = (first, second) {

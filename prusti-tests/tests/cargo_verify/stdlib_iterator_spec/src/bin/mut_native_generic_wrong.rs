@@ -1,6 +1,4 @@
 use prusti_contracts::*;
-#[path = "../support/native_mut.rs"]
-mod native;
 
 struct Token { value: u32 }
 

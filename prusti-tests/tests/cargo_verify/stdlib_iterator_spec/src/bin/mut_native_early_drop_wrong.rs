@@ -1,6 +1,4 @@
 use prusti_contracts::*;
-#[path = "../support/native_mut.rs"]
-mod native;
 
 #[requires(values.len() == 1 && values[0] == 1)]
 fn visit(values: &mut [u32]) {

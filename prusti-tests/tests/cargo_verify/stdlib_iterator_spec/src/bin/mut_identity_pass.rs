@@ -1,4 +1,3 @@
-use iterator_specs::{mut_remaining, mut_remaining_refs};
 use prusti_contracts::*;
 
 fn shared_reborrow(value: &mut u32) {
@@ -10,8 +9,8 @@ fn shared_reborrow(value: &mut u32) {
 #[requires(values.len() == 2)]
 fn visit(values: &mut [u32]) {
     let mut iterator = values.iter_mut();
-    let references = ghost! { mut_remaining_refs(&iterator) };
-    prusti_assert!(mut_remaining(&iterator).len() == Int::from(2));
+    let references = ghost! { mut_iter_refs(&iterator) };
+    prusti_assert!(mut_slice_len(&*mut_iter_tail(&iterator)) == 2);
     let first = iterator.next();
     let second = iterator.next();
     match (first, second) {

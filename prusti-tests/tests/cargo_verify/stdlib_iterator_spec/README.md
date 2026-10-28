@@ -1,21 +1,14 @@
 # Iterator contract progress
 
-The fixture also probes `slice::IterMut` separately from the bundled iterator
-model. A trusted, test-only observation describes the unyielded element
-snapshots. Trusted external contracts connect construction to the original
-slice and describe forward advancement, the returned reference's initial
-value, and exhaustion. A separate reference sequence and address-only
-observations connect each yield to its original position without reading the
-referent from a mutable-reference snapshot. Cross-crate clients check two
-simultaneously live mutable yields and their identities; negative clients
-reject an incorrect identity, value, and owner restoration under those limited
-contracts. A runtime check
-also covers the shared address of zero-sized slice elements. Restoring the
-original slice after mutation requires heap-aware permissions. These probes
-do not expose a bundled `IterMut` contract.
+The fixture checks bundled contracts for `slice::iter_mut`, mutable-slice
+`IntoIterator`, and `IterMut`'s `next` and `len`. These are trusted normal-return
+contracts reviewed against the pinned standard-library implementation.
+`mut_iter_refs` observes the identities of the unyielded references in order;
+address-only observations connect each yield to its original position without
+reading its value from a mutable-reference snapshot. Runtime checks also cover
+the shared address of zero-sized slice elements.
 
-The `mut_native_*` cases provide separate test-only contracts for native
-`core::slice::IterMut`. Its encoded representation now includes a logical
+The native iterator's encoded representation includes a logical
 `&mut [T]` tail, observed by the specification-only `mut_iter_tail` marker.
 The tail carries the remaining element permissions; each `next` pledge
 reassembles the yielded element and the final tail at expiry. This supports
@@ -23,6 +16,19 @@ two simultaneous yields, non-`Copy` elements, empty and exhausted iterators,
 and source-slice reuse after mutation. Yielded references remain usable after
 the iterator itself is dropped. A loop also restores ownership of the source;
 it does not yet prove a value invariant for the entire updated prefix.
+
+The `no_std` specification library verifies `set_first_native`, which uses a
+native iterator to update the first element and preserves the remaining
+slice. Separate clients use its exported contract to check the mutation and
+framing. Other cases exercise length queries and ordinary `for` loops over a
+mutable slice without local external specifications. Native mutable iterators
+use heap-aware observations rather than the pure `ModeledIterator` capability
+used by owned and shared iterators.
+
+The vector cases check that `Vec::iter_mut()` composes with the mutable-slice
+reborrow contracts: writing through a yielded reference updates the vector
+and preserves untouched elements. Zero-sized loop cases also exercise
+traversal and restoration without assuming distinct physical addresses.
 
 The marker supplies an identity, not permission to read elements. Negative
 cases check that a saved tail cannot be read after a yield, that incorrect

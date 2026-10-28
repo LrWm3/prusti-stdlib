@@ -1,6 +1,4 @@
 use prusti_contracts::*;
-#[path = "../support/native_mut.rs"]
-mod native;
 
 fn visit(values: &mut [u32]) {
     let len = values.len();

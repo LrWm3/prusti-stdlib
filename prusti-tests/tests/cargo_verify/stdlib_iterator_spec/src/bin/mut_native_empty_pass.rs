@@ -1,6 +1,4 @@
 use prusti_contracts::*;
-#[path = "../support/native_mut.rs"]
-mod native;
 
 #[requires(values.is_empty())]
 fn empty<T>(values: &mut [T]) {

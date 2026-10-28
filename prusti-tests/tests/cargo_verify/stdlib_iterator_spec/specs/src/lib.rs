@@ -4,6 +4,20 @@ extern crate alloc;
 use alloc::vec::Vec;
 use prusti_contracts::{iter_model::ModeledIterator, *};
 
+#[requires(values.len() > 0)]
+#[ensures(values.len() == old(values.len()))]
+#[ensures(values[0] == 7)]
+#[ensures(Seq::from_slice(&*values)[1..] == old(Seq::from_slice(&*values))[1..])]
+pub fn set_first_native(values: &mut [u32]) {
+    let mut iter = values.iter_mut();
+    let first = iter.next();
+    drop(iter);
+    match first {
+        Some(value) => *value = 7,
+        None => { prusti_assert!(false); }
+    }
+}
+
 #[pure]
 #[ensures(result == prusti_contracts::alloc_spec::vec::vec_contents(value))]
 pub fn view<T>(value: &Vec<T>) -> Seq<T> {
@@ -184,50 +198,4 @@ pub fn count_shared_for_source<T>(values: &[T], expected: usize) -> usize {
         count += 1;
     });
     count
-}
-
-/// Test-only snapshot of the unyielded elements of a mutable slice iterator.
-/// This does not describe elements already yielded or restore the source slice.
-#[pure]
-#[trusted]
-pub fn mut_remaining<T>(_iter: &core::slice::IterMut<'_, T>) -> Seq<T> {
-    Seq::new()
-}
-
-/// Test-only identities of the unyielded references. The snapshots do not
-/// contain the values behind those mutable references.
-#[pure]
-#[trusted]
-pub fn mut_remaining_refs<'a, T>(_iter: &core::slice::IterMut<'a, T>) -> Seq<&'a mut T> {
-    Seq::new()
-}
-
-// Reviewed against the pinned implementation: construction starts at the
-// beginning, and each forward step yields the first remaining element.
-#[extern_spec]
-impl<T> [T] {
-    #[trusted]
-    #[ensures(mut_remaining(&result) == old(Seq::from_slice(&*self)))]
-    #[ensures(mut_remaining_refs(&result).len() == Int::from(old(self.len())))]
-    #[ensures(forall(|i: usize| i < old(self.len()) ==>
-        mut_ref_shared_same_address(&*mut_remaining_refs(&result)[i], old(&self[i]))))]
-    fn iter_mut(&mut self) -> core::slice::IterMut<'_, T>;
-}
-
-#[extern_spec]
-impl<'a, T> Iterator for core::slice::IterMut<'a, T> {
-    #[trusted]
-    #[ensures(match &result {
-        Some(value) => old(mut_remaining(&*self)).len() > Int::from(0)
-            && mut_ref_same_address(value, &*old(mut_remaining_refs(&*self))[0])
-            && Ghost::new_ref(&**value) == Ghost::new_ref(&*old(mut_remaining(&*self))[0])
-            && mut_remaining(&*self) == old(mut_remaining(&*self))[1..],
-        None => old(mut_remaining(&*self)).len() == Int::from(0)
-            && mut_remaining(&*self) == old(mut_remaining(&*self)),
-    })]
-    #[ensures(match &result {
-        Some(_) => mut_remaining_refs(&*self) == old(mut_remaining_refs(&*self))[1..],
-        None => mut_remaining_refs(&*self) == old(mut_remaining_refs(&*self)),
-    })]
-    fn next(&mut self) -> Option<&'a mut T>;
 }

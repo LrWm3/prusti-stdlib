@@ -200,6 +200,19 @@ PRUSTI_DUMP_VIPER_PROGRAM=true PRUSTI_LOG_DIR="$PWD/target/stdlib-im2-constructo
 The runner checks the expected generated fixture shape and stops if it has
 changed, rather than treating a different package as evidence.
 
+The [loop-wand runner](../../../../../scripts/test_stdlib_iterator_loop_wand.py)
+uses the same dumped program. It strengthens the existing generated loop
+wand with a processed-prefix relation and the tail-at-expiry suffix, then
+checks the final owner contents. The constructor and `next` pledges establish
+the packages; no new assumptions are added. The runner also checks that `false`
+and an incorrect final value fail. This is a generated-Viper experiment, not
+support for a Rust restoration annotation. Run it after the preceding dump:
+
+```sh
+./x.py exec python3 scripts/test_stdlib_iterator_loop_wand.py \
+  target/stdlib-im2-constructor-input/viper_program/program-check.vpr
+```
+
 `im2_quantified_expiry_valid` and `im2_quantified_expiry_wrong` check a
 two-state pledge inside a quantifier. The valid identity pledge currently
 fails with insufficient permission to read a mutable reference, both before

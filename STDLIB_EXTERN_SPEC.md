@@ -1097,6 +1097,32 @@ and the existing constructor pledge. A deliberately opposite assertion fails.
 This checks only the base case; the generated loop wand still omits the value
 relation on its backedge and exit.
 
+A further experiment strengthens the actual emitted loop wand with a
+processed-prefix and tail-at-expiry relation. The existing constructor and
+`next` expiry pledges then verify full traversal for symbolic lengths, including
+empty input; an incorrect final prefix and `false` are rejected. This is a
+manual transformation of generated Viper, not yet a Rust-facing feature.
+
+Implement the Rust connection in these steps:
+
+1. Introduce a narrowly scoped loop restoration annotation carrying a saved
+   source identity, the live native iterator, and a ghost sequence of completed
+   element snapshots. Its meaning is `source_at_restoration = prefix ++
+   tail_at_expiry`; the annotation itself must never read the borrowed source.
+2. At each loop head, identify the unique PCG restoration edge for that source
+   and tail, and check the saved identity and metadata against the edge. Reject
+   ambiguous, missing, or mismatched resources instead of guessing an edge or
+   adding a second overlapping wand.
+3. Attach the value relation to that edge's existing wand at entry, backedges,
+   and all exits. Capture the source identity, tail reference, and prefix
+   snapshots at the correct labels, and prove the relation in each package
+   using the existing expiry pledges. Preserve the resource-only behavior when
+   no restoration annotation is present.
+4. Verify Rust clients that maintain the prefix sequence, then test symbolic
+   full and early-break exits, wrong prefix and suffix values, `false`, and
+   attempts to read the still-borrowed owner. Extend beyond the first native
+   iterator shape only after these cases verify.
+
 Add explicit-loop clients first, followed by ordinary mutable-slice `for`
 loops and `Vec::iter_mut()`. Cover full traversal, symbolic early break,
 conditional updates with `continue`, empty input, non-`Copy` owned elements,

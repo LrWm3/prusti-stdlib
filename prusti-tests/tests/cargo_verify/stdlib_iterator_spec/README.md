@@ -108,8 +108,8 @@ borrowed-item probe starts with an existing iterator; it does not establish a
 model for constructing a vector of references.
 
 Some lifetime-dependent evidence remains unsupported, including markers for
-shared iterators. P2-C's stated iterator gate passes; M2 integration is still
-in progress. An existing owned iterator of borrowed elements supports both
+shared iterators. P2-C's stated iterator gate and M2 integration pass. An
+existing owned iterator of borrowed elements supports both
 direct `next` calls and the generic wrapper.
 
 The `known_limits/for_count` probe omits the marker and reproduces the original

@@ -562,12 +562,23 @@ clients were checked separately: it processes exactly the smaller of the input
 length and a positive stopping point, including for non-`Copy` elements. The
 return-permission change passed 76 borrow checks, plus a separate negative test
 for a stale owner after a returned mutable borrow. These results satisfy P2-C's
-iterator gate. M2's integration checks remain in progress.
+iterator gate.
 
 An attempted universal-lifetime check using rustc's region-insensitive solver
 was rejected: it accepted an implementation whose nested type argument had a
 hidden `'static` requirement. A negative cross-crate test preserves that case;
 the stricter universal check retains a conservative boundary.
+
+### M2 integration
+
+**Verified locally on 2026-10-27:** the final encoder passed 21 sequence, 21
+Vec, 27 collection, 79 external-specification, and 58 iterator checks. The
+symbolic early-break library and its positive, negative, and runtime clients
+passed separately. The return-permission prototype passed 76 borrow checks;
+the final encoder also rejected a separate stale-owner claim after a returned
+mutable borrow. P2-A, P2-B, and P2-C satisfy their stated gates, so M2 passes.
+The documented boundaries on conditional preconditions, shared loop markers,
+and iterator forwarding remain outside that gate.
 
 ## Phase 1 — External-specification support and unbounded Vec
 
@@ -935,7 +946,7 @@ claimed.
 | P2-A: Vec and shared slices | M1 | Contracts, sequence lemmas, any slice encoding fixes | Verified locally: 27 checks cover symbolic mutations, shared lookup/ranges, splits, swaps, boundaries, ordering, and framing. |
 | P2-B: mutable collection views | P2-A, two-state snapshots | Pledges, expiry, generic reference framing | Verified locally: 74 checks cover slice and Vec views, lookup, indexing, splits, reborrowing, inclusive range state, and negative framing cases. |
 | P2-C: shared and owned iterators | Sequence model, generic trait probes | Opt-in models, refinement, lifetimes, loop support | Passed locally: 58 iterator checks plus focused symbolic early-break checks cover owned and shared traversal, exact lengths, refinement, and loops. |
-| **M2: Vec/slice phase complete** | P2-A, P2-B, P2-C | Integration and cross-crate validation | In progress: component gates pass; Vec and collection integration pass, with sequence integration running. |
+| **M2: Vec/slice phase complete** | P2-A, P2-B, P2-C | Integration and cross-crate validation | Passed locally: component gates and the sequence, Vec, collection, borrow, external-spec, and iterator integration checks pass. |
 | P3-A: explicit key models | M2, logical Map/Set | Key-model interfaces and conditional contracts | Untested; equality/hash/model evidence is enforced. |
 | **M3: HashMap/HashSet phase complete** | P3-A, P3-B, P2-B expiry support | Map/set contracts and mutable lookup | Untested; key, cardinality, framing, and mutable-value cases pass. |
 | `IterMut` | P2-B and iterator models | Yielded-reference tracking and owner restoration | Deferred from M2; investigate after mutable access works. |

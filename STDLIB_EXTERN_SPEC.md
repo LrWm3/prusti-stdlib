@@ -1193,6 +1193,12 @@ predicate must not by itself be treated as proof that a generic value has no
 borrows. Reject shapes that cannot be matched precisely. Check two live shared
 yields, repeated referents, separately expiring projections, conditional calls,
 pledge-only cases, and false assertions before claiming this gap closed.
+PCG's `create_edges_for_shape` maps call-shape argument/result projections to
+labelled operand places, while `WandEnc` stores generalized signature-shape
+projections. The edge does not retain the original shape-node identity; expose
+or reconstruct that correspondence through normalization and generic
+substitution, and reject ambiguous matches rather than equating indices by
+position.
 
 Keep reference identity and referent value separate. `Seq<&mut U>` and the
 iterator identity observations continue to describe reference snapshots;

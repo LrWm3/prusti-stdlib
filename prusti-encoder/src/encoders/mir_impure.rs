@@ -5,7 +5,7 @@ use pcg::{
     borrow_pcg::{
         ArgIdxOrResult, FunctionShapeNode,
         action::BorrowPcgActionKind,
-        borrow_pcg_edge::{BlockedNode, BorrowPcgEdge},
+        borrow_pcg_edge::{BlockedNode, BorrowPcgEdge, BorrowPcgEdgeLike},
         borrow_pcg_expansion::BorrowPcgExpansion,
         edge::{
             abstraction::{AbstractionEdge, FunctionCallOrLoop},
@@ -727,7 +727,10 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
     }
 
     /// The conjuncts of the condition under which `edge` is valid.
-    fn edge_condition(&mut self, edge: &BorrowPcgEdge<'vir>) -> Vec<vir::ExprBool<'vir>> {
+    pub(crate) fn edge_condition(
+        &mut self,
+        edge: &BorrowPcgEdge<'vir>,
+    ) -> Vec<vir::ExprBool<'vir>> {
         let conditions = edge.conditions();
 
         // For each block `b` where the edge is only valid if control flow
@@ -3149,6 +3152,79 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         .collect::<Vec<_>>(),
                 ),
             );
+
+            // Choices made strictly within the body belong to this iteration.
+            // Loop havoc otherwise leaves an untaken arm's flag arbitrary,
+            // allowing its expiry actions to read a call label never reached
+            // in this iteration. Do not reset choices on paths entering the
+            // invariant, exiting the loop, or supporting an edge retained at
+            // the boundary: those can describe earlier iterations.
+            let protected_choices = pcg_state
+                .borrow_pcg()
+                .graph()
+                .edges()
+                .flat_map(|edge| {
+                    edge.conditions()
+                        .all_branch_choices()
+                        .map(|choice| choice.from())
+                        .collect::<Vec<_>>()
+                })
+                .chain(
+                    pcg_state
+                        .borrow_pcg()
+                        .validity_conditions()
+                        .all_branch_choices()
+                        .map(|choice| choice.from()),
+                )
+                .collect::<FxHashSet<_>>();
+            // Dominance in the executable CFG: the Rust CFG still contains
+            // the dead specification arms, which can bypass this invariant.
+            // A block dominated by this head is unreachable from the entry
+            // when paths through the head are excluded.
+            let mut without_head = FxHashSet::default();
+            let mut pending = vec![mir::START_BLOCK];
+            while let Some(from) = pending.pop() {
+                if from == block || !without_head.insert(from) {
+                    continue;
+                }
+                if let Some(to) = self.spec_blocks.spec_arms.switches.get(&from) {
+                    pending.push(*to);
+                } else {
+                    pending.extend(self.body[from].terminator().successors());
+                }
+            }
+            let reset = self
+                .body
+                .basic_blocks
+                .iter_enumerated()
+                .filter(|(from, _)| {
+                    self.loop_analysis().in_loop(*from, loop_id)
+                        && !without_head.contains(from)
+                        && !protected_choices.contains(from)
+                })
+                .flat_map(|(from, data)| {
+                    let successors = data.terminator().successors().unique().collect::<Vec<_>>();
+                    if successors.len() > 1
+                        && successors
+                            .iter()
+                            .all(|to| self.loop_analysis().in_loop(*to, loop_id))
+                    {
+                        successors
+                            .into_iter()
+                            .map(|to| (from, to))
+                            .collect::<Vec<_>>()
+                    } else {
+                        Vec::new()
+                    }
+                })
+                .collect::<Vec<_>>();
+            for (from, to) in reset {
+                let flag = self.from_to_vars.get_or_create(self.vcx, from, to);
+                self.stmt(
+                    self.vcx
+                        .mk_pure_assign_stmt(flag.expr, self.vcx.mk_bool::<false>()),
+                );
+            }
         }
 
         self.current_fpcs = Some(cfpcs);

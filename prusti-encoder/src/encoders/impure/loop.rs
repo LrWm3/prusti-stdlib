@@ -2,6 +2,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use pcg::{
     borrow_pcg::{
+        borrow_pcg_edge::BorrowPcgEdgeLike,
         edge::{
             abstraction::{AbstractionEdge, FunctionCallOrLoop},
             kind::BorrowPcgEdgeKind,
@@ -27,7 +28,7 @@ use prusti_rustc_interface::{
 };
 
 use task_encoder::TaskEncoder;
-use vir::Reify;
+use vir::{CastType, Reify};
 
 use crate::encoders::{
     EncodeResult, ImpureEncVisitor, TyUseImpureEnc,
@@ -124,12 +125,15 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             .borrow_pcg()
             .graph()
             .edges()
-            .filter_map(|edge| match edge.kind() {
-                BorrowPcgEdgeKind::Coupled(edge) => Some(edge.clone()),
-                BorrowPcgEdgeKind::Abstraction(edge @ AbstractionEdge::Loop(_)) => {
-                    Some(edge.clone().into_singleton_coupled_edge())
-                }
-                _ => None,
+            .filter_map(|edge| {
+                let coupled = match edge.kind() {
+                    BorrowPcgEdgeKind::Coupled(edge) => edge.clone(),
+                    BorrowPcgEdgeKind::Abstraction(edge @ AbstractionEdge::Loop(_)) => {
+                        edge.clone().into_singleton_coupled_edge()
+                    }
+                    _ => return None,
+                };
+                Some((coupled, self.edge_condition(&edge.to_owned_edge())))
             })
             .collect();
 
@@ -137,7 +141,7 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         // value to identify its owner. Preserve that value's predicate without
         // also claiming the referent, which remains owned through the iterator.
         let mut reference_frames = FxHashSet::default();
-        for edge in &edges {
+        for (edge, _) in &edges {
             for input in edge.inputs(self.pcg_ctxt()) {
                 let PcgNode::Place(MaybeLabelledPlace::Current(place)) = *input else {
                     continue;
@@ -159,6 +163,26 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         reference_frames.insert(prefix);
                     }
                 }
+            }
+        }
+        // A reference's shallow value identifies its referent after loop
+        // havoc, including owners whose resources are held by a call wand.
+        // Writes through the reference do not change that value. Assigning,
+        // moving, or mutably borrowing the reference slot does, so exclude it.
+        for (local, decl) in self.body.local_decls.iter_enumerated() {
+            let place: Place<'vir> = local.into();
+            if matches!(decl.ty.kind(), ty::Ref(..))
+                && state
+                    .capabilities()
+                    .capability(place, self.pcg_ctxt())
+                    .is_some_and(|cap| !cap.is_write())
+                && !loop_place_usages.iter().any(|(used, usage)| {
+                    used.local == local
+                        && used.projection.is_empty()
+                        && !matches!(usage, pcg::r#loop::PlaceUsageType::Read)
+                })
+            {
+                reference_frames.insert(place);
             }
         }
         let mut snapshots = Vec::new();
@@ -196,7 +220,12 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             let (encoded, snap, _, _) = self.encode_place_with_snap(place)?;
             let task = RustTyDecomposition::from_ty(place.ty(ctxt).ty, self.def_id);
             let ty = self.deps.require_dep::<TyUseImpureEnc>(task)?;
-            inv.push(ty.ref_to_pred(self.vcx, encoded.expr.expect_predicate(), None));
+            if !loop_invariant_place_capabilities
+                .get(&place)
+                .is_some_and(|cap| !cap.is_write())
+            {
+                inv.push(ty.ref_to_pred(self.vcx, encoded.expr.expect_predicate(), None));
+            }
             let name = vir::vir_format!(self.vcx, "_loop_ref{}", self.tmp_ctr);
             self.tmp_ctr += 1;
             let decl = self.vcx.mk_local_decl(name, snap.ty());
@@ -215,8 +244,8 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         // A function-call wand can contain expiry pledges in addition to its
         // resource predicates. Rebuilding it as a resource-only loop wand
         // would request a different wand and lose the value relation.
-        let mut retained_wands = FxHashSet::default();
-        for edge in edges {
+        let mut retained_wands = FxHashMap::default();
+        for (edge, condition) in edges {
             if let PcgCoupledEdgeKind(FunctionCallOrLoop::FunctionCall(call)) = &edge
                 && !self
                     .fpcs_analysis
@@ -225,9 +254,10 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     .in_loop(call.metadata().location().block, loop_id)
             {
                 for (id, wand) in self.encode_function_call_wands(&edge)? {
-                    if retained_wands.insert((call.metadata().location().block, id)) {
-                        inv.push(self.vcx.mk_wand_expr(wand));
-                    }
+                    let (_, guards) = retained_wands
+                        .entry((call.metadata().location().block, id))
+                        .or_insert_with(|| (wand, Vec::new()));
+                    guards.push(self.vcx.mk_conj(&condition));
                 }
                 continue;
             }
@@ -256,6 +286,20 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 );
             }
             inv.push(wand);
+        }
+
+        // Retain each obligation only where its call ran. Several PCG edges
+        // may contribute guards for the same obligation; use their disjunction.
+        for (wand, guards) in retained_wands.into_values() {
+            inv.push(
+                self.vcx
+                    .mk_bin_op_expr(
+                        vir::BinOpKind::Implies,
+                        self.vcx.mk_disj(&guards),
+                        self.vcx.mk_wand_expr(wand),
+                    )
+                    .downcast_ty(),
+            );
         }
 
         Ok((inv, loop_invariant_place_capabilities.into_iter().collect()))

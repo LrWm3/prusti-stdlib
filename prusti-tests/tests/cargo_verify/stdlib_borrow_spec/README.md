@@ -38,6 +38,15 @@ The return-boundary regression covers a reference returned inside `Option`,
 alongside partial moves and an unrelated mutable reference. A negative case
 rejects retaining a stale owner value after a returned mutable reference changes it.
 
+Call-wand regressions cover independent returned borrows, shared expiry
+pledges, conditional calls on alternating loop iterations, and a conditional
+borrow retained across a symbolic-length loop. They include zero iterations,
+`continue`, early `break`, nested loops, and incorrect-value/false controls.
+The `loop_reference_*` cases check that reference framing permits assignments
+and mutable borrows of reference slots without preserving their old values.
+Unsupported generalized-to-concrete resource projection shifts are diagnosed
+explicitly by `call_wand_shifted_projection`.
+
 The trusted ghost-only `scalar_index_model` is interpreted as `Some(i)` for a
 `usize` index `i` and `None` for other sealed `SliceIndex` types. The `usize`
 implementation exposes its classification; other index types remain opaque to

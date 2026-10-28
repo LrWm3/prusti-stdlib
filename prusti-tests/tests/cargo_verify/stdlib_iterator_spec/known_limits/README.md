@@ -6,10 +6,11 @@ logical borrowed tail for `core::slice::IterMut`, with bundled contracts for
 yielding elements and restoring their source. The older `mutable_ref_snapshot`
 and `expiry_ref_heap` probes below define their own contracts for the same
 methods; their historical commands apply to revisions before bundling, since
-those definitions now conflict with the bundled contracts. Pure mutable-reference snapshots still
-cannot read referent values without permission. A functional invariant for an
-arbitrary updated prefix and reference-containing generic elements remain
-outside the established examples.
+those definitions now conflict with the bundled contracts. Pure mutable-reference
+snapshots still cannot read referent values without permission. Whole-prefix
+value proofs now use explicit `body_restore_prefix!` summaries; the unannotated
+loop probes below retain their baseline limitations. Resources for mutable
+references inside concrete or generic elements remain incomplete.
 
 ## IM0: native loop values and references inside elements
 
@@ -64,18 +65,18 @@ Unknown substitutions and partial edge coverage are rejected. This fixes the
 diagnosed duplicate application without claiming support for arbitrary nested
 mutable references or reference-containing collection resources.
 
-Two additional call-wand loop repros remain here. `im3_branch_call_loop` makes
-a branch-selected borrow each iteration and alternates the branch. Its call
-expiry can refer to an unreached heap label after loop havoc
-(`apply.failed:labelled.state.not.reached`). `im3_retained_branch` chooses a
-borrow before the loop and keeps it live across the loop boundary. Conditional
-retention currently reports `not.wellformed:labelled.state.not.reached`: an
-unconditional invariant reads the other branch's call snapshot. Guarding that
-invariant alone exposed a further missing-permission issue in the trial, so
-retention and reference framing both need work. Clearing all untaken branch
-flags was tested and removed: it lost the historical loop-entry condition
-needed to return the owner's permission. These are separate from the fixed
-shared-reference two-yield duplicate application.
+The former `im3_branch_call_loop` and `im3_retained_branch` repros now verify
+and have been promoted to `call_wand_branch_loop_*` and
+`call_wand_retained_branch_*` in the borrow suite. They cover symbolic loop
+lengths, both branch choices, alternating choices, and incorrect-value/false
+controls. Retained call wands keep their edge guards, and unchanged reference
+slots keep their shallow snapshots. At each invariant boundary, internal body
+choices are reset only if the executable CFG places them after that boundary
+and no live boundary condition needs them. Entry and exit history remains
+available for restoration. Additional regressions cover `continue`, early
+`break`, nested loops, and reference slots assigned or mutably borrowed during
+or before a loop. These changes address call lifecycle and reference identity;
+they do not provide the missing inner referent resources described above.
 
 The scalar loop's generated invariant retains the iterator tail permission,
 the source reference's shallow snapshot, and a wand from the tail resource to

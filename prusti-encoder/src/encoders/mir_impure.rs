@@ -2321,17 +2321,65 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         ))
     }
 
+    /// The current summary starts before `next` creates a yielded borrow.
+    /// Until that borrow is part of the wand, reject annotations reached only
+    /// after an iterator has already advanced on an entry path.
+    fn restoration_has_prior_next(
+        &self,
+        loop_id: LoopId,
+        original_head: mir::BasicBlock,
+        annotation_head: mir::BasicBlock,
+    ) -> bool {
+        let tcx = self.vcx.tcx();
+        let mut queue = std::collections::VecDeque::from([original_head]);
+        let mut visited = FxHashSet::default();
+        while let Some(block) = queue.pop_front() {
+            if block == annotation_head
+                || !self.loop_analysis().in_loop(block, loop_id)
+                || !visited.insert(block)
+            {
+                continue;
+            }
+            let terminator = self.body[block].terminator();
+            if let mir::TerminatorKind::Call { func, .. } = &terminator.kind
+                && let ty::FnDef(def_id, _) = *func.ty(self.body, tcx).kind()
+                && tcx.item_name(def_id).as_str() == "next"
+                && tcx.trait_of_assoc(def_id) == tcx.lang_items().iterator_trait()
+            {
+                return true;
+            }
+            if let Some(&live_target) = self.spec_blocks.spec_arms.switches.get(&block) {
+                queue.push_back(live_target);
+            } else {
+                queue.extend(
+                    self.body
+                        .basic_blocks
+                        .successors(block)
+                        .filter(|successor| !self.spec_blocks.spec_arms.blocks.contains(successor)),
+                );
+            }
+        }
+        false
+    }
+
     /// Prepare the selected edge and its iteration-local snapshot variables.
     /// The saved values identify the previous wand after the body advances the
     /// iterator or changes the ghost prefix.
     pub(crate) fn prepare_restoration_frame(
         &mut self,
         original_head: mir::BasicBlock,
+        annotation_head: mir::BasicBlock,
         cfpcs: &PcgBasicBlock<'_, 'vir>,
         loop_id: LoopId,
         spec_block: mir::BasicBlock,
         span: Span,
     ) -> EncodeResult<'vir, LoopRestorationFrame<'vir>, E> {
+        if self.restoration_has_prior_next(loop_id, original_head, annotation_head) {
+            return Err(self.unsupported_rvalue(
+                "body_restore_prefix requires the annotation before iterator advancement".to_string(),
+                span,
+            ));
+        }
         if let Some(frame) = self.loop_restoration_frames.get(&original_head) {
             return Ok(frame.clone());
         }
@@ -2421,7 +2469,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     span,
                 ));
             };
-            self.prepare_restoration_frame(original_head, &cfpcs, loop_id, spec_block, span)?
+            self.prepare_restoration_frame(original_head, head, &cfpcs, loop_id, spec_block, span)?
         };
         let selected_outputs = frame.edge.outputs();
         let outputs = edge.outputs();
@@ -2909,6 +2957,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 }
                 let frame = self.prepare_restoration_frame(
                     original_head,
+                    block,
                     &cfpcs,
                     loop_id,
                     spec_block,

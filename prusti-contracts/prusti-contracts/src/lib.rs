@@ -92,8 +92,9 @@ pub use prusti_contracts_proc_macros::body_invariant;
 /// does not make the borrowed source readable inside the loop.
 ///
 /// Currently this requires one matching singleton loop edge from a local
-/// mutable slice reference to a local native `slice::IterMut`. Ambiguous edges
-/// and unsupported control-flow shapes are rejected.
+/// mutable slice reference to a local native `slice::IterMut`. The annotation
+/// must be reached before any iterator is advanced on the entry path. Ambiguous
+/// edges and unsupported control-flow shapes are rejected.
 pub use prusti_contracts_proc_macros::body_restore_prefix;
 
 /// Internal marker emitted by `body_restore_prefix!`.

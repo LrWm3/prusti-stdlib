@@ -1132,7 +1132,10 @@ Implement the Rust connection in these steps:
    use the saved pre-`next` iterator when applying the previous wand. The
    existing expiry pledges prove full traversal and symbolic early break in
    explicit Rust loops, including empty inputs. Resource-only loops retain
-   their existing behavior.
+   their existing behavior. The first supported shape reaches the annotation
+   before any iterator `next` call on the loop entry path; the named `for`
+   macro reaches it after yielding an element and is rejected until the current
+   yield can be included in the restoration wand.
 4. Complete the remaining Rust acceptance cases: conditional updates and
    `continue`, ordinary `for` loops and Vec views, multiple yields, and
    cross-crate early-break contracts. Keep wrong-prefix, wrong-suffix, `false`, borrowed

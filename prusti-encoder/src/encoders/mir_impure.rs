@@ -2912,6 +2912,12 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                                 Some(vec![error])
                             },
                         );
+                        vcx.handle_error("call.precondition:insufficient.permission", move |_| {
+                            Some(vec![PrustiError::verification(
+                                "insufficient permission to call this function",
+                                span.into(),
+                            )])
+                        });
                         self.stmts(call);
                         let label_post = self.new_label("post");
                         self.call_labels

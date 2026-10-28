@@ -258,6 +258,8 @@ impl<'vir> WandEncOutput<'vir> {
                                 heap_label,
                                 bindings,
                                 guard: None,
+                                extent: None,
+                                binder_depth: 0,
                             },
                         )
                     })

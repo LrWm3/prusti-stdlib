@@ -153,3 +153,30 @@ method witness()
   reindex(ys, 0, 11)
   assert at(ys, 11, 0) == 3 && at(ys, 11, 1) == 8
 }
+
+// Repeated graph views may request an already open/closed resource. Each
+// fallback checks the alternative representation and cannot create it.
+predicate payload(r: Ref) { acc(r.value) }
+predicate indexed_payload(index: Int, r: Ref) { payload(r) }
+
+method repeated_views()
+{
+  var a: Ref := new(value)
+  a.value := 1
+  fold payload(a)
+  fold indexed_payload(0, a)
+  if (perm(indexed_payload(0, a)) > none) { unfold indexed_payload(0, a) }
+  else { assert payload(a) }
+  if (perm(indexed_payload(0, a)) > none) { unfold indexed_payload(0, a) }
+  else { assert payload(a) }
+  unfold payload(a)
+  a.value := 7
+  fold payload(a)
+  if (perm(payload(a)) > none) { fold indexed_payload(0, a) }
+  else { assert indexed_payload(0, a) }
+  if (perm(payload(a)) > none) { fold indexed_payload(0, a) }
+  else { assert indexed_payload(0, a) }
+  unfold indexed_payload(0, a)
+  unfold payload(a)
+  assert a.value == 7
+}

@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 
-use crate::{data::*, gendata::*, CompType};
+use crate::{CompType, data::*, gendata::*};
 
 fn fmt_comma_sep_display<T: Display>(f: &mut Formatter<'_>, els: &[T]) -> FmtResult {
     els.iter().enumerate().try_for_each(|(idx, el)| {
@@ -220,6 +220,7 @@ impl<'vir, Curr, Next> Debug for ExprKindGenData<'vir, Curr, Next> {
             Self::Local(e) => e.fmt(f),
             Self::Old(e) => e.fmt(f),
             Self::PredicateApp(e) => e.fmt(f),
+            Self::PredicatePerm(e) => write!(f, "perm({e:?})"),
             Self::Wand(e) => e.fmt(f),
             Self::Ternary(e) => e.fmt(f),
             Self::UnOp(e) => e.fmt(f),

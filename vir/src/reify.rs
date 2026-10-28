@@ -1,4 +1,4 @@
-use crate::{gendata::*, genrefs::*, refs::*, CompType, VirCtxt};
+use crate::{CompType, VirCtxt, gendata::*, genrefs::*, refs::*};
 
 pub use vir_proc_macro::*;
 
@@ -78,6 +78,9 @@ impl<'vir, Curr: Copy, NextA, NextB> Reify<'vir, Curr>
             ExprKindGenData::FuncApp(v) => vcx.alloc(ExprKindGenData::FuncApp(v.reify(vcx, lctx))),
             ExprKindGenData::PredicateApp(v) => {
                 vcx.alloc(ExprKindGenData::PredicateApp(v.reify(vcx, lctx)))
+            }
+            ExprKindGenData::PredicatePerm(v) => {
+                vcx.alloc(ExprKindGenData::PredicatePerm(v.reify(vcx, lctx)))
             }
             ExprKindGenData::Wand(v) => vcx.alloc(ExprKindGenData::Wand(v.reify(vcx, lctx))),
             ExprKindGenData::Local(v) => match vcx.local_subst(v.name) {

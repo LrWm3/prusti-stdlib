@@ -1280,18 +1280,40 @@ rules. Decide the representation with the IM0 probes and generated Viper;
 specify how the whole owner, an indexed element, a yielded element, and the
 remaining tail divide those resources so they are never counted twice.
 
-The current `IndirectPredicatesEnc` still returns no resources for
-`ArrayLike`, and its `ExprInput` carries a shallow snapshot but no collection
-extent. A slice snapshot has no length: that lives in the enclosing reference's
-metadata. Thread an explicit finite extent from that metadata (or an array's
-constant length) before introducing indexed permissions. Preserve its heap
-label when a mutable container changes. Start with concrete `&mut U` elements
-and prove extraction/reassembly before adding nested references or enum
-variants; a quantified element's heap read must not escape its bound index
-through the existing wand snapshot-binding mechanism. Re-encoding
-`im0_mut_ref_index_write` and `im0_mut_ref_next_write` after the lifecycle fix
-still emits no inner referent resource; saved programs are in
-`target/stdlib-conditional-inner-baseline-logs` (encoding only, not verification).
+The concrete encoder now carries finite indexed resources through slices and
+arrays. Slice bounds come from pointer metadata and fixed-array bounds from
+constant lengths. Quantified conjunctions and variant guards are distributed
+into atomic permissions before sending the AST to Silicon; Prusti does not use
+Viper's parser, which normally performs this transformation. Index-dependent
+heap reads remain under their binder instead of becoming wand-local captures.
+
+PCG indexed lifetime expansions open and close wrappers, and array aggregate
+edges transfer the resources of separately borrowed operands. Restoration reads
+the actual held representation of an element: its typed or generic predicate,
+its expanded struct fields, or the folded array owner. Historical heap labels
+freeze both the snapshot and index. Permission inspection selects an existing
+representation; missing resources fail an explicit assertion. Repeated
+historical expansions therefore do not consume a wrapper twice or manufacture
+permissions. Nested quantified extraction currently receives an explicit
+unsupported diagnostic.
+
+PCG revision `3134385` delays automatic expiry of an outer borrow while its
+referent remains expanded for a field borrow. This is an ordering dependency,
+not another resource consumed by edge removal. It fixes optional-element
+restoration and passed all 249 numbered inputs, four projection-map tests,
+eight function-shape tests, and the annotated nested-field expiry regression.
+
+The `mut_element_{index,array,option,pair}_pass` clients now prove executable
+reads, mutation, framing, and local-array borrow expiry. The pair has two
+independent inner lifetimes. Four runtime clients, nine verification clients
+(including five exact negative diagnostics), and the Rust compilation check
+passed on 2026-10-28; results are in
+`target/stdlib-im3-verified-iterator-logs/results.json`. The full build passed;
+the iterator specification library was also independently reverified (170.79s).
+These tests read referent values through ordinary permission-checked Rust
+expressions into scalar locals. Pure dereferencing of a shallow reference
+snapshot remains unsupported. Native mutable-reference iteration, replacement,
+nested references, and the generic resource interface still require work.
 
 The executable [element-resource model](prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/element_resources.vpr)
 now validates indexed resource wrappers. A direct quantifier over referent
@@ -1305,20 +1327,20 @@ identities, so repeated sequence occurrences do not multiply permissions.
 The model verifies two simultaneous yields, resource/value restoration with a
 symbolic remaining tail, reference replacement, and a symbolic loop that
 renumbers wrappers for a slice view. Replacement transfers the previous
-referent out while transferring the replacement in. Eight negative controls
+referent out while transferring the replacement in. Twelve negative controls
 reject false/stale/wrong-target claims, access to the borrowed owner, duplicated
 mutable resources, writes with shared permission, and a false claim after
-constructing empty resources. Run
+constructing empty resources. Additional controls cover repeated expansion
+views, missing resources on opening and closing, and duplicate wrappers. Run
 `./x.py exec python3 scripts/test_stdlib_element_resources.py`; individual logs
-are in `target/stdlib-im3-resources-logs`. The final model verified in 43.43s;
-the duplicate-resource control verified its expected diagnostic in 8.59s after
-correcting the harness's expected variable name. These are model results, not
-yet evidence that Rust's translation carries the resources correctly.
+are in `target/stdlib-im3-resources-logs`. The extended model verified in 18.60s and all twelve negative controls produced
+their exact expected diagnostic. These model checks complement the concrete
+Rust tests above; they do not establish generic resource transport.
 
 The representation follows Viper's documented
 [quantified-permission injectivity requirement](https://viper.ethz.ch/tutorial/quantified-permissions-injectivity.html)
 and [wand restoration mechanism](https://viper.ethz.ch/tutorial/magic-wands.html).
-The next encoder step uses indexed wrappers around the existing indirect
+The concrete encoder uses indexed wrappers around the existing indirect
 predicate applications, with explicit finite bounds and guarded extraction at
 PCG lifetime-projection expansions. Wrapper bodies retain the original
 resources; opening a wrapper does not assume a new referent permission.

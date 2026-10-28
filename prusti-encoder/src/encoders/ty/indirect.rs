@@ -14,6 +14,8 @@ use crate::encoders::{TyUseImpureEnc, ty::RustTyDecomposition};
 
 use super::{
     data::{StructData, TySpecifics},
+    generics::GArgsTyEnc,
+    indexed::{IndexedResources, quantify_resources},
     rust_ty::RustTyDatas,
     use_pure::{TyUsePureEnc, UsePureTyDatas},
 };
@@ -48,6 +50,9 @@ pub(crate) struct ExprInput<'vir> {
     pub heap_label: Option<vir::OldLabel<'vir>>,
     pub bindings: Option<&'vir SnapshotBindings<'vir>>,
     pub guard: Option<vir::ExprBool<'vir>>,
+    /// A slice's extent is supplied by its enclosing pointer metadata.
+    pub extent: Option<vir::ExprInt<'vir>>,
+    pub binder_depth: usize,
 }
 
 impl<'vir> ExprInput<'vir> {
@@ -57,6 +62,8 @@ impl<'vir> ExprInput<'vir> {
             heap_label: None,
             bindings: None,
             guard: None,
+            extent: None,
+            binder_depth: 0,
         }
     }
 }
@@ -65,12 +72,19 @@ type ExprOutput<'vir> = vir::ExprGenBool<'vir, ExprInput<'vir>, vir::ExprKind<'v
 #[derive(Clone)]
 pub struct IndirectPredicatesEncOutputRef<'vir> {
     pub predicate_applications: Vec<ExprOutput<'vir>>,
+    pub(crate) array: Option<ArrayIndirect<'vir>>,
+}
+
+#[derive(Clone)]
+pub(crate) struct ArrayIndirect<'vir> {
+    pub indexed: IndexedResources<'vir>,
 }
 
 impl<'vir> IndirectPredicatesEncOutputRef<'vir> {
     pub fn new(predicate_applications: Vec<ExprOutput<'vir>>) -> Self {
         Self {
             predicate_applications,
+            array: None,
         }
     }
 }
@@ -111,6 +125,7 @@ impl TaskEncoder for IndirectPredicatesEnc {
             let self_ty_enc = deps.require_dep::<TyUsePureEnc>(ty)?;
             let combined = ty.ty.zip(self_ty_enc);
             let mut predicate_applications = vec![];
+            let mut array_indirect = None;
             // Collects (accessor, indirect_predicate) pairs for the fields of a
             // struct-like (used for structs and enum variants). Fields are
             // recursed into at their concrete (normalized) type.
@@ -149,7 +164,73 @@ impl TaskEncoder for IndirectPredicatesEnc {
                 // Here, `T` could be instantiated as `&'a mut i32` in which
                 // case we would want a wand with `i32(result) --* opaque_behind_a(x)`.
                 // This is why we should return `opaque_behind_a(x)` here.
-                TySpecifics::Param(_) | TySpecifics::Opaque(_) | TySpecifics::ArrayLike(_) => (),
+                TySpecifics::Param(_) | TySpecifics::Opaque(_) => (),
+                TySpecifics::ArrayLike(data) => {
+                    let element_ty = data.0.decompose_normalize(ty.args);
+                    if let Some(proj) =
+                        LifetimeProjection::new(element_ty, task_region, None, PrustiPcgCtxt)
+                    {
+                        let element = deps.require_dep::<IndirectPredicatesEnc>(proj)?;
+                        if !element.predicate_applications.is_empty() {
+                            let element_pure = deps.require_dep::<TyUsePureEnc>(element_ty)?;
+                            let snap = vcx.mk_local_ex(
+                                vcx.mk_local_decl("_element_resource", element_pure.snapshot),
+                            );
+                            let exprs = element
+                                .predicate_applications
+                                .iter()
+                                .map(|expr| expr.reify(vcx, ExprInput::current(snap)))
+                                .collect::<Vec<_>>();
+                            let indexed = IndexedResources::new(deps, vcx.mk_conj(&exprs))?;
+                            let array = self_ty_enc.expect_array();
+                            let usize_ty =
+                                deps.require_dep::<TyUsePureEnc>(RustTyDecomposition::from_ty(
+                                    vcx.tcx().types.usize,
+                                    ty.args.context(),
+                                ))?;
+                            let fixed_extent = if data.slice {
+                                None
+                            } else {
+                                let args = deps.require_dep::<GArgsTyEnc>(ty.args)?;
+                                Some(
+                                    usize_ty
+                                        .expect_primitive()
+                                        .snap_to_prim(args.get_const()[0])
+                                        .downcast_ty(),
+                                )
+                            };
+                            array_indirect = Some(ArrayIndirect {
+                                indexed: indexed.clone(),
+                            });
+                            predicate_applications.push(vcx.mk_lazy_expr(
+                                "array_indirect",
+                                vir::TYPE_BOOL,
+                                Box::new(move |vcx, input: ExprInput<'vir>| {
+                                    let extent = fixed_extent.or(input.extent).expect("slice resource extent");
+                                    let index_decl = vcx.mk_local_decl(vir::vir_format!(vcx, "_resource_index{}", input.binder_depth), vir::TYPE_INT);
+                                    let index = vcx.mk_local_ex(index_decl);
+                                    let snap = array.index(input.snap.downcast_ty(), index);
+                                    let exprs = element.predicate_applications.iter().map(|expr| expr.reify(vcx, ExprInput {
+                                        snap,
+                                        // Index-dependent heap reads remain under this binder.
+                                        bindings: None,
+                                        extent: None,
+                                        binder_depth: input.binder_depth + 1,
+                                        ..input
+                                    })).collect::<Vec<_>>();
+                                    let resources = indexed.wrap(vcx.mk_conj(&exprs), index);
+                                    let zero = vcx.mk_uint::<0>();
+                                    let bounds = vir::expr! { (([zero]) <= (index)) && ((index) < (extent)) };
+                                    quantify_resources(vcx,
+                                        vcx.alloc_slice(&[index_decl.as_dyn()]),
+                                        vcx.alloc_slice(&[vcx.mk_trigger(&[snap.as_dyn()])]),
+                                        bounds, resources,
+                                    ).kind
+                                }),
+                            ));
+                        }
+                    }
+                }
                 TySpecifics::MutRef((data, ref_domain)) => {
                     let inner_ty = data.referent.decompose_context(ty.ty.params, ty.args);
                     let inner_impure = deps.require_dep::<TyUseImpureEnc>(inner_ty)?;
@@ -167,6 +248,9 @@ impl TaskEncoder for IndirectPredicatesEnc {
                     // Collect the indirect predicates of the referent itself
                     // (e.g. of the inner reference in `&'a mut &'b mut i32`).
                     let referent_ty = data.referent.decompose_normalize(ty.args);
+                    let slice_metadata = matches!(referent_ty.ty.specifics, TySpecifics::ArrayLike(ref array) if array.slice)
+                        .then(|| deps.require_dep::<TyUsePureEnc>(RustTyDecomposition::from_ty(vcx.tcx().types.usize, ty.args.context())))
+                        .transpose()?;
                     if let Some(new_projection) =
                         LifetimeProjection::new(referent_ty, task_region, None, PrustiPcgCtxt)
                     {
@@ -213,6 +297,18 @@ impl TaskEncoder for IndirectPredicatesEnc {
                                             ExprInput {
                                                 snap: ref_domain
                                                     .cast_to_caller_ctx(inner_snap.downcast_ty()),
+                                                extent: slice_metadata.as_ref().map(|usize_ty| {
+                                                    usize_ty
+                                                        .expect_primitive()
+                                                        .snap_to_prim(
+                                                            ref_domain
+                                                                .metadata_access(
+                                                                    input.snap.downcast_ty(),
+                                                                )
+                                                                .downcast_ty(),
+                                                        )
+                                                        .downcast_ty()
+                                                }),
                                                 ..input
                                             },
                                         )
@@ -309,7 +405,10 @@ impl TaskEncoder for IndirectPredicatesEnc {
             };
             Ok((
                 (),
-                IndirectPredicatesEncOutputRef::new(predicate_applications),
+                IndirectPredicatesEncOutputRef {
+                    predicate_applications,
+                    array: array_indirect,
+                },
             ))
         })
     }

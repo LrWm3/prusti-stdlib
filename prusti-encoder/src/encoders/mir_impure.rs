@@ -218,6 +218,10 @@ pub(crate) struct PlaceExpr<'vir> {
 }
 
 impl<'vir> PlaceExpr<'vir> {
+    pub(crate) fn metadata(&self) -> Option<vir::ExprSnap<'vir>> {
+        self.metadata
+    }
+
     pub(crate) fn is_snapshot(&self) -> bool {
         self.snap.is_some()
     }
@@ -631,7 +635,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
 
     /// The index argument for folding or unfolding an array-typed place,
     /// if the expansion is guided by an indexing projection.
-    fn expansion_index(&mut self, guide: RepackGuide) -> Option<vir::ExprInt<'vir>> {
+    pub(crate) fn expansion_index(&mut self, guide: RepackGuide) -> Option<vir::ExprInt<'vir>> {
         match guide {
             RepackGuide::Index(index_local, _) => {
                 let index = self
@@ -880,6 +884,11 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 self.stmts(undo);
                 return Ok(());
             }
+            BorrowPcgEdgeKind::BorrowFlow(flow)
+                if matches!(flow.kind(), BorrowFlowEdgeKind::Aggregate { .. }) =>
+            {
+                self.repack_array_aggregate(flow, edge_action.is_add(), label)?;
+            }
             BorrowPcgEdgeKind::Deref(deref) => {
                 let frame = self.fold_or_unfold(
                     deref.blocked_place(),
@@ -893,7 +902,6 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     self.fold_footprint(footprint, edge, frame)?;
                 }
             }
-            // Ignore expansions of lifetime projections for now
             BorrowPcgEdgeKind::BorrowPcgExpansion(expansion)
                 if let PcgNode::Place(base) = expansion.base() =>
             {
@@ -907,6 +915,12 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     && let Some(frame) = frame
                 {
                     self.fold_footprint(footprint, edge, frame)?;
+                }
+            }
+            BorrowPcgEdgeKind::BorrowPcgExpansion(expansion) => {
+                let fold = !edge_action.is_add();
+                if let Some(statements) = self.repack_array_indirect(expansion, fold, label)? {
+                    self.stmts(statements);
                 }
             }
             BorrowPcgEdgeKind::Coupled(

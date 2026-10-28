@@ -66,6 +66,24 @@ def main():
   exhale acc(a.value, 1/2)
   a.value := 7
 """, "There might be insufficient permission to access a.value"),
+        "missing_open": ("""
+  var a: Ref
+  if (perm(indexed_payload(0, a)) > none) { unfold indexed_payload(0, a) }
+  else { assert payload(a) }
+""", "There might be insufficient permission to access payload(a)"),
+        "missing_close": ("""
+  var a: Ref
+  if (perm(payload(a)) > none) { fold indexed_payload(0, a) }
+  else { assert indexed_payload(0, a) }
+""", "There might be insufficient permission to access indexed_payload(0, a)"),
+        "duplicate_wrapper": ("""
+  var a: Ref := new(value)
+  fold payload(a)
+  fold indexed_payload(0, a)
+  if (perm(payload(a)) > none) { fold indexed_payload(1, a) }
+  else { assert indexed_payload(1, a) }
+""", "There might be insufficient permission to access indexed_payload(1, a)"),
+        "repeated_views_false": ("  repeated_views()\n  assert false\n", "Assertion false might not hold"),
         "zero_sized_false": ("""
   var r: Ref
   fold empty_element(0, r)

@@ -1,6 +1,6 @@
 use crate::{
-    callable::*, data::*, debug_info::DebugInfo, gendata::*, genrefs::*, refs::*, typecheck_error,
-    CastType, CompType, HasType, ViperIdent, VirCtxt,
+    CastType, CompType, HasType, ViperIdent, VirCtxt, callable::*, data::*, debug_info::DebugInfo,
+    gendata::*, genrefs::*, refs::*, typecheck_error,
 };
 use cfg_if::cfg_if;
 use prusti_rustc_interface::middle::ty;
@@ -137,7 +137,7 @@ cfg_if! {
                     check_expr_bindings(m, *expr);
                 },
                 ExprKindGenData::Const(..) | ExprKindGenData::Lazy(..) => {},
-                ExprKindGenData::PredicateApp(app) => {
+                ExprKindGenData::PredicateApp(app) | ExprKindGenData::PredicatePerm(app) => {
                     check_predicate_app_bindings(m, app);
                 },
                 ExprKindGenData::AccField( AccFieldGenData { recv, perm, .. }) => {
@@ -524,6 +524,15 @@ impl<'tcx> VirCtxt<'tcx> {
     ) -> ExprGenBool<'vir, Curr, Next> {
         self.alloc(ExprGenData::new(
             self.alloc(ExprKindGenData::PredicateApp(pred_app)),
+        ))
+    }
+
+    pub fn mk_predicate_perm_expr<'vir, Curr, Next>(
+        &'vir self,
+        pred_app: PredicateAppGen<'vir, Curr, Next>,
+    ) -> ExprGenPerm<'vir, Curr, Next> {
+        self.alloc(ExprGenData::new(
+            self.alloc(ExprKindGenData::PredicatePerm(pred_app)),
         ))
     }
 
@@ -1192,7 +1201,11 @@ impl<'tcx> VirCtxt<'tcx> {
         functions: &'vir [DomainFunction<'vir>],
         interpretation: Option<&'vir [&'vir BackendInterpretationPair]>,
     ) -> DomainGen<'vir, Curr, Next> {
-        assert_eq!(typarams.len(), 0, "Domain type parameters are not yet supported (because `FunctionIdn` doesn't have a mechanism to add a type_map for calls)");
+        assert_eq!(
+            typarams.len(),
+            0,
+            "Domain type parameters are not yet supported (because `FunctionIdn` doesn't have a mechanism to add a type_map for calls)"
+        );
         self.alloc(DomainGenData {
             name: name.to_str(),
             typarams,

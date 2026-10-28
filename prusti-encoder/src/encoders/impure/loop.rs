@@ -3,8 +3,10 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use pcg::{
     borrow_pcg::{
         borrow_pcg_edge::BorrowPcgEdgeLike,
+        borrow_pcg_expansion::BorrowPcgExpansion,
         edge::{
             abstraction::{AbstractionEdge, FunctionCallOrLoop},
+            borrow_flow::{BorrowFlowEdge, BorrowFlowEdgeKind},
             kind::BorrowPcgEdgeKind,
         },
         region_projection::{
@@ -31,10 +33,12 @@ use task_encoder::TaskEncoder;
 use vir::{CastType, Reify};
 
 use crate::encoders::{
-    EncodeResult, ImpureEncVisitor, TyUseImpureEnc,
+    EncodeResult, ImpureEncVisitor, TyUseImpureEnc, TyUsePureEnc,
     mir_impure::LoopSnapshotFrame,
+    mir_shared::PureRvalueEnc,
     ty::{
-        RustTyDecomposition,
+        RustTyDecomposition, TySpecifics,
+        generics::GArgsCastEnc,
         indirect::{ExprInput, IndirectPredicatesEnc},
         use_impure::TyUseImpure,
     },
@@ -46,6 +50,272 @@ pub(crate) enum WandOldOuter<'vir> {
 }
 
 impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
+    fn resource_extent(
+        &mut self,
+        metadata: Option<vir::ExprSnap<'vir>>,
+    ) -> EncodeResult<'vir, Option<vir::ExprInt<'vir>>, E> {
+        metadata
+            .map(|metadata| {
+                let ty = RustTyDecomposition::from_ty(self.vcx.tcx().types.usize, self.def_id);
+                let usize_ty = self.deps.require_dep::<TyUsePureEnc>(ty)?;
+                Ok(usize_ty
+                    .expect_primitive()
+                    .snap_to_prim(metadata.downcast_ty())
+                    .downcast_ty())
+            })
+            .transpose()
+    }
+
+    /// Read an element at a historical heap where the slot may still be
+    /// folded into its owner. Every branch reads an actual owned predicate;
+    /// permission inspection only selects its representation.
+    fn indexed_element_snapshot(
+        &mut self,
+        owner: Place<'vir>,
+        element: Place<'vir>,
+        index: vir::ExprInt<'vir>,
+    ) -> EncodeResult<'vir, vir::ExprSnap<'vir>, E> {
+        let (slot, snap, _, child_impure) = self.encode_place_with_snap(element)?;
+        let (parent, mut parent_snap, _, parent_impure) = self.encode_place_with_snap(owner)?;
+        let owner_ty = RustTyDecomposition::from_ty(parent.ty.ty, self.def_id);
+        let parent_pure = self.deps.require_dep::<TyUsePureEnc>(owner_ty)?;
+        let has = |app| {
+            let perm = self.vcx.mk_predicate_perm_expr(app);
+            let none = self.vcx.mk_no_perm();
+            vir::expr! { (none) < (perm) }
+        };
+        // A referent that has not been expanded is held in generic form.
+        if let Some((prefix, mir::ProjectionElem::Deref)) = owner.last_projection() {
+            let prefix_ty = prefix.ty(self.pcg_ctxt()).ty;
+            let prefix_ty = RustTyDecomposition::from_ty(prefix_ty, self.def_id);
+            if let TySpecifics::MutRef(data) = prefix_ty.ty.specifics {
+                let generic = data
+                    .referent
+                    .decompose_context(prefix_ty.ty.params, prefix_ty.args);
+                let generic = self.deps.require_dep::<TyUseImpureEnc>(generic)?;
+                let caster = self
+                    .deps
+                    .require_dep::<GArgsCastEnc<crate::encoders::Pure>>(
+                        data.referent
+                            .decompose_compare_normalize(prefix_ty.ty.params, prefix_ty.args),
+                    )?;
+                let fallback =
+                    caster.cast_to_caller_ctx(generic.ref_to_snap(parent.expr.expect_predicate()));
+                parent_snap = self.vcx.mk_ternary_expr(
+                    has(parent_impure.ref_to_pred_app(parent.expr.expect_predicate(), None)),
+                    parent_snap,
+                    fallback,
+                );
+            }
+        }
+        let parent_element = parent_pure
+            .expect_array()
+            .index(parent_snap.downcast_ty(), index);
+        let TySpecifics::ArrayLike(ref data) = owner_ty.ty.specifics else {
+            unreachable!()
+        };
+        let generic = data.decompose_context(owner_ty.ty.params, owner_ty.args);
+        let generic = self.deps.require_dep::<TyUseImpureEnc>(generic)?;
+        let caster = self
+            .deps
+            .require_dep::<GArgsCastEnc<crate::encoders::Pure>>(
+                data.decompose_compare_normalize(owner_ty.ty.params, owner_ty.args),
+            )?;
+        let generic_snap =
+            caster.cast_to_caller_ctx(generic.ref_to_snap(slot.expr.expect_predicate()));
+        let mut fallback = self.vcx.mk_ternary_expr(
+            has(generic.ref_to_pred_app(slot.expr.expect_predicate(), None)),
+            generic_snap,
+            parent_element,
+        );
+        let child_ty = RustTyDecomposition::from_ty(slot.ty.ty, self.def_id);
+        if let TySpecifics::StructLike(data) = &child_ty.ty.specifics {
+            let pure = self.deps.require_dep::<TyUsePureEnc>(child_ty)?;
+            let mut readable = Vec::new();
+            let mut fields = Vec::new();
+            for (field, access) in data
+                .fields
+                .iter()
+                .zip(&child_impure.expect_structlike().fields)
+            {
+                let addr = access.field_ref(slot.expr.expect_predicate());
+                let concrete = self
+                    .deps
+                    .require_dep::<TyUseImpureEnc>(field.ty().decompose_normalize(child_ty.args))?;
+                let generic = self.deps.require_dep::<TyUseImpureEnc>(
+                    field
+                        .ty()
+                        .decompose_context(child_ty.ty.params, child_ty.args),
+                )?;
+                let caster = self
+                    .deps
+                    .require_dep::<GArgsCastEnc<crate::encoders::Pure>>(
+                        field
+                            .ty()
+                            .decompose_compare_normalize(child_ty.ty.params, child_ty.args),
+                    )?;
+                let concrete_held = has(concrete.ref_to_pred_app(addr, None));
+                let generic_held = has(generic.ref_to_pred_app(addr, None));
+                readable.push(self.vcx.mk_disj(&[concrete_held, generic_held]));
+                fields.push(self.vcx.mk_ternary_expr(
+                    concrete_held,
+                    concrete.ref_to_snap(addr),
+                    caster.cast_to_caller_ctx(generic.ref_to_snap(addr)),
+                ));
+            }
+            let expanded = pure
+                .expect_structlike()
+                .field_snaps_to_snap(fields)
+                .upcast_ty();
+            fallback = self
+                .vcx
+                .mk_ternary_expr(self.vcx.mk_conj(&readable), expanded, fallback);
+        }
+        Ok(self.vcx.mk_ternary_expr(
+            has(child_impure.ref_to_pred_app(slot.expr.expect_predicate(), None)),
+            snap,
+            fallback,
+        ))
+    }
+
+    pub(crate) fn repack_array_aggregate(
+        &mut self,
+        flow: &BorrowFlowEdge<'vir>,
+        fold: bool,
+        label: Option<&'vir str>,
+    ) -> EncodeResult<'vir, (), E> {
+        let BorrowFlowEdgeKind::Aggregate { field_idx, .. } = flow.kind() else {
+            return Ok(());
+        };
+        let target = flow.short();
+        let owner = target.base().place();
+        let ty = owner.ty(self.pcg_ctxt()).ty;
+        if !matches!(ty.kind(), ty::Array(..)) {
+            return Ok(());
+        }
+        // Collapsing an owned place also uses Aggregate edges. Its indexed
+        // lifetime expansion handles those resources; only an aggregate
+        // assignment transfers resources from independent operands here.
+        if let PcgLifetimeProjectionBase::Place(source) = flow.long().base()
+            && Self::get_place(source).prefix_place() == Some(owner)
+        {
+            return Ok(());
+        }
+        let task = RustTyDecomposition::from_ty(ty, self.def_id);
+        let indirect = self
+            .deps
+            .require_dep::<IndirectPredicatesEnc>(target.with_base(task))?;
+        let Some(array) = indirect.array else {
+            return Ok(());
+        };
+        let mut old_outer = WandOldOuter::Label(label);
+        let resources = self.encode_lifetime_projection(flow.long(), &mut old_outer)?;
+        let resources = self.vcx.mk_conj(&resources);
+        let index = self
+            .vcx
+            .mk_const_expr(vir::ConstData::Int(field_idx as u128))
+            .downcast_ty();
+        let stmts = array
+            .indexed
+            .operations(resources, index, fold)
+            .map_err(|reason| self.unsupported_rvalue(reason.to_string(), self.current_span()))?;
+        for stmt in stmts {
+            self.stmt(stmt);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn repack_array_indirect(
+        &mut self,
+        expansion: &BorrowPcgExpansion<'vir>,
+        fold: bool,
+        label: Option<&'vir str>,
+    ) -> EncodeResult<'vir, Option<Vec<vir::Stmt<'vir>>>, E> {
+        let PcgNode::LifetimeProjection(base) = expansion.base() else {
+            return Ok(None);
+        };
+        let ty = base.base().place().ty(self.pcg_ctxt()).ty;
+        if !matches!(ty.kind(), ty::Array(..) | ty::Slice(..)) {
+            return Ok(None);
+        }
+        let task = RustTyDecomposition::from_ty(ty, self.def_id);
+        let indirect = self
+            .deps
+            .require_dep::<IndirectPredicatesEnc>(base.with_base(task))?;
+        let Some(array) = indirect.array else {
+            return Ok(None);
+        };
+        let Some(index) = expansion
+            .guide()
+            .and_then(|guide| self.expansion_index(guide))
+        else {
+            return Err(self.unsupported_rvalue(
+                "non-indexed expansion of collection referent resources".to_string(),
+                self.current_span(),
+            ));
+        };
+        let nodes = expansion.expansion();
+        let [PcgNode::LifetimeProjection(element)] = nodes.as_slice() else {
+            return Err(self.unsupported_rvalue(
+                "non-singleton expansion of collection referent resources".to_string(),
+                self.current_span(),
+            ));
+        };
+        let (_, mut snap, ty, _) = self.encode_place_with_snap(element.base().place())?;
+        let heap_label = match element.label() {
+            Some(LifetimeProjectionLabel::Location(at)) => Some(self.get_location_label(at)),
+            _ => match element.base() {
+                MaybeLabelledPlace::Labelled(place) => Some(self.get_location_label(place.at())),
+                _ => match base.label() {
+                    Some(LifetimeProjectionLabel::Location(at)) => {
+                        Some(self.get_location_label(at))
+                    }
+                    _ => match base.base() {
+                        MaybeLabelledPlace::Labelled(place) => {
+                            Some(self.get_location_label(place.at()))
+                        }
+                        _ => label.map(vir::OldLabel::Label),
+                    },
+                },
+            },
+        };
+        // An opening reads the newly exposed child in the current heap.
+        let heap_label = if fold {
+            heap_label
+        } else {
+            label.map(vir::OldLabel::Label)
+        };
+        if fold || heap_label.is_some() {
+            snap =
+                self.indexed_element_snapshot(base.base().place(), element.base().place(), index)?;
+        }
+        let snap = self.vcx.maybe_apply_label(snap, heap_label);
+        let index = self.vcx.maybe_apply_label(index, heap_label);
+        let task = RustTyDecomposition::from_ty(ty.ty, self.def_id);
+        let child = self
+            .deps
+            .require_dep::<IndirectPredicatesEnc>(element.with_base(task))?;
+        let resources = child
+            .predicate_applications
+            .iter()
+            .map(|expr| {
+                expr.reify(
+                    self.vcx,
+                    ExprInput {
+                        heap_label,
+                        ..ExprInput::current(snap)
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
+        let resources = self.vcx.mk_conj(&resources);
+        let statements = array
+            .indexed
+            .operations(resources, index, fold)
+            .map_err(|reason| self.unsupported_rvalue(reason.to_string(), self.current_span()))?;
+        Ok(Some(statements))
+    }
+
     /// Calculate invariant at loop head
     pub(crate) fn get_loop_inv(
         &mut self,
@@ -104,6 +374,11 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             // for example, if we add an invariant for x and x is a reference, then we also want to add
             // an invariant for *x
             let projs = ctxt.extract_lifetime_projections(place.with_inherent_region(ctxt));
+            let extent = if matches!(ty.ty.kind(), ty::Slice(..)) {
+                self.resource_extent(place_res.expr.metadata())?
+            } else {
+                None
+            };
             for proj in projs {
                 let indirect = self
                     .deps
@@ -112,7 +387,12 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 inv.extend(indirect.predicate_applications.iter().map(|p| {
                     p.reify(
                         self.vcx,
-                        ExprInput::current(ty_out.ref_to_snap(place_res.expr.expect_predicate())),
+                        ExprInput {
+                            extent,
+                            ..ExprInput::current(
+                                ty_out.ref_to_snap(place_res.expr.expect_predicate()),
+                            )
+                        },
                     )
                 }));
             }
@@ -454,6 +734,19 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             }
         };
         let ty = RustTyDecomposition::from_ty(ty.ty, self.def_id);
+        let extent = if matches!(ty.ty.specifics, super::super::ty::TySpecifics::ArrayLike(ref array) if array.slice)
+        {
+            let PcgLifetimeProjectionBase::Place(place) = place else {
+                unreachable!()
+            };
+            let metadata = self.encode_place(Self::get_place(place))?.expr.metadata();
+            let metadata = metadata.map(|metadata| self.configure_old(place, metadata, old_outer));
+            let metadata =
+                metadata.map(|metadata| self.vcx.maybe_apply_label(metadata, heap_label));
+            self.resource_extent(metadata)?
+        } else {
+            None
+        };
         let indirect = self
             .deps
             .require_dep::<IndirectPredicatesEnc>(r.with_base(ty))
@@ -466,6 +759,7 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     self.vcx,
                     ExprInput {
                         heap_label,
+                        extent,
                         ..ExprInput::current(place_snap)
                     },
                 )

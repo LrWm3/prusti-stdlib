@@ -49,6 +49,15 @@ iterator variants for mutable references, holders, and optional references
 all reach the missing-permission error. Shared-reference iteration required a
 separate fix to select the correct call wand, described below.
 
+The concrete indexed-resource extension now verifies the write-only direct
+indexing, local-array, holder, and optional-element probes. Stronger paired
+regressions live in `../src/bin/mut_element_*`: symbolic indices, unchanged
+referents, independent inner lifetimes, and array-owner recovery. Their
+assertions use values read by executable Rust expressions, so they exercise
+heap permissions without treating shallow reference snapshots as values.
+The baseline table above is historical; native mutable-reference yields and
+generic resource transport remain open.
+
 The single-yield and two-yield shared-reference cases now verify in the main
 suite, including reads of the restored slice. Their incorrect-value and
 `false` counterparts are rejected. The two-yield regression is

@@ -34,8 +34,12 @@ The marker supplies an identity, not permission to read elements. Negative
 cases check that a saved tail cannot be read after a yield, that incorrect
 restored values fail, and that zero-sized elements are not assumed to have
 distinct physical addresses. Executable code and ordinary pure functions
-cannot call the marker. Reference-containing element types and additional
-iterator operations are outside these examples.
+cannot call the marker. The `mut_element_*` clients separately check direct indexing of concrete
+mutable-reference elements, fixed arrays, optional references, and structs
+with two independent lifetimes. They prove mutation and framing through
+ordinary Rust scalar reads, with exact wrong-value and false controls. Native
+iteration over mutable-reference elements and generic reference resources
+remain incomplete; additional iterator operations are outside these examples.
 
 A separate untrusted iterator stores an explicit borrowed tail and implements
 `next` with `mem::replace` and `split_at_mut`. Its regressions restore multiple

@@ -172,6 +172,12 @@ saved mutable owner's contents while the iterator is live is rejected for
 insufficient permission. A direct invariant borrowing `values` while its
 iterator is live is still rejected by Rust.
 
+The regular `mut_native_tail_suffix` and `mut_native_tail_early_break` tests
+prove that the live iterator tail is the entry sequence's suffix at the
+processed count, for symbolic lengths and an arbitrary early-break bound.
+Their negative clients reject incorrect exit-count claims. This does not yet
+establish the processed prefix or the restored owner's final contents.
+
 `im2_quantified_expiry_valid` and `im2_quantified_expiry_wrong` check a
 two-state pledge inside a quantifier. The valid identity pledge currently
 fails with insufficient permission to read a mutable reference, both before

@@ -1083,6 +1083,12 @@ and their current diagnostics are recorded under
 Address them without granting access to a borrowed source or treating a
 failed positive proof as evidence for a negative case.
 
+The native iterator now has symbolic-length Rust controls for full traversal
+and early break: at each loop head the remaining tail equals the corresponding
+suffix of the entry sequence, and the exit count is checked. These controls
+include empty inputs and reject incorrect exit-count claims. They observe the
+live tail; they do not prove that the processed prefix is restored to the owner.
+
 Add explicit-loop clients first, followed by ordinary mutable-slice `for`
 loops and `Vec::iter_mut()`. Cover full traversal, symbolic early break,
 conditional updates with `continue`, empty input, non-`Copy` owned elements,

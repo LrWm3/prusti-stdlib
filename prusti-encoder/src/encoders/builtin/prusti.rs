@@ -23,6 +23,7 @@ pub enum Mode {
     Old,
     Rel(usize),
     BeforeExpiry,
+    AfterCall,
 }
 
 /// The pure-only spec builtins (quantifiers, spec blocks, mode markers),
@@ -251,6 +252,8 @@ impl PrustiBuiltin {
                     "rel_end" => Self::Spec(SpecBuiltin::ModeEnd(Mode::Rel(rel_index()))),
                     "before_expiry_start" => Self::Spec(SpecBuiltin::ModeStart(Mode::BeforeExpiry)),
                     "before_expiry_end" => Self::Spec(SpecBuiltin::ModeEnd(Mode::BeforeExpiry)),
+                    "after_call_start" => Self::Spec(SpecBuiltin::ModeStart(Mode::AfterCall)),
+                    "after_call_end" => Self::Spec(SpecBuiltin::ModeEnd(Mode::AfterCall)),
                     other => Self::float_fn(other).unwrap_or_else(|| {
                         todo!("unsupported `prusti_contracts` function {other}")
                     }),

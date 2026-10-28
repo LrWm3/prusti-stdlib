@@ -18,7 +18,7 @@ use vir::{CastType, HasType, Reify};
 
 use crate::encoders::{
     MirLocalDefEncTask, MirPureEnc,
-    mir_pure::{ExprInput, MirPureEncOutput, PureKind},
+    mir_pure::{ExprInput, MirPureEncOutput, PostCapture, PureKind},
     ty::generics::{GArgs, GParams},
 };
 pub struct MirSpecEnc;
@@ -69,17 +69,28 @@ impl<'vir> PledgeExpr<'vir> {
         vir::with_vcx(|vcx| PledgeArgs(vcx.alloc(all_args), result_local))
     }
 
-    pub fn expr(&self, args: PledgeArgs<'vir>) -> vir::ExprBool<'vir> {
+    pub fn expr(
+        &self,
+        args: PledgeArgs<'vir>,
+        capture: Option<PostCapture<'vir>>,
+    ) -> vir::ExprBool<'vir> {
         vir::with_vcx(|vcx| {
             self.expr
-                .reify(vcx, (self.did, args.0, vir::OldLabel::None))
+                .reify(vcx, (self.did, args.0, vir::OldLabel::None, capture))
         })
     }
 
-    pub fn expr_at_label(&self, args: PledgeArgs<'vir>, label: &'vir str) -> vir::ExprBool<'vir> {
+    pub fn expr_at_label(
+        &self,
+        args: PledgeArgs<'vir>,
+        label: &'vir str,
+        capture: Option<PostCapture<'vir>>,
+    ) -> vir::ExprBool<'vir> {
         vir::with_vcx(|vcx| {
-            self.expr
-                .reify(vcx, (self.did, args.0, vir::OldLabel::Label(label)))
+            self.expr.reify(
+                vcx,
+                (self.did, args.0, vir::OldLabel::Label(label), capture),
+            )
         })
     }
 
@@ -291,7 +302,7 @@ impl TaskEncoder for MirSpecEnc {
                     // reification pick up the ambient span, which makes error
                     // positions inside this precondition point at the spec.
                     let expr = vcx.with_span(span, |vcx| {
-                        expr.reify(vcx, (*spec_def_id, pre_args, vir::OldLabel::None))
+                        expr.reify(vcx, (*spec_def_id, pre_args, vir::OldLabel::None, None))
                     });
                     Some((expr, span))
                 })
@@ -325,7 +336,8 @@ impl TaskEncoder for MirSpecEnc {
                             )])
                         });
                         let expr = spec.expr.downcast_ty::<vir::Bool>();
-                        let expr = expr.reify(vcx, (*spec_def_id, post_args, vir::OldLabel::None));
+                        let expr =
+                            expr.reify(vcx, (*spec_def_id, post_args, vir::OldLabel::None, None));
                         let expr = expr.realloc_span();
                         Some((expr, span))
                     })
@@ -439,6 +451,7 @@ impl MirSpecEnc {
             kind: PureKind::Spec {
                 context: ctx.context_def_id,
                 mode: ctx.enc_mode,
+                allow_after_call: type_ == "pledge rhs",
             },
             parent_def_id: def_id,
             gargs: GArgs::new(

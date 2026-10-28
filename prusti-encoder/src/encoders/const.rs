@@ -382,8 +382,11 @@ impl TaskEncoder for ConstEnc {
                         let args = Default::default();
                         Ok((
                             Vec::new(),
-                            expr.reify(vcx, (uneval.def, vcx.alloc(args), vir::OldLabel::None))
-                                .downcast_ty(),
+                            expr.reify(
+                                vcx,
+                                (uneval.def, vcx.alloc(args), vir::OldLabel::None, None),
+                            )
+                            .downcast_ty(),
                         ))
                     } else {
                         todo!("const too generic")

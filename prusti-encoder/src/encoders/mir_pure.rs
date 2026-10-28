@@ -8,6 +8,7 @@ use crate::encoders::{
     ty::{
         RustTyDecomposition,
         generics::{GArgs, GParams},
+        indirect::SnapshotBindings,
         use_pure::{TyUsePure, TyUsePureEnc},
     },
 };
@@ -43,10 +44,17 @@ pub enum MirPureEncError {
     // UnsupportedTerminator,
 }
 
+#[derive(Clone, Copy)]
+pub struct PostCapture<'vir> {
+    pub label: Option<vir::OldLabel<'vir>>,
+    pub bindings: Option<&'vir SnapshotBindings<'vir>>,
+}
+
 pub type ExprInput<'vir> = (
     DefId,
     &'vir FxHashMap<mir::Local, vir::ExprSnap<'vir>>,
     vir::OldLabel<'vir>,
+    Option<PostCapture<'vir>>,
 );
 type ExprRet<'vir> = vir::ExprGenSnap<'vir, ExprInput<'vir>, vir::ExprKind<'vir>>;
 type ExprRetRef<'vir> = vir::ExprGenRef<'vir, ExprInput<'vir>, vir::ExprKind<'vir>>;
@@ -78,6 +86,7 @@ pub enum PureKind {
         /// How the arguments are supplied, which decides whether their
         /// snapshots are deep (see `Enc::impure_context`).
         mode: MirSpecEncMode,
+        allow_after_call: bool,
     },
     Pure,
     Constant(mir::Promoted),
@@ -307,6 +316,8 @@ struct Enc<'vir: 'enc, 'enc> {
     rel0_mode: bool,
     rel1_mode: bool,
     before_expiry_mode: bool,
+    after_call_mode: bool,
+    allow_after_call: bool,
     impure_context: bool,
 }
 
@@ -409,6 +420,14 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
             rel0_mode: false,
             rel1_mode: false,
             before_expiry_mode: false,
+            after_call_mode: false,
+            allow_after_call: matches!(
+                kind,
+                PureKind::Spec {
+                    allow_after_call: true,
+                    ..
+                }
+            ),
             // An impure method's specs and contained spec blocks get shallow
             // argument snapshots (and can take a snapshot of the predicates
             // behind `&mut`s). Pure functions currently also only get shallow
@@ -948,10 +967,11 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                                 if builtin == PrustiBuiltin::MutSliceContents
                                     && (self.rel0_mode
                                         || self.rel1_mode
+                                        || self.after_call_mode
                                         || (self.old_mode && self.before_expiry_mode))
                                 {
                                     return Err(self.unsupported_rvalue(
-                                        "mutable slice contents in a relational or nested temporal expression".to_string(),
+                                        "mutable slice contents in a relational, after_call, or nested temporal expression".to_string(),
                                         self.current_span(),
                                     ));
                                 }
@@ -1339,7 +1359,11 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
     }
 
     fn in_mode(&self) -> bool {
-        self.old_mode || self.rel0_mode || self.rel1_mode || self.before_expiry_mode
+        self.old_mode
+            || self.rel0_mode
+            || self.rel1_mode
+            || self.before_expiry_mode
+            || self.after_call_mode
     }
 
     fn encode_place_with_ref(
@@ -1398,6 +1422,27 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
             }
             if heap_read && self.before_expiry_mode {
                 encoded_place.snap = self.vcx.mk_old_lhs_expr(encoded_place.snap);
+            }
+            if heap_read && self.after_call_mode {
+                let inner = encoded_place.snap;
+                encoded_place.snap = self.vcx.mk_lazy_expr(
+                    "after_call_heap_capture",
+                    inner.ty(),
+                    Box::new(move |vcx, lctx: ExprInput<'vir>| {
+                        use vir::Reify;
+                        let capture = lctx.3.expect("after_call requires a pledge context");
+                        let value = vcx.maybe_apply_label(inner.reify(vcx, lctx), capture.label);
+                        if let Some(bindings) = capture.bindings {
+                            let name =
+                                vir::vir_format!(vcx, "_wand_snapshot_{}", bindings.borrow().len());
+                            let decl = vcx.mk_local_decl(name, value.ty());
+                            bindings.borrow_mut().push((decl, value));
+                            vcx.mk_local_ex(decl).kind
+                        } else {
+                            value.kind
+                        }
+                    }),
+                );
             }
         }
         // Can we ever have the use of a projected place?
@@ -1499,7 +1544,8 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                         .map(|(idx, qvar)| ((idx + 2).into(), vcx.mk_local_ex(qvar))),
                 );
                 let reify_args = vcx.alloc(reify_args);
-                body.reify(vcx, (cl_def_id, reify_args, lctx.2)).kind
+                body.reify(vcx, (cl_def_id, reify_args, lctx.2, lctx.3))
+                    .kind
             }),
         );
         Ok((qvars, body))
@@ -1644,6 +1690,12 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                 return Ok(self.vcx.mk_local_ex(self.vcx.mk_local_decl(name, snapshot)));
             }
             SpecBuiltin::ModeStart(mode) => {
+                if self.after_call_mode {
+                    return Err(self.unsupported_rvalue(
+                        "after_call is only supported in expiry pledges outside other temporal expressions".to_string(),
+                        self.current_span(),
+                    ));
+                }
                 match mode {
                     Mode::Old => {
                         assert!(!self.old_mode);
@@ -1662,6 +1714,15 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                     Mode::BeforeExpiry => {
                         assert!(!self.before_expiry_mode);
                         self.before_expiry_mode = true;
+                    }
+                    Mode::AfterCall => {
+                        if !self.allow_after_call || self.in_mode() {
+                            return Err(self.unsupported_rvalue(
+                                "after_call is only supported in expiry pledges outside other temporal expressions".to_string(),
+                                self.current_span(),
+                            ));
+                        }
+                        self.after_call_mode = true;
                     }
                 }
                 mk_bool(self.vcx.mk_bool::<true>().lift()) // TODO: what value do we return?
@@ -1685,6 +1746,15 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                     Mode::BeforeExpiry => {
                         assert!(self.before_expiry_mode);
                         self.before_expiry_mode = false;
+                    }
+                    Mode::AfterCall => {
+                        if !self.after_call_mode {
+                            return Err(self.unsupported_rvalue(
+                                "after_call with branching expressions is not supported".to_string(),
+                                self.current_span(),
+                            ));
+                        }
+                        self.after_call_mode = false;
                     }
                 }
                 mk_bool(self.vcx.mk_bool::<true>().lift()) // TODO: what value do we return?

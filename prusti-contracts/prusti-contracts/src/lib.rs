@@ -50,6 +50,13 @@ pub use prusti_contracts_proc_macros::requires;
 pub use prusti_contracts_proc_macros::ensures;
 
 /// A macro for writing a pledge on a function.
+///
+/// In a pledge, `after_call(expr)` captures mutable-reference heap reads in
+/// `expr` at the function's normal return. Arguments retain their contract
+/// bindings, and `result` denotes the returned value. The captured snapshot
+/// does not itself grant access to the referenced heap. The marker currently
+/// cannot be nested with temporal operators or contain a heap-dependent
+/// `mut_slice_contents` call.
 pub use prusti_contracts_proc_macros::after_expiry;
 
 /// A macro for writing a two-state pledge on a function.
@@ -723,6 +730,20 @@ pub fn before_expiry_start() {
 #[cfg(feature = "prusti")]
 #[doc(hidden)]
 pub fn before_expiry_end() {
+    panic!()
+}
+
+/// Begin a call-return snapshot in an expiry pledge.
+#[cfg(feature = "prusti")]
+#[doc(hidden)]
+pub fn after_call_start() {
+    panic!()
+}
+
+/// End a call-return snapshot in an expiry pledge.
+#[cfg(feature = "prusti")]
+#[doc(hidden)]
+pub fn after_call_end() {
     panic!()
 }
 

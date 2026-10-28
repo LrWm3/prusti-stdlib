@@ -1799,6 +1799,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 kind: PureKind::Spec {
                     context: self.def_id,
                     mode: MirSpecEncMode::Impure,
+                    allow_after_call: true,
                 },
             })?;
             result.push(PledgeExpr::new(id, spec.expr.downcast_ty::<vir::Bool>()));
@@ -2227,7 +2228,12 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             .expr
             .reify(
                 self.vcx,
-                (self.def_id, self.vcx.alloc(locals), vir::OldLabel::None),
+                (
+                    self.def_id,
+                    self.vcx.alloc(locals),
+                    vir::OldLabel::None,
+                    None,
+                ),
             )
             .downcast_ty();
         let mut local_names = Default::default();
@@ -3001,12 +3007,13 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                                         // including bounds on associated types.
                                         context: self.def_id,
                                         mode: MirSpecEncMode::Impure,
+                                        allow_after_call: false,
                                     },
                                 })?;
-                                let expr = spec
-                                    .expr
-                                    .downcast_ty::<vir::Bool>()
-                                    .reify(vcx, (post, spec_args, vir::OldLabel::Label(label_pre)));
+                                let expr = spec.expr.downcast_ty::<vir::Bool>().reify(
+                                    vcx,
+                                    (post, spec_args, vir::OldLabel::Label(label_pre), None),
+                                );
                                 self.stmt(vcx.mk_inhale_stmt(expr));
                             }
                         }

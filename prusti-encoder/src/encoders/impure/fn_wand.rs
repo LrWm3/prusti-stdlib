@@ -1,6 +1,7 @@
 use crate::encoders::{
     EncodeResult, ImpureEncVisitor, MirLocalDefEncOutput, MirSpecEnc, Pure,
     mir_fn::RustSignature,
+    mir_pure::PostCapture,
     pure::spec::{EncodedPledge, MirSpecEncMode, PledgeArgs, PledgeExpr},
     ty::{
         RustTyDecomposition,
@@ -126,7 +127,13 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
                             span.into(),
                         )])
                     });
-                    package_script.push(vcx.mk_exhale_stmt(expiry_postcondition.expr(args)));
+                    package_script.push(vcx.mk_exhale_stmt(expiry_postcondition.expr(
+                        args,
+                        Some(PostCapture {
+                            label: Some(vir::OldLabel::Label(label)),
+                            bindings: None,
+                        }),
+                    )));
                 });
             }
             wand_packages.push(
@@ -437,11 +444,15 @@ impl<'vir> WandEncOutput<'vir> {
         } else {
             pledge_args
         };
+        let capture = Some(PostCapture {
+            label: output_heap_label.map(vir::OldLabel::Label),
+            bindings: output_bindings,
+        });
         let pledge_expr = |pledge: &PledgeExpr<'vir>| match pledge_old_label {
             Some(label) => {
-                vcx.with_local_subst(generics, || pledge.expr_at_label(spec_args, label))
+                vcx.with_local_subst(generics, || pledge.expr_at_label(spec_args, label, capture))
             }
-            None => pledge.expr(spec_args),
+            None => pledge.expr(spec_args, capture),
         };
         let rhs = wand_data.rhs.iter().filter_map(|g| {
             self.encode_predicates_for_function_shape_node(
@@ -465,8 +476,8 @@ impl<'vir> WandEncOutput<'vir> {
             // context, so they use the caller's snapshots directly rather
             // than the cast and substitution used for the base pledge.
             .chain(extra_pledges.iter().map(|pledge| match pledge_old_label {
-                Some(label) => pledge.expr_at_label(pledge_args, label),
-                None => pledge.expr(pledge_args),
+                Some(label) => pledge.expr_at_label(pledge_args, label, capture),
+                None => pledge.expr(pledge_args, capture),
             }))
             .collect::<Vec<_>>();
         if rhs.is_empty() {

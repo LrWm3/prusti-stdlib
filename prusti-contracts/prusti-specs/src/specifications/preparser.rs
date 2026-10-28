@@ -252,6 +252,9 @@ impl PrustiTokenStream {
                     (TokenTree::Ident(ident), _, _, _) if ident == "before_expiry" => {
                         PrustiToken::ModeMarker(ident.span(), MarkerKind::BeforeExpiry)
                     }
+                    (TokenTree::Ident(ident), _, _, _) if ident == "after_call" => {
+                        PrustiToken::ModeMarker(ident.span(), MarkerKind::AfterCall)
+                    }
                     (TokenTree::Punct(punct), _, _, _)
                         if punct.as_char() == ',' && punct.spacing() == Alone =>
                     {
@@ -892,6 +895,7 @@ enum MarkerKind {
     Old,
     Rel(usize),
     BeforeExpiry,
+    AfterCall,
 }
 
 impl MarkerKind {
@@ -909,6 +913,10 @@ impl MarkerKind {
             MarkerKind::BeforeExpiry => (
                 quote_spanned!(span => ::prusti_contracts::before_expiry_start()),
                 quote_spanned!(span => ::prusti_contracts::before_expiry_end()),
+            ),
+            MarkerKind::AfterCall => (
+                quote_spanned!(span => ::prusti_contracts::after_call_start()),
+                quote_spanned!(span => ::prusti_contracts::after_call_end()),
             ),
         };
         quote_spanned! { full_span => ({
@@ -1296,6 +1304,9 @@ mod tests {
 
     #[test]
     fn test_preparser() {
+        let after_call = parse_prusti("after_call(self.count)".parse().unwrap()).unwrap().to_string();
+        assert!(after_call.contains("after_call_start"));
+        assert!(after_call.contains("after_call_end"));
         assert_eq!(
             parse_prusti("a ==> b".parse().unwrap())
                 .unwrap()

@@ -2155,6 +2155,90 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         Ok(())
     }
 
+    /// Reify the restoration formula using one consistent set of snapshots.
+    /// Callers must choose the capture point for every local before invoking
+    /// this method, including the edge's source and the iterator itself.
+    fn encode_restoration_relation(
+        &mut self,
+        restoration: &super::mir_pure::MirPureEncOutput<'vir>,
+        source: Place<'vir>,
+        iterator: mir::Local,
+        locals: FxHashMap<mir::Local, vir::ExprSnap<'vir>>,
+        span: Span,
+    ) -> EncodeResult<'vir, vir::ExprBool<'vir>, E> {
+        let Some((&source_snap, &iterator_snap)) = locals
+            .get(&source.local)
+            .zip(locals.get(&iterator))
+            .filter(|_| restoration.inputs.iter().all(|local| locals.contains_key(local)))
+        else {
+            return Err(self.unsupported_rvalue(
+                "body_restore_prefix requires snapshots for all restoration inputs".to_string(),
+                span,
+            ));
+        };
+        let slice_ty = source.ty(self.pcg_ctxt()).ty;
+        let iterator_ty = self.body.local_decls[iterator].ty;
+        let TyKind::Adt(_, iterator_args) = iterator_ty.kind() else {
+            unreachable!()
+        };
+        let source_use = self.ty_use_pure(self.body.local_decls[source.local].ty);
+        let source_ref = source_use.expect_mutref();
+        let source_addr = source_ref.deref_access(source_snap.downcast_ty());
+        let source_len = source_ref.metadata_access(source_snap.downcast_ty());
+        let usize_use = self.ty_use_pure(self.vcx.tcx().types.usize);
+        let source_len = usize_use
+            .expect_primitive()
+            .snap_to_prim(source_len.downcast_ty())
+            .downcast_ty::<vir::Int>();
+        let iterator_use = self.ty_use_pure(iterator_ty);
+        let tail = iterator_use
+            .expect_structlike()
+            .fields
+            .last()
+            .unwrap()
+            .read(iterator_snap.downcast_ty());
+        let tail_ty = ty::Ty::new_mut_ref(self.vcx.tcx(), iterator_args.region_at(0), slice_ty);
+        let tail_use = self.ty_use_pure(tail_ty);
+        let tail_ref = tail_use.expect_mutref();
+        let tail_addr = tail_ref.deref_access(tail.downcast_ty());
+        let tail_len = tail_ref.metadata_access(tail.downcast_ty());
+        let tail_len = usize_use
+            .expect_primitive()
+            .snap_to_prim(tail_len.downcast_ty())
+            .downcast_ty::<vir::Int>();
+        let relation = restoration
+            .expr
+            .reify(
+                self.vcx,
+                (
+                    self.def_id,
+                    self.vcx.alloc(locals),
+                    vir::OldLabel::None,
+                    None,
+                ),
+            )
+            .downcast_ty::<vir::Bool>();
+        let mut substitution = RestorationSubstitution {
+            replacements: FxHashMap::from_iter([
+                (super::mir_pure::RESTORE_SOURCE_ADDR, source_addr.as_dyn()),
+                (super::mir_pure::RESTORE_SOURCE_LEN, source_len.as_dyn()),
+                (super::mir_pure::RESTORE_TAIL_ADDR, tail_addr.as_dyn()),
+                (super::mir_pure::RESTORE_TAIL_LEN, tail_len.as_dyn()),
+            ]),
+            seen: FxHashSet::default(),
+            invalid: false,
+        };
+        let relation = relation.fold_with(&mut substitution).unwrap_or(relation);
+        if substitution.invalid || substitution.seen.len() != substitution.replacements.len() {
+            return Err(self.unsupported_rvalue(
+                "body_restore_prefix could not bind the selected iterator restoration edge"
+                    .to_string(),
+                span,
+            ));
+        }
+        Ok(relation)
+    }
+
     /// Find the unique iterator advanced on every path from a loop head to
     /// its body invariant. Only direct local borrows are supported;
     /// ambiguous shapes are deliberately rejected.
@@ -2546,69 +2630,15 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         span,
                     ));
                 }
-                let source_snap = self.encode_place_with_snap(source.local.into())?.1;
-                let source_use = self.ty_use_pure(self.body.local_decls[source.local].ty);
-                let source_ref = source_use.expect_mutref();
-                let source_addr = source_ref.deref_access(source_snap.downcast_ty());
-                let source_len = source_ref.metadata_access(source_snap.downcast_ty());
-                let usize_use = self.ty_use_pure(self.vcx.tcx().types.usize);
-                let source_len = usize_use
-                    .expect_primitive()
-                    .snap_to_prim(source_len.downcast_ty())
-                    .downcast_ty::<vir::Int>();
-                let iterator_snap = self.encode_place_with_snap(iterator.into())?.1;
-                let iterator_use = self.ty_use_pure(iterator_ty);
-                let tail = iterator_use
-                    .expect_structlike()
-                    .fields
-                    .last()
-                    .unwrap()
-                    .read(iterator_snap.downcast_ty());
-                let tail_ty =
-                    ty::Ty::new_mut_ref(self.vcx.tcx(), iterator_args.region_at(0), slice_ty);
-                let tail_use = self.ty_use_pure(tail_ty);
-                let tail_ref = tail_use.expect_mutref();
-                let tail_addr = tail_ref.deref_access(tail.downcast_ty());
-                let tail_len = tail_ref.metadata_access(tail.downcast_ty());
-                let tail_len = usize_use
-                    .expect_primitive()
-                    .snap_to_prim(tail_len.downcast_ty())
-                    .downcast_ty::<vir::Int>();
                 let mut locals = FxHashMap::default();
-                for local in restoration.inputs {
-                    locals.insert(local, self.encode_place_with_snap(local.into())?.1);
+                for local in restoration.inputs.iter().copied().chain([source.local, iterator]) {
+                    if !locals.contains_key(&local) {
+                        locals.insert(local, self.encode_place_with_snap(local.into())?.1);
+                    }
                 }
-                let relation = restoration
-                    .expr
-                    .reify(
-                        self.vcx,
-                        (
-                            self.def_id,
-                            self.vcx.alloc(locals),
-                            vir::OldLabel::None,
-                            None,
-                        ),
-                    )
-                    .downcast_ty::<vir::Bool>();
-                let mut substitution = RestorationSubstitution {
-                    replacements: FxHashMap::from_iter([
-                        (super::mir_pure::RESTORE_SOURCE_ADDR, source_addr.as_dyn()),
-                        (super::mir_pure::RESTORE_SOURCE_LEN, source_len.as_dyn()),
-                        (super::mir_pure::RESTORE_TAIL_ADDR, tail_addr.as_dyn()),
-                        (super::mir_pure::RESTORE_TAIL_LEN, tail_len.as_dyn()),
-                    ]),
-                    seen: FxHashSet::default(),
-                    invalid: false,
-                };
-                let _relation = relation.fold_with(&mut substitution).unwrap_or(relation);
-                if substitution.invalid || substitution.seen.len() != substitution.replacements.len()
-                {
-                    return Err(self.unsupported_rvalue(
-                        "body_restore_prefix could not bind the selected iterator restoration edge"
-                            .to_string(),
-                        span,
-                    ));
-                }
+                let _relation = self.encode_restoration_relation(
+                    &restoration, source, iterator, locals, span,
+                )?;
                 return Err(self.unsupported_rvalue(
                     "body_restore_prefix is not yet supported".to_string(),
                     span,

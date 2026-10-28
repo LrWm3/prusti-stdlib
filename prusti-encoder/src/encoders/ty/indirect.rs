@@ -255,7 +255,11 @@ impl TaskEncoder for IndirectPredicatesEnc {
                         })
                         .collect::<Result<Vec<_>, _>>()?;
 
-                    if variant_preds.is_empty() {
+                    // Enums such as Option<&T> have no indirect mutable
+                    // resources in any variant. Keep that absence explicit,
+                    // rather than emitting a discriminant-guarded `true` that
+                    // makes loop encoding demand a nonexistent resource wand.
+                    if variant_preds.iter().all(|(_, fields)| fields.is_empty()) {
                         return Ok(((), IndirectPredicatesEncOutputRef::new(vec![])));
                     }
 

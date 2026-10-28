@@ -58,9 +58,16 @@ using the returned borrow and rejects a false claim in the returned-`Some` path.
 Run the probe with `--bin take_mut_slice`.
 
 The `region_advance` probe implements `next` by taking and splitting that
-tail. It still reports an insufficient-permission error while packaging the
-iterator's old slice resource, currently exposed as an internal
-backtranslation error. Run it with `--bin region_advance`.
+tail. It now verifies, including a caller that holds two possible results and
+restores the original slice's length. The package builder follows the input's
+original lifetime projection through the split, and captures an index at the
+same saved heap state as its slice. Run it with `--bin region_advance`.
+The `mut_region_functional_pass` regression goes further: the untrusted
+implementation proves its remaining length and `Some`/`None` behavior, and
+the caller proves two yields and exhaustion. It uses `mut_slice_len`, a
+metadata-only observation that does not read the mutable slice's elements.
+These examples do not yet prove the final element values or model the standard
+library's raw-pointer-backed `IterMut`.
 
 Before the edge-replay fix, the wand package script in `take_mut_slice`
 converted the slot's representation a second time and consumed its permission;

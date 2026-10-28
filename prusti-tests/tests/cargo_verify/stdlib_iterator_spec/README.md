@@ -13,6 +13,13 @@ also covers the shared address of zero-sized slice elements. Restoring the
 original slice after mutation requires heap-aware permissions and remains
 open. These probes do not expose a bundled `IterMut` contract.
 
+On 2026-10-27, the iterator suite passed 71 checks at encoder revision
+`98a6bcee2`, with overflow and panic checks enabled and the cache disabled.
+The separately added two-yield zero-sized negative case also produced its
+expected diagnostic. The suite took 656.03 seconds; its longest check was the
+specification library at 32.88 seconds. Rust, Viper, Z3, and PCG versions are
+recorded in the P3-B evidence in `STDLIB_EXTERN_SPEC.md`.
+
 This fixture checks the bundled contracts for `Vec::into_iter` and
 `Iterator::next` on `Vec::IntoIter`. The sealed `ModeledIterator` capability
 observes the remaining sequence. Constructing an iterator preserves the

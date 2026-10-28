@@ -2,12 +2,16 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use pcg::{
     borrow_pcg::{
-        edge::{abstraction::AbstractionEdge, kind::BorrowPcgEdgeKind},
+        edge::{
+            abstraction::{AbstractionEdge, FunctionCallOrLoop},
+            kind::BorrowPcgEdgeKind,
+        },
         region_projection::{
             ExtractRegionsCtxt, LifetimeProjection, LifetimeProjectionLabel,
             PcgLifetimeProjectionBase, PcgLifetimeProjectionBaseLike,
         },
     },
+    coupling::PcgCoupledEdgeKind,
     r#loop::{LoopId, PlaceUsages},
     pcg::{CapabilityKind, EvalStmtPhase, PcgNode},
     results::PcgBasicBlock,
@@ -208,7 +212,24 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 snapshots,
             });
         }
+        // A function-call wand can contain expiry pledges in addition to its
+        // resource predicates. Rebuilding it as a resource-only loop wand
+        // would request a different wand and lose the value relation.
+        let mut retained_calls = FxHashSet::default();
         for edge in edges {
+            if let PcgCoupledEdgeKind(FunctionCallOrLoop::FunctionCall(call)) = &edge
+                && !self
+                    .fpcs_analysis
+                    .analysis()
+                    .loop_analysis()
+                    .in_loop(call.metadata().location().block, loop_id)
+            {
+                if retained_calls.insert(call.metadata().location().block) {
+                    let wands = self.encode_function_call_wands(&edge)?;
+                    inv.extend(wands.into_iter().map(|wand| self.vcx.mk_wand_expr(wand)));
+                }
+                continue;
+            }
             let mut let_bind = WandOldOuter::LetBind(Vec::new());
             let (wand, _) = self.coupled_wand(&edge, &mut let_bind)?;
             let wand = self.with_restoration_wand(wand, &edge, &mut let_bind, false, false)?;

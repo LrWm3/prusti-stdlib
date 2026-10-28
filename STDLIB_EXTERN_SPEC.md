@@ -1138,10 +1138,13 @@ Implement the Rust connection in these steps:
    macro reaches it after yielding an element and is rejected until the current
    yield can be included in the restoration wand.
 4. Complete the remaining Rust acceptance cases: conditional updates and
-   ordinary `for` loops and Vec views. Conditional updates with a `continue`
-   backedge and two simultaneous yields per iteration now verify; wrong-value
-   and `false` controls are rejected. Keep wrong-prefix, wrong-suffix, `false`, borrowed
-   owner, mismatched identity, and mismatched length checks alongside them.
+   ordinary `for` loops and direct `Vec::iter_mut`. Conditional updates with a
+   `continue` backedge, two simultaneous yields per iteration, and an explicit
+   `Vec::as_mut_slice` view now verify; wrong-value and `false` controls are
+   rejected. Direct `Vec::iter_mut` currently has a PCG source edge for the
+   vector rather than a slice and receives an unsupported-feature diagnostic.
+   Keep wrong-prefix, wrong-suffix, `false`, borrowed owner, mismatched identity,
+   and mismatched length checks alongside them.
 
 Add explicit-loop clients first, followed by ordinary mutable-slice `for`
 loops and `Vec::iter_mut()`. Cover full traversal, symbolic early break,

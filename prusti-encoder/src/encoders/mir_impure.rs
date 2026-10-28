@@ -906,9 +906,9 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     self.fold_footprint(footprint, edge, frame)?;
                 }
             }
-            BorrowPcgEdgeKind::Coupled(PcgCoupledEdgeKind(FunctionCallOrLoop::FunctionCall(
-                call_edge,
-            ))) => {
+            BorrowPcgEdgeKind::Coupled(
+                coupled @ PcgCoupledEdgeKind(FunctionCallOrLoop::FunctionCall(call_edge)),
+            ) => {
                 if edge_action.is_add() {
                     // The wand will be introduced by the method call itself.
                     return Ok(());
@@ -921,65 +921,14 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     return Ok(());
                 }
                 to_skip.push(call.location().block);
-                // TODO: this applies *all* the wands for the referenced
-                //   function call; instead we should figure out which
-                //   wand it is based on the edge info.
-                // TODO: closures
-                // Keep the edge's original dependency, even for wandless calls:
-                // it contributes declarations needed by existing proofs.
-                let original_data = call.function_data().unwrap();
-                let original_wands = self.deps.require_dep::<WandEnc>(WandEncTask {
-                    data: original_data,
-                })?;
-                let bb = &self.body[call.location().block];
-                let terminator = bb.terminator.as_ref().unwrap();
-                match &terminator.kind {
-                    mir::TerminatorKind::Call {
-                        func,
-                        args,
-                        destination,
-                        ..
-                    } => {
-                        // Calls not encoded as impure method calls create no
-                        // wands (e.g., a Viper function application).
-                        if self.wandless_calls.contains(&call.location().block) {
-                            return Ok(());
-                        }
-                        let (callee, caller_substs, _) = self.get_call_data(func);
-                        let (callee, call_ctx) = self.gargs(caller_substs).resolve_method(callee);
-                        let wands = if callee == original_data.def_id() {
-                            original_wands
-                        } else {
-                            self.deps.require_dep::<WandEnc>(WandEncTask {
-                                data: pcg::borrow_pcg::FunctionData::new(callee),
-                            })?
-                        };
-
-                        let (_, dest_snap, _, _) =
-                            self.encode_place_with_snap((*destination).into())?;
-                        let wand_args =
-                            std::iter::once(Ok(dest_snap))
-                                .chain(args.iter().map(|operand| {
-                                    self.encode_operand_snap_immediate(&operand.node)
-                                }))
-                                .collect::<EncodeResult<'vir, Vec<_>, E>>()?;
-                        let (label_pre, label_post) = self.call_labels[&call.location().block];
-                        let extra = self.conditional_pledge_exprs(callee, caller_substs)?;
-                        let wands = wands
-                            .call_wands(&wand_args, label_pre, label_post, call_ctx, &extra, self);
-                        for wand in wands {
-                            if let Some(footprint) = &mut footprint {
-                                footprint.parts.push(self.vcx.mk_wand_expr(wand));
-                                // Import the resources before applying the wand.
-                                // In a package, `old[lhs]` in an applied pledge
-                                // must see the complete input heap, including
-                                // resources pulled from the enclosing state.
-                                self.stmt(self.vcx.mk_assert_stmt(wand.lhs));
-                            }
-                            self.stmt(self.vcx.mk_apply_stmt(wand));
-                        }
+                for wand in self.encode_function_call_wands(coupled)? {
+                    if let Some(footprint) = &mut footprint {
+                        footprint.parts.push(self.vcx.mk_wand_expr(wand));
+                        // Import the resources before applying the wand. In a
+                        // package, `old[lhs]` must see the complete input heap.
+                        self.stmt(self.vcx.mk_assert_stmt(wand.lhs));
                     }
-                    _ => unreachable!(),
+                    self.stmt(self.vcx.mk_apply_stmt(wand));
                 }
             }
             BorrowPcgEdgeKind::Coupled(edge)
@@ -1015,6 +964,61 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             edge.to_short_string(self.pcg_ctxt())
         );
         Ok(())
+    }
+
+    /// Reconstruct the wands created by an impure function call, including
+    /// its expiry pledges and call-time snapshots. As at application, this
+    /// currently handles all wands for the call together.
+    pub(crate) fn encode_function_call_wands(
+        &mut self,
+        edge: &PcgCoupledEdgeKind<'vir>,
+    ) -> EncodeResult<'vir, Vec<vir::Wand<'vir>>, E> {
+        let PcgCoupledEdgeKind(FunctionCallOrLoop::FunctionCall(call_edge)) = edge else {
+            unreachable!("expected a function-call edge")
+        };
+        let call = call_edge.metadata();
+        // Preserve the original dependency even for calls that create no wand.
+        let original_data = call.function_data().unwrap();
+        let original_wands = self.deps.require_dep::<WandEnc>(WandEncTask {
+            data: original_data,
+        })?;
+        if self.wandless_calls.contains(&call.location().block) {
+            return Ok(Vec::new());
+        }
+        let bb = &self.body[call.location().block];
+        let mir::TerminatorKind::Call {
+            func,
+            args,
+            destination,
+            ..
+        } = &bb.terminator().kind
+        else {
+            unreachable!("function-call edge must refer to a call")
+        };
+        let (callee, caller_substs, _) = self.get_call_data(func);
+        let (callee, call_ctx) = self.gargs(caller_substs).resolve_method(callee);
+        let wands = if callee == original_data.def_id() {
+            original_wands
+        } else {
+            self.deps.require_dep::<WandEnc>(WandEncTask {
+                data: pcg::borrow_pcg::FunctionData::new(callee),
+            })?
+        };
+        let (_, dest_snap, _, _) = self.encode_place_with_snap((*destination).into())?;
+        let wand_args = std::iter::once(Ok(dest_snap))
+            .chain(
+                args.iter()
+                    .map(|operand| self.encode_operand_snap_immediate(&operand.node)),
+            )
+            .collect::<EncodeResult<'vir, Vec<_>, E>>()?;
+        let Some(&(label_pre, label_post)) = self.call_labels.get(&call.location().block) else {
+            return Err(self.unsupported_rvalue(
+                "loop invariant requires a previously encoded function call".to_string(),
+                self.current_span(),
+            ));
+        };
+        let extra = self.conditional_pledge_exprs(callee, caller_substs)?;
+        Ok(wands.call_wands(&wand_args, label_pre, label_post, call_ctx, &extra, self))
     }
 
     fn pcs_unblock_actions(

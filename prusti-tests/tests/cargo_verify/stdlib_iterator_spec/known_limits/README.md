@@ -119,7 +119,10 @@ this is not yet a proof that Prusti can express the invariant in Rust or that
 its whole-slice encoding implements the same summary. The existing untrusted
 [`mut_region_full_pass`](../src/bin/mut_region_full_pass.rs) and
 [`mut_region_full_wrong`](../src/bin/mut_region_full_wrong.rs) cases separately
-exercise composition of Rust expiry pledges for two yields.
+exercise composition of Rust expiry pledges for two yields. On the current
+encoder, the positive case verified in an isolated 129.10-second run and the
+wrong-value case produced its expected diagnostic in 128.62 seconds. An
+earlier concurrent positive run timed out and is not included as evidence.
 
 The `mutable_ref_snapshot` probe attempts to model the remaining mutable
 references and relate each reference to the corresponding source element:

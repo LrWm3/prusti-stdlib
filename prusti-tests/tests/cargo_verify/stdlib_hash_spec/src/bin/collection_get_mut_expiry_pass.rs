@@ -36,6 +36,14 @@ fn set_ten<K: HashKeyModel>(map: &mut HashMap<K, u32>, key: &K) {
     }
 }
 
+#[requires(!prusti_contracts::std_spec::hash::map_contents(&*map).contains(key.key_model()))]
+#[ensures(prusti_contracts::std_spec::hash::map_contents(&*map)
+    == old(prusti_contracts::std_spec::hash::map_contents(&*map)))]
+fn absent<K: HashKeyModel>(map: &mut HashMap<K, u32>, key: &K) {
+    let result = map.get_mut(key);
+    prusti_assert!(matches!(result, None));
+}
+
 #[trusted]
 fn runtime_mutation() {
     let mut map = HashMap::<Key, u32>::new();
@@ -61,8 +69,7 @@ fn main() {
     let len = map.len();
     prusti_assert!(len == 2);
     let missing = Key { id: 4, ignored: 0 };
-    let result = map.get_mut(&missing);
-    prusti_assert!(matches!(result, None));
+    absent(&mut map, &missing);
     prusti_assert!(*prusti_contracts::std_spec::hash::map_contents(&map)[2] == 10);
     prusti_assert!(*prusti_contracts::std_spec::hash::map_contents(&map)[3] == 9);
     let len = map.len();

@@ -27,7 +27,7 @@ use vir::Reify;
 
 use crate::encoders::{
     EncodeResult, ImpureEncVisitor, TyUseImpureEnc,
-    mir_impure::LoopReferenceFrame,
+    mir_impure::LoopSnapshotFrame,
     ty::{
         RustTyDecomposition,
         indirect::{ExprInput, IndirectPredicatesEnc},
@@ -158,6 +158,36 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             }
         }
         let mut snapshots = Vec::new();
+        // Keep the snapshot stored in an unchanged ghost local. Its predicate
+        // alone would otherwise allow the verifier to forget the value at the
+        // loop boundary. This does not add resources behind that value.
+        for (place, capability) in &loop_invariant_place_capabilities {
+            if capability.is_write() || !place.projection.is_empty() {
+                continue;
+            }
+            let ty::Adt(adt, _) = place.ty(ctxt).ty.kind() else {
+                continue;
+            };
+            if !adt.is_struct()
+                || !prusti_interface::environment::EnvQuery::new(self.vcx.tcx())
+                    .is_adt_in_crate(*adt, "prusti_contracts")
+                || adt.non_enum_variant().name.as_str() != "Ghost"
+                || loop_place_usages.iter().any(|(used, usage)| {
+                    (place.is_prefix_of(**used) || used.is_prefix_of(**place))
+                        && !matches!(usage, pcg::r#loop::PlaceUsageType::Read)
+                })
+            {
+                continue;
+            }
+            let (_, snap, _, _) = self.encode_place_with_snap(*place)?;
+            let name = vir::vir_format!(self.vcx, "_loop_ghost{}", self.tmp_ctr);
+            self.tmp_ctr += 1;
+            let decl = self.vcx.mk_local_decl(name, snap.ty());
+            self.stmt(self.vcx.mk_local_decl_stmt(decl, None));
+            let saved = self.vcx.mk_local_ex(decl);
+            inv.push(self.vcx.mk_eq_expr(snap, saved));
+            snapshots.push((saved, snap));
+        }
         for place in reference_frames {
             let (encoded, snap, _, _) = self.encode_place_with_snap(place)?;
             let task = RustTyDecomposition::from_ty(place.ty(ctxt).ty, self.def_id);
@@ -172,7 +202,7 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             snapshots.push((saved, snap));
         }
         if !snapshots.is_empty() {
-            self.loop_reference_frames.push(LoopReferenceFrame {
+            self.loop_snapshot_frames.push(LoopSnapshotFrame {
                 loop_id,
                 head: self.current_block_label.unwrap(),
                 snapshots,
@@ -208,11 +238,11 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         Ok((inv, loop_invariant_place_capabilities.into_iter().collect()))
     }
 
-    /// Initialise shallow reference snapshots on entry edges only. Capturing
-    /// them on a backedge would erase the equality that the invariant must
-    /// preserve. Pre-loop copies belong to the entry path even when their MIR
-    /// block is syntactically inside the loop.
-    pub(crate) fn capture_loop_reference_frames(&mut self) {
+    /// Initialise shallow reference and ghost snapshots on entry edges only.
+    /// Capturing them on a backedge would erase the equality that the invariant
+    /// must preserve. Pre-loop copies belong to the entry path even when their
+    /// MIR block is syntactically inside the loop.
+    pub(crate) fn capture_loop_snapshot_frames(&mut self) {
         let vcx = self.vcx;
         let analysis = self.fpcs_analysis.analysis().loop_analysis();
         for block in &mut self.encoded_blocks {
@@ -231,7 +261,7 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             };
             let capture = |target: vir::CfgBlockLabel<'vir>, existing: &'vir [vir::Stmt<'vir>]| {
                 let extra = self
-                    .loop_reference_frames
+                    .loop_snapshot_frames
                     .iter()
                     .filter(|frame| frame.head == target && !in_loop(frame.loop_id))
                     .flat_map(|frame| frame.snapshots.iter())

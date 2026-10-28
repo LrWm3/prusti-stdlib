@@ -155,6 +155,23 @@ a fix and was not applied to the encoder. The shared-reference iterator
 probe in IM0 also exhibits repeated use of a constructor wand, which needs
 separate lifetime/coupling analysis before the reference-element gate.
 
+A separate identity probe saves `(&*values) as *const [u32]` in a ghost
+snapshot; it carries no indirect mutable-reference predicates. The loop
+encoder now retains snapshots of unchanged ghost locals across loop
+boundaries, including scalars, sequences, and raw pointers. The regular
+`mut_native_owner_identity_pass` test checks that this saved snapshot matches
+the restored owner's pointer after the loop;
+`mut_native_owner_identity_wrong` rejects a false self-inequality. The
+`ghost_snapshot_loop` and `ghost_snapshot_reassigned` tests check scalar and
+sequence snapshots, including ghost locals assigned inside a loop; the latter
+are not frozen to their entry values. The saved pointer is only an identity:
+it does not permit reading the borrowed contents or imply physical address
+distinctness. The
+regular `mut_native_borrowed_owner_read` regression confirms that reading the
+saved mutable owner's contents while the iterator is live is rejected for
+insufficient permission. A direct invariant borrowing `values` while its
+iterator is live is still rejected by Rust.
+
 `im2_quantified_expiry_valid` and `im2_quantified_expiry_wrong` check a
 two-state pledge inside a quantifier. The valid identity pledge currently
 fails with insufficient permission to read a mutable reference, both before
@@ -163,7 +180,14 @@ postcondition might not hold. These do not form a completed positive/negative
 gate: the valid case must first verify. The generated valid program also
 does not wrap the captured mutable-reference heap read in `old[lhs]`, so
 propagating the expiry context and checking its heap selection are separate
-work from permitting the marker in an expiry closure.
+work from permitting the marker in an expiry closure. When a closure captures
+the mutable reference itself rather than its referent, the encoder now selects
+the expiry heap for reads inside the quantified body. The regular
+`quantified_expiry_heap` and `quantified_expiry_no_permission` regressions
+check valid use, a wrong result, and missing permission. A quantifier placed
+inside `before_expiry` remains unsupported because its body would otherwise
+lose that temporal context; `quantified_expiry_outer_context` checks the
+explicit diagnostic.
 
 The `mutable_ref_snapshot` probe attempts to model the remaining mutable
 references and relate each reference to the corresponding source element:

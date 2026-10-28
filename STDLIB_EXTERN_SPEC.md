@@ -1069,10 +1069,16 @@ Maintain the existing omission of empty resource obligations.
 Initial expressibility probes found that an ordinary loop invariant emits an
 invalid `old[lhs]` when it uses `before_expiry`; invalid contexts now receive
 an explicit diagnostic. A saved source-reference identity also exposes an
-unreached loop-head label and overlapping restoration resources. Finally, a
-valid quantified heap-reading pledge fails permission checking, and its
-generated closure omits the requested `old[lhs]` heap selection. These
-reproducers and their current diagnostics are recorded under
+unreached loop-head label and overlapping restoration resources. A separate
+raw-pointer ghost identity now survives the loop and matches the restored
+owner, without supplying permission to read its contents. The same loop
+framing preserves unchanged ghost scalar and sequence snapshots. Finally, a
+valid quantified heap-reading pledge with a direct dereference capture fails
+permission checking, and its generated closure omits the requested `old[lhs]`
+heap selection. For a closure that captures the mutable reference itself,
+expiry heap selection is propagated into the quantified body; explicit-trigger
+positive and negative clients exercise that narrower case. These reproducers
+and their current diagnostics are recorded under
 [IM2 known limits](prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/README.md#im2-expressing-a-restoration-summary-in-a-loop).
 Address them without granting access to a borrowed source or treating a
 failed positive proof as evidence for a negative case.

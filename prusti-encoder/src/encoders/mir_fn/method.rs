@@ -315,7 +315,7 @@ impl TaskEncoder for MethodEnc {
                     call_labels: Default::default(),
                     wandless_calls: Default::default(),
                     from_to_vars: Default::default(),
-                    loop_reference_frames: Vec::new(),
+                    loop_snapshot_frames: Vec::new(),
 
                     current_block: None,
                     current_block_pres: None,
@@ -344,7 +344,7 @@ impl TaskEncoder for MethodEnc {
                             vcx.alloc_slice(&start_stmts),
                             vcx.mk_goto_stmt(&vir::CfgBlockLabelData::BasicBlock(0)),
                         );
-                        visitor.capture_loop_reference_frames();
+                        visitor.capture_loop_snapshot_frames();
 
                         visitor.encoded_blocks.push(vcx.mk_cfg_block(
                             vcx.alloc(vir::CfgBlockLabelData::End),

@@ -173,7 +173,7 @@ where
     /// created no wand to apply on expiry.
     pub wandless_calls: FxHashSet<mir::BasicBlock>,
     pub from_to_vars: FromToVars<'vir>,
-    pub loop_reference_frames: Vec<LoopReferenceFrame<'vir>>,
+    pub loop_snapshot_frames: Vec<LoopSnapshotFrame<'vir>>,
 
     // for the current basic block
     pub current_fpcs: Option<PcgBasicBlock<'enc, 'vir>>,
@@ -187,7 +187,7 @@ where
     pub encoded_blocks: Vec<vir::CfgBlock<'vir>>, // TODO: use IndexVec ?
 }
 
-pub(crate) struct LoopReferenceFrame<'vir> {
+pub(crate) struct LoopSnapshotFrame<'vir> {
     pub loop_id: LoopId,
     pub head: vir::CfgBlockLabel<'vir>,
     pub snapshots: Vec<(vir::ExprSnap<'vir>, vir::ExprSnap<'vir>)>,

@@ -1009,7 +1009,7 @@ unsupported; a hosted CI run is not claimed.
 | P3-A: explicit key models | M2, logical Map/Set | Key-model interfaces and conditional contracts | Passed locally: 20 checks cover projections, explicitly trusted key laws, collisions, and conditional empty map/set observations. |
 | P3-B: core hash collection operations | P3-A, P2-B expiry support | Conditional map/set contracts and mutable value restoration | Passed locally within the modeled key domain, including generic, non-`Copy`, collision, and negative clients. |
 | **M3: HashMap/HashSet phase complete** | P3-A, P3-B, P2-B expiry support | Map/set contracts and mutable lookup | Passed locally: 51 hash checks cover the modeled core operations and mutable lookup with explicit key laws and same-type queries. |
-| `IterMut` | P2-B and iterator models | Yielded-reference tracking and owner restoration | In progress: test-only construction, advancement, and yielded-reference identity probes; restoring the source requires heap-aware lifetime permissions. |
+| `IterMut` | P2-B and iterator models | Yielded-reference tracking and owner restoration | In progress: an untrusted slice-backed iterator restores two simultaneously yielded elements, but the raw-pointer-backed standard iterator still needs a resource model. |
 | Adapters, closures, callbacks, general `collect` | Iterator and higher-order contracts | Separate closure/callback and composition work | Deferred from all three gates. |
 | Reference-containing elements, interior mutability, nested collections | Snapshot and ownership extensions | Additional modeling and permission support | Deferred; no unrestricted nested-generic support claim. |
 | Entry APIs, hash-collection iteration, heterogeneous lookup | M3 and additional models | API-specific state, representative, and borrowed-key contracts | Deferred from M3. |
@@ -1032,3 +1032,22 @@ used the pinned Rust, Viper, Z3, and Java versions and the verification
 settings recorded above. These checks cover an explicit borrowed tail and
 restoration of its length; they do not establish a functional standard
 `IterMut` model or restoration of its elements.
+
+Subsequent untrusted slice-backed iterator experiments establish element
+restoration, rather than just the length of the remaining slice. For a
+nonempty tail, two simultaneously live results can be mutated and expired in
+either order; the original slice is then proved to contain both mutations.
+A generic variant also restores a non-`Copy` element. Negative cases reject
+incorrect restored values. The `after_call` pledge expression captures the
+post-call tail separately from its state at expiry; mutable-slice observations
+require permission and respect the requested heap state. The separate
+functional iterator test covers exhaustion, while a combined contract for both
+empty and nonempty tails remains a solver timeout, recorded under
+`stdlib_iterator_spec/known_limits`.
+
+This evidence does not yet give `core::slice::IterMut` an element-restoration
+contract: its raw-pointer representation does not carry the slice-backed
+iterator's encoded lifetime resources. In particular, any resource model must
+distinguish logical elements even when zero-sized elements share a physical
+address. Reference-containing generic elements are also outside the verified
+examples.

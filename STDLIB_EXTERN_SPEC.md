@@ -16,6 +16,8 @@ The work proceeds in three phases:
 
 The implementation tasks and proof gates below define the work. The evidence
 sections record completed gates; the roadmap itself does not establish them.
+The next extension is the [mutable-iterator follow-up plan](#mutable-iterator-follow-up-plan),
+covering functional loop results and reference-containing elements.
 
 “Unbounded” means verification for arbitrary symbolic finite lengths, with no
 fixed collection-size bound and no loop unrolling. Rust representability limits
@@ -944,6 +946,220 @@ Defer entry APIs, collection iterators, heterogeneous borrowed-key lookup,
 arbitrary custom hashing behavior without model evidence, and nested mutable
 collection models. Do not promise deterministic iteration order.
 
+## Mutable-iterator follow-up plan
+
+**Status: planned on 2026-10-28; implementation has not started.** Start from
+Prusti `22ea24a6b` and PCG `a4eb802`. The completed native gate supplies
+construction, forward advancement, lengths, simultaneous yields, early
+iterator destruction, and ownership restoration. It does not establish the
+two extensions below. Keep that support claim unchanged until their gates pass.
+
+The execution order is IM0, IM1, IM2, IM3, IM4, then IM5. Functional loops
+first use owned elements with stable snapshots. Reference support then adds
+the separate permissions needed to observe and update nested referents.
+The final gate combines both extensions.
+
+| Step | Deliverable | Depends on | Exit gate |
+|---|---|---|---|
+| IM0 | Minimal reproducers and resource/state inventory | Native core gate | Each gap is classified with a reproducible result and intended positive/negative checks. |
+| IM1 | Proven loop restoration summary | IM0 | The summary composes for arbitrary prefix length and supports exhaustion and early exit in a small proof model. |
+| IM2 | Functional native iterator loops | IM1 | Rust clients prove whole-slice updates and exact early-break prefix/suffix behavior for symbolic lengths. |
+| IM3 | Concrete reference-containing slice elements | IM0; implemented after IM2 | Reads, writes, framing, and expiry work for shared references, mutable references, and reference-bearing structs/enums. |
+| IM4 | Generic and cross-crate reference resources | IM3 | Generic definitions retain the same referent permissions under substitution and through Vec/slice views. |
+| IM5 | Combined acceptance and support update | IM2, IM4 | Symbolic iterator loops over reference-containing elements prove final values and framing across crate boundaries. |
+
+### IM0: Reproduce and locate the missing information
+
+Keep the existing positive and negative native iterator cases as controls.
+Adapt [region_full_loop.rs](prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/region_full_loop.rs)
+to the bundled native iterator and compare its generated Viper with an
+equivalent unrolled client. Use a scalar assignment first, then a non-`Copy`
+owned element. Record exactly where the restoration equations stop surviving
+the loop boundary; a failure with only a length invariant does not by itself
+establish an encoder defect.
+
+Add small, separate probes for slices containing `&U`, `&mut U`,
+`Holder<'b, U> { value: &'b mut U }`, and `Option<&'b mut U>`. Start with
+indexing and reborrowing without an iterator, then add one and two `next`
+calls. Distinguish a missing contract, missing referent permission, incorrect
+heap selection, and incorrect lifetime dependencies before changing code.
+These probes should be valid Rust; the negative proof cases must reach
+verification rather than fail Rust borrow checking.
+
+Two inspected implementation boundaries guide the investigation:
+
+- [coupled_wand](prusti-encoder/src/encoders/impure/wand.rs) constructs loop
+  abstraction wands from resource predicates. This is the first candidate
+  boundary for retaining a value relation between the processed prefix and
+  eventual owner restoration; the reproducer must confirm the required change.
+- [IndirectPredicatesEnc](prusti-encoder/src/encoders/ty/indirect.rs) recurses
+  through concrete mutable references and fields, but currently returns no
+  indirect resources for array-like, parameter, and opaque types. Audit these
+  paths together with [array indexing and framing](prusti-encoder/src/encoders/ty/kinds/arraylike.rs).
+  Absence of a modeled resource must not be interpreted as proof that a type
+  contains no borrows.
+
+**Completion evidence:** retain the minimal probes, emitted proof fragments,
+expected failures, and a short resource ledger identifying which permission
+and heap state each operation requires. These are diagnostics, not new support
+claims.
+
+### IM1: Prove a summary for the processed prefix
+
+Use ghost state `S0` for the entry sequence, `N = |S0|`, a processed count `k`,
+and a sequence `P` of the final snapshots of completed elements. Begin with
+loops whose current yield expires before the next loop head. The desired
+invariant has four parts:
+
+1. `0 <= k <= N`, `|P| = k`, and the remaining tail has length `N - k`.
+2. The untouched tail still has the entry snapshots `S0[k..]`.
+3. `P` satisfies the required transformation, initially every element equals
+   `7`, then a pointwise relation to its entry value with overflow preconditions.
+4. A restoration obligation says that returning the tail's resources restores
+   the source with contents `P ++ tail_at_expiry`.
+
+The fourth part is a permission-bearing implication, or magic wand. Its value
+equation is interpreted when the source becomes readable again. It must not
+permit reading the borrowed source during the loop or equate mutable contents
+across unrelated heap states. `P` initially contains only completed owned
+values, not snapshots pretending to contain the values behind mutable references.
+
+Reuse [spatial_iter.vpr](prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/spatial_iter.vpr)
+as existing proof evidence, then adapt the summary to the current whole-slice
+owner and borrowed-tail representation. Establish the empty-prefix base case,
+composition with one `next` expiry pledge, and both exits. Exhaustion gives
+`source_final = P`; early exit after `k` updates gives
+`source_final = P ++ S0[k..]`. Include an untrusted slice-backed Rust iterator
+as a control for composing the existing expiry pledges.
+
+**Completion evidence:** arbitrary symbolic lengths verify without unrolling
+or assumed update laws. Wrong prefix values, an altered untouched suffix,
+and `false` at exit are rejected. Record whether existing ghost state and
+pledges can express the summary before choosing any new annotation syntax.
+
+### IM2: Carry the summary through Rust loop encoding
+
+If existing specifications can express the IM1 summary, preserve those facts
+through loop abstraction. If they cannot, add a narrowly scoped loop
+restoration specification whose clauses become obligations when packaging
+the loop wand. Settle its syntax only after the IM1 proof model works; do not
+expose an unrestricted future-heap observation or simply assume the desired
+postcondition.
+
+Extend [loop encoding](prusti-encoder/src/encoders/impure/loop.rs), wand
+construction, and package scripts to retain both resources and the summary's
+value clauses. Check initialization on entry edges, composition on backedges,
+and application on every exit. Preserve source identity and entry snapshots
+without recapturing them on backedges. Bind tail and yielded-value observations
+to the appropriate call/expiry heaps, including captures inside quantifiers.
+Maintain the existing omission of empty resource obligations.
+
+Add explicit-loop clients first, followed by ordinary mutable-slice `for`
+loops and `Vec::iter_mut()`. Cover full traversal, symbolic early break,
+conditional updates with `continue`, empty input, non-`Copy` owned elements,
+and two yields within an iteration that both expire before the next head.
+An unchanged-value claim after mutation and a claim that early break updated
+the entire slice must fail for the intended reason.
+
+**Exit gate:** a verified library exports exact final-value and suffix-framing
+contracts for symbolic-length clients; separate positive and negative clients
+consume them. No fixed size, loop unrolling, trusted traversal helper, or new
+`Copy`, `Clone`, or `Eq` requirement substitutes for this proof. Existing
+ownership-only loops continue to work with their current annotations.
+
+### IM3: Track referent permissions inside concrete elements
+
+Keep reference identity and referent value separate. `Seq<&mut U>` and the
+iterator identity observations continue to describe reference snapshots;
+reading `U` requires the corresponding heap permission. Shared references may
+alias, including repeated references to the same referent, and must not gain
+exclusive permissions. Logical ownership must remain independent of physical
+address distinctness for zero-sized types.
+
+Extend lifetime-indexed indirect resources through slices and arrays. A
+collection must carry the resources behind its element references as well as
+the shallow element slots. Use an indexed resource family with finite bounds,
+or an equivalent collection predicate with verified extraction/reassembly
+rules. Decide the representation with the IM0 probes and generated Viper;
+specify how the whole owner, an indexed element, a yielded element, and the
+remaining tail divide those resources so they are never counted twice.
+
+Preserve the relationship between the short container/iterator borrow and
+each inner borrow. Outlives constraints must not collapse distinct lifetimes
+into equality. Reuse the existing heap labels and guarded enum-field handling;
+inactive variants must not require referent permissions. Test writing through
+an inner mutable reference separately from replacing or moving that reference
+out of its slot, since those operations transfer different resources.
+
+**Exit gate:** concrete slice clients read shared referents, mutate inner
+mutable referents, preserve unrelated slots/referents, and recover their
+owners after expiry. Cover repeated shared aliases, optional references,
+multiple independent inner lifetimes, two simultaneous yields, early iterator
+drop, and both valid expiry orders. Negative clients reject stale values,
+claims that the wrong target changed, and heap reads through saved snapshots
+without permission.
+Keep the untrusted explicit-tail iterator as a control before relying on native
+contracts.
+
+### IM4: Preserve those resources through generic calls and Vec views
+
+Give parameter and opaque element types an abstract lifetime-resource
+interface, rather than treating their unknown internals as empty. Check how
+PCG's generalized lifetimes, including regions contained in a type parameter,
+map to the encoder's lifetime projections. Definition-site verification and
+call-site substitution must agree on that interface. Concrete instances must
+justify any conversion between abstract and concrete resources; do not inhale
+referent permissions merely because a generic type is instantiated.
+
+Exercise associated types, nested mutable references, and wrappers with two
+independent lifetime parameters. Extend Vec's slice-view and borrow-expiry
+paths as needed so `Vec<&mut U>` and vectors of reference-bearing structs
+carry the same resources through indexing, reborrowing, and iteration.
+Verify generic helpers once in a separate `no_std` crate, then instantiate
+them with owned values, shared references, mutable references, and non-`Copy`
+referents. Add an explicitly permission-checked referent observation only if
+the existing specification expressions cannot express the required value
+relations; keep pure identity observations shallow.
+
+**Exit gate:** cross-crate clients prove identity preservation, referent
+updates, and framing through generic helpers and Vec/slice conversions.
+Negative cases reject lifetime merging, stale referent values, and duplicated
+or leaked permissions. Unsupported shapes receive a clear diagnostic rather
+than silently dropping their resources. Document the precise supported type
+shapes instead of claiming all nested types are supported.
+
+### IM5: Combine the extensions and close the gates
+
+Revisit the IM1 summary for elements containing references: its state must
+distinguish completed slot identities from the heap-dependent values and
+resources of their referents. A shallow `P: Seq<&mut U>` alone is not a
+record of those referent values. Prove symbolic loops that update all inner
+referents and loops that update only a prefix while preserving the remaining
+references and referents. Cover slices, Vec views, reference-bearing wrappers,
+and separate library/client crates, with matching wrong-value and wrong-frame
+cases. Include empty and zero-sized cases and a negative consistency check
+after traversal.
+
+Run focused paired tests during each step, then the full iterator and borrow
+suites and relevant sequence, Vec, collection, and external-specification
+suites at acceptance. Run PCG shape tests and the numbered corpus whenever
+PCG changes. Use fresh targets, disabled caching, overflow/panic checks, and
+the current 180-second limit with one parallel verifier. A timeout, crash,
+unsupported-feature error, or wrong diagnostic is an unresolved gate, not a
+successful negative proof. Reproduce solver failures before changing limits.
+
+Commit and push each working step in logical chunks: proof probes and model,
+loop encoding, concrete resource support, generic/cross-crate support, then
+combined contracts and evidence. Update this plan with revisions, commands,
+timings, and exact remaining blockers. Completion requires both functional
+and permission checks; runtime tests alone establish neither.
+
+Interior mutability, arbitrary recursive containers, callbacks/adapters,
+additional iterator methods, and yields retained across an unbounded number
+of loop backedges remain separate follow-ups. The gates above cover finite
+reference-bearing shapes and yields completed within each iteration; broader
+claims require their own ownership and loop invariants.
+
 ## Validation and delivery rules
 
 ### Evidence required for every gate
@@ -956,8 +1172,9 @@ tests establish generic behavior and which are only concrete regressions.
 A negative test must fail for the intended verification or diagnostic reason.
 Crashes, unsupported-feature errors, timeouts, and `known-failure` annotations do
 not count as rejection of an incorrect proof. A timeout also does not justify a
-fixed-length fallback. Track timings against the existing 90-second per-file
-verifier timeout before changing any limits.
+fixed-length fallback. Track timings against the current 180-second per-file
+verifier timeout with one parallel verifier before changing any limits; the
+earlier 90-second runs remain historical evidence.
 
 For every blocker, retain a minimal reproducer and classify it as a specification,
 resolution, snapshot, borrowing, trait-refinement, or solver-encoding issue. Record
@@ -1010,8 +1227,10 @@ unsupported; a hosted CI run is not claimed.
 | P3-B: core hash collection operations | P3-A, P2-B expiry support | Conditional map/set contracts and mutable value restoration | Passed locally within the modeled key domain, including generic, non-`Copy`, collision, and negative clients. |
 | **M3: HashMap/HashSet phase complete** | P3-A, P3-B, P2-B expiry support | Map/set contracts and mutable lookup | Passed locally: 51 hash checks cover the modeled core operations and mutable lookup with explicit key laws and same-type queries. |
 | `IterMut` | P2-B and iterator models | Yielded-reference tracking and owner restoration | Core contracts bundled: native construction, forward next, exact length, mutable-slice IntoIterator, simultaneous yields, and source restoration. Whole-prefix loop values and reference-containing elements remain outside this gate. |
+| Functional `IterMut` loops (IM1–IM2) | Native core gate, IM0 | Prefix summaries and functional loop restoration obligations | Planned: symbolic full-traversal and early-break value/framing proofs, followed by combined acceptance in IM5. |
+| Reference-containing slice/Vec elements (IM3–IM4) | Native core gate, IM0 | Indexed referent resources and generic lifetime-resource interfaces | Planned: concrete and cross-crate generic reference shapes; combine with functional loops in IM5 before extending the support claim. |
 | Adapters, closures, callbacks, general `collect` | Iterator and higher-order contracts | Separate closure/callback and composition work | Deferred from all three gates. |
-| Reference-containing elements, interior mutability, nested collections | Snapshot and ownership extensions | Additional modeling and permission support | Deferred; no unrestricted nested-generic support claim. |
+| Interior mutability and general nested/recursive collections | Snapshot and ownership extensions beyond IM3–IM5 | Additional modeling and permission support | Deferred; the reference-element plan does not establish unrestricted nested-generic support. |
 | Entry APIs, hash-collection iteration, heterogeneous lookup | M3 and additional models | API-specific state, representative, and borrowed-key contracts | Deferred from M3. |
 
 On 2026-10-28, the lifetime-preservation change at `e9dd7929c` passed the

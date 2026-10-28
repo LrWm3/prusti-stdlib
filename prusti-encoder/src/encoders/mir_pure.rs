@@ -14,6 +14,7 @@ use crate::encoders::{
 };
 use itertools::Itertools;
 use pcg::utils::Place;
+use prusti_interface::PrustiError;
 use prusti_rustc_interface::{
     data_structures::graph::{self, Successors},
     index::IndexVec,
@@ -1288,6 +1289,16 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                                 .deps
                                 .require_dep::<crate::encoders::TyUseImpureEnc>(inner_ty_task)
                                 .unwrap();
+                            let span = self.current_span();
+                            self.vcx.handle_error(
+                                "application.precondition:insufficient.permission",
+                                move |_| {
+                                    Some(vec![PrustiError::verification(
+                                        "insufficient permission to read through mutable reference",
+                                        span.into(),
+                                    )])
+                                },
+                            );
                             caster.cast_to_caller_ctx(inner_ty.ref_to_snap(ref_expr))
                         };
                         EncodedPlace::new(val_expr, Some(ref_expr)).with_metadata(metadata)

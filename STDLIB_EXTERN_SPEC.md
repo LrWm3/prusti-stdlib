@@ -906,8 +906,12 @@ uses PCG `e54bf675468d44c5e3c0d0e2eca6b7e837e11270`, Rust
 `1.99.0-nightly (d453bdd8f 2026-08-14)`, Viper `v-2026-09-01-0834`, Z3
 `4.16.0`, and Java `21.0.2`. The full external-spec suite passed 97 checks
 and the existing iterator suite passed 61 checks at the same encoder revision;
-the later test-only `IterMut` additions were verified separately. The 36
-`prusti-specs` unit tests also passed. These results satisfy M3 within the
+the later test-only `IterMut` additions were verified separately. The full
+borrow suite passed 77 checks at `b15a36e4a`, taking 1074.21 seconds in total;
+its longest individual check was `frame_pass` at 69.26 seconds. An earlier
+parallel run timed out on `inclusive_missing_pass`; that case passed both a
+separate retry and this complete run. The 36 `prusti-specs` unit tests also
+passed. These results satisfy M3 within the
 explicit key-model and same-key lookup domain described above; they do not
 establish the deferred cases below.
 

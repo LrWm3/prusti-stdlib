@@ -275,6 +275,74 @@ impl RefinedFinite for RefinedOnce {
         }
     }
 }
+
+pub struct RefinedOnceRef<'a, T> {
+    pub value: &'a T,
+    pub available: bool,
+}
+
+#[refine_trait_spec]
+impl<'a, T> RefinedFinite for RefinedOnceRef<'a, T> {
+    type Item = &'a T;
+
+    #[pure]
+    fn remaining(&self) -> Seq<&'a T> {
+        if self.available {
+            Seq::single(self.value)
+        } else {
+            Seq::new()
+        }
+    }
+
+    #[ensures(match &result {
+        Some(value) => old(self.remaining()).len() > Int::from(0)
+            && *value === *old(self.remaining())[0]
+            && self.remaining() == old(self.remaining())[1..],
+        None => old(self.remaining()).len() == Int::from(0)
+            && self.remaining() == old(self.remaining()),
+    })]
+    fn advance(&mut self) -> Option<&'a T> {
+        if self.available {
+            self.available = false;
+            Some(self.value)
+        } else {
+            None
+        }
+    }
+}
+
+pub struct RefinedToken {
+    pub value: u32,
+}
+
+pub struct RefinedOnceOwned {
+    pub value: Option<RefinedToken>,
+}
+
+#[refine_trait_spec]
+impl RefinedFinite for RefinedOnceOwned {
+    type Item = RefinedToken;
+
+    #[pure]
+    fn remaining(&self) -> Seq<RefinedToken> {
+        match &self.value {
+            Some(value) => Seq::single(RefinedToken { value: value.value }),
+            None => Seq::new(),
+        }
+    }
+
+    #[ensures(match &result {
+        Some(value) => old(self.remaining()).len() > Int::from(0)
+            && *value === *old(self.remaining())[0]
+            && self.remaining() == old(self.remaining())[1..],
+        None => old(self.remaining()).len() == Int::from(0)
+            && self.remaining() == old(self.remaining()),
+    })]
+    fn advance(&mut self) -> Option<RefinedToken> {
+        core::mem::replace(&mut self.value, None)
+    }
+}
+
 #[ensures(match &result {
     Some(value) => old(it.remaining()).len() > Int::from(0)
         && *value === *old(it.remaining())[0]

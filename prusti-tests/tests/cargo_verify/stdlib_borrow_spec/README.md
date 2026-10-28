@@ -13,7 +13,7 @@ the positive binaries, enables overflow and panic checks, disables verification
 caching, and uses fresh Cargo targets. Logs and positive Viper programs remain
 in `target/stdlib-borrow-spec-logs/`.
 
-The 74 checks cover `Vec::as_mut_slice`, `slice::split_at_mut`, mutable indexing,
+The checks cover `Vec::as_mut_slice`, `slice::split_at_mut`, mutable indexing,
 and the supported parts of `slice::get_mut`. Generic clients verify changes
 through both halves of a split, restoration to a slice or Vec owner, and halves
 that expire separately.
@@ -34,6 +34,9 @@ inclusive-range cases and a cross-crate non-`Copy` client.
 Trait-borrow probes cover concrete pledges
 and abstract calls without assuming implementation-specific guarantees. Negative
 cases reject incorrect values, framing claims for splits, and invalid bounds.
+The return-boundary regression covers a reference returned inside `Option`,
+alongside partial moves and an unrelated mutable reference. A negative case
+rejects retaining a stale owner value after a returned mutable reference changes it.
 
 The trusted ghost-only `scalar_index_model` is interpreted as `Some(i)` for a
 `usize` index `i` and `None` for other sealed `SliceIndex` types. The `usize`

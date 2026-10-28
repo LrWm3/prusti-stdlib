@@ -512,7 +512,9 @@ The conditional `ExactSizeIterator::len` contract relates the returned length
 to the remaining sequence. A verified generic `&I` helper exports the relation,
 and clients check owned and shared iterators before and after `next`. A
 [reproducer](prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/exact_length_mut_ref.rs)
-records that the same generic relationship is not yet retained through `&mut I`.
+records that method syntax on `&mut I` selects an unmodeled forwarding
+implementation; a verified generic helper uses `ExactSizeIterator::len(&*it)`
+to retain the relationship while advancing.
 
 Selection checks a region-bearing bound by independently quantifying its
 lifetimes, selecting a concrete implementation or builtin, checking its
@@ -532,8 +534,11 @@ the trait's two-state contract; behavioral-subtyping checks account for the
 mutable arguments' post-state. A concrete owned finite iterator refines its
 sequence contract and a generic cross-crate helper consumes it. Negative cases
 reject a weaker implementation postcondition and an incorrect state claim.
-Borrowed-item refinement and some lifetime-sensitive calls remain necessary for
-P2-C. Ordinary owned `for` loops can use the specification
+The same helper consumes verified concrete refinements for borrowed items and
+owned non-`Copy` items. Restoring unblocked input permissions at function return
+allows the borrowed implementation to return its reference inside `Option`;
+regressions cover a partial move and an unrelated mutable reference. Some
+lifetime-sensitive calls remain open. Ordinary owned `for` loops can use the specification
 marker `for_iterator::<alloc::vec::IntoIter<T>>()` to refer to the actual
 compiler-generated iterator in a body invariant. The symbolic-count proof is
 verified across crates; nested loops, another same-typed iterator, incorrect
@@ -919,7 +924,7 @@ claimed.
 | **M1: unbounded functional Vec** | P1-A through P1-D | Minimal contracts plus reproduced blockers | Verified locally: 21 Vec checks, symbolic append/pop/round-trip and whole-prefix loop proofs for owned non-`Copy` elements, cross-crate clients, and negative cases. |
 | P2-A: Vec and shared slices | M1 | Contracts, sequence lemmas, any slice encoding fixes | Verified locally: 27 checks cover symbolic mutations, shared lookup/ranges, splits, swaps, boundaries, ordering, and framing. |
 | P2-B: mutable collection views | P2-A, two-state snapshots | Pledges, expiry, generic reference framing | Verified locally: 74 checks cover slice and Vec views, lookup, indexing, splits, reborrowing, inclusive range state, and negative framing cases. |
-| P2-C: shared and owned iterators | Sequence model, generic trait probes | Opt-in models, refinement, lifetimes, loop support | In progress: 54 checks cover owned and shared traversal, symbolic loops, `prusti_for!`, and ordinary owned `for` loops; some lifetime evidence remains open. |
+| P2-C: shared and owned iterators | Sequence model, generic trait probes | Opt-in models, refinement, lifetimes, loop support | In progress: 58 iterator checks cover owned and shared traversal, exact lengths, symbolic loops, `prusti_for!`, and ordinary owned `for` loops; final integration is running. |
 | **M2: Vec/slice phase complete** | P2-A, P2-B, P2-C | Integration and cross-crate validation | Untested; all required gates pass. |
 | P3-A: explicit key models | M2, logical Map/Set | Key-model interfaces and conditional contracts | Untested; equality/hash/model evidence is enforced. |
 | **M3: HashMap/HashSet phase complete** | P3-A, P3-B, P2-B expiry support | Map/set contracts and mutable lookup | Untested; key, cardinality, framing, and mutable-value cases pass. |

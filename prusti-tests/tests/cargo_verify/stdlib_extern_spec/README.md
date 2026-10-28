@@ -49,6 +49,8 @@ each test command has a 300-second outer timeout.
 | `refinement_mutable_pass` | Verify a concrete finite iterator model and consume its two-state trait contract through a generic cross-crate helper. |
 | `refinement_mutable_frame_pass` | Verify a mutable trait method alongside a separate shared-reference frame condition. |
 | `refinement_mutable_wrong_post`, `refinement_mutable_wrong_state` | Reject a weakened mutable implementation postcondition and an incorrect generic state claim. |
+| `refinement_borrowed_pass`, `refinement_owned_noncopy_pass` | Verify concrete borrowed-item and non-`Copy` owned refinements, then consume their contracts across crates. |
+| `refinement_borrowed_wrong` | Reject an incorrect exhausted result from a nonempty borrowed-item iterator. |
 | `cross_crate_pass` | Generic wrappers preserve non-`Copy` payloads, return the old destination, and install the new value across crate boundaries. |
 | `lifetimes_pass` | Renamed early/late-bound lifetimes, existing outlives bounds, type aliases, and nested higher-ranked signatures are accepted. |
 | `conditional_pass`, `iterator_capability_pass` | Conditional postconditions are selected with caller evidence for trusted free functions and the external `Iterator::next` trait method, including old-state and cross-crate generic capability probes. The sealed iterator capability is available only to supported implementations. |

@@ -2679,6 +2679,45 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 let borrows = current_fpcs.statements.last().unwrap().states
                     [EvalStmtPhase::PostMain]
                     .borrow_pcg();
+                // Return the input resources that are not blocked by a
+                // result lifetime. They may still be split into field or
+                // dereference predicates at the end of the body, even when
+                // the function contract requires the enclosing predicate.
+                // Unblock all inputs together so shared graph edges are folded
+                // only once, under their original control-flow conditions.
+                let blocked = self.wands.blocked_inputs();
+                let locals = self
+                    .wands
+                    .inputs()
+                    .filter(|input| !blocked.contains(input))
+                    .map(|input| input.mir_local())
+                    .collect::<FxHashSet<_>>();
+                let graph = UnblockGraph::for_nodes(
+                    locals.into_iter().map(mir::Place::from),
+                    borrows,
+                    self.pcg_ctxt(),
+                );
+                let actions = match graph.actions(self.pcg_ctxt()) {
+                    Ok(actions) => actions,
+                    Err(_) => {
+                        self.vcx.emit_early_error(PrustiError::unsupported(
+                            "cannot restore unblocked input permissions at return".to_string(),
+                            self.body.source_info(location).span.into(),
+                        ));
+                        Vec::new()
+                    }
+                };
+                let mut to_skip = Vec::new();
+                for action in actions {
+                    self.pcs_handle_edge(
+                        borrows,
+                        action.edge(),
+                        EdgeAction::Remove,
+                        false,
+                        &mut to_skip,
+                        None,
+                    )?;
+                }
                 let wand_packages = self.package_wands(borrows)?;
                 self.current_fpcs = Some(current_fpcs);
                 self.stmts(wand_packages);

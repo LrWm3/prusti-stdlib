@@ -101,13 +101,6 @@ pub fn mut_slice_len<T>(slice: &&mut [T]) -> usize {
     slice.len()
 }
 
-/// Observe the current contents of a mutable slice reference in a
-/// specification. Verification requires permission to read the slice.
-#[pure]
-pub fn mut_slice_contents<T>(slice: &&mut [T]) -> Seq<T> {
-    Seq::from_slice(&**slice)
-}
-
 /// Traverse an `IntoIterator` while giving its iterator a name for specifications.
 ///
 /// `prusti_for!(iter, for item in values => { ... })` expands to a `match` and

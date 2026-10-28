@@ -242,7 +242,7 @@ pub(crate) trait PureRvalueEnc<'vir> {
                 def_id,
                 args: gargs,
                 is_pure,
-                span: (!is_pure || builtin == PrustiBuiltin::MutSliceContents).then_some(span),
+                span: (!is_pure).then_some(span),
             })?;
         let operands = args
             .iter()

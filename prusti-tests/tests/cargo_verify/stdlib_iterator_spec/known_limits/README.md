@@ -206,11 +206,17 @@ wand with a processed-prefix relation and the tail-at-expiry suffix, then
 checks the final owner contents. The constructor and `next` pledges establish
 the packages; no new assumptions are added. The runner also checks that `false`
 and an incorrect final value fail. This is a generated-Viper experiment, not
-support for a Rust restoration annotation. Run it after the preceding dump:
+support for a Rust restoration annotation. Its `--prefix-sequence` variant
+adds ghost assignments for a sequence of completed snapshots and proves the
+planned `source = prefix ++ tail_at_expiry` relation. Run it after the
+preceding dump:
 
 ```sh
 ./x.py exec python3 scripts/test_stdlib_iterator_loop_wand.py \
   target/stdlib-im2-constructor-input/viper_program/program-check.vpr
+# Check the same proof with an explicit ghost prefix sequence.
+./x.py exec python3 scripts/test_stdlib_iterator_loop_wand.py \
+  target/stdlib-im2-constructor-input/viper_program/program-check.vpr --prefix-sequence
 ```
 
 `im2_quantified_expiry_valid` and `im2_quantified_expiry_wrong` check a

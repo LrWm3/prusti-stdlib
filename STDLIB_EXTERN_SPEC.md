@@ -1100,8 +1100,11 @@ relation on its backedge and exit.
 A further experiment strengthens the actual emitted loop wand with a
 processed-prefix and tail-at-expiry relation. The existing constructor and
 `next` expiry pledges then verify full traversal for symbolic lengths, including
-empty input; an incorrect final prefix and `false` are rejected. This is a
-manual transformation of generated Viper, not yet a Rust-facing feature.
+empty input; an incorrect final prefix and `false` are rejected. A second
+variant explicitly maintains a ghost sequence of completed values and proves
+`source_at_restoration = prefix ++ tail_at_expiry` with the same controls.
+These are manual transformations of generated Viper, not yet a Rust-facing
+feature.
 
 Implement the Rust connection in these steps:
 

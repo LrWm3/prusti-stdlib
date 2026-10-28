@@ -48,10 +48,23 @@ def relation(address: str, length: str, tail: str, count: str) -> str:
     )
 
 
-def labelled_relation(owner_label: str, tail_label: str, count_label: str) -> str:
+def sequence_relation(address: str, length: str, tail: str, count: str) -> str:
+    """RHS facts using an explicitly maintained sequence of completed values."""
+    source = f"s_Slice_to_seq(p_Slice_snap({address}, s_UInt_u32_type()), {length})"
+    remaining = (
+        f"old[lhs](s_Slice_to_seq(p_Param_snap({tail}.s_Ref_mutable_0, "
+        f"s_Slice_type(s_UInt_u32_type())).make_concrete_s_Slice, "
+        f"s_UInt_usize_value({tail}.s_Ref_mutable_1.make_concrete_s_UInt_usize)))"
+    )
+    prefix = "_oldprefix" if "_before_25_4" in tail else "_prefix"
+    return (f" && 0 <= {length} && 0 <= {count} && {count} <= {length}"
+            f" && |{prefix}| == {count} && {source} == {prefix} ++ {remaining}")
+
+
+def labelled_relation(owner_label: str, tail_label: str, count_label: str, build=relation) -> str:
     owner = old_owner(owner_label)
     length = f"s_UInt_usize_value({owner}.s_Ref_mutable_1.make_concrete_s_UInt_usize)"
-    return relation(owner + ".s_Ref_mutable_0", length, old_tail(tail_label), old_count(count_label))
+    return build(owner + ".s_Ref_mutable_0", length, old_tail(tail_label), old_count(count_label))
 
 
 def source_predicate(label: str) -> re.Pattern[str]:
@@ -59,7 +72,7 @@ def source_predicate(label: str) -> re.Pattern[str]:
     return re.compile(re.escape(start) + r"\s*" + re.escape("s_UInt_u32_type()), write)"))
 
 
-def strengthen(program: str) -> str:
+def strengthen(program: str, build=relation) -> str:
     if "method m_visit(_0p: Ref, _1p: Ref)" not in program:
         raise ValueError("the emitted program does not contain the expected iterator fixture")
     # The constructor package establishes the empty-prefix case.
@@ -67,7 +80,7 @@ def strengthen(program: str) -> str:
     if len(entry) != 1:
         raise ValueError("unexpected constructor loop-wand shape")
     end = entry[0].end()
-    program = (program[:end] + labelled_relation("outer_package2", "outer_package2", "outer_package2")
+    program = (program[:end] + labelled_relation("outer_package2", "outer_package2", "outer_package2", build)
                + program[end:])
 
     # Bind the loop count alongside the already-bound owner and tail snapshots.
@@ -85,8 +98,8 @@ def strengthen(program: str) -> str:
     if program.count(end_marker) != 1:
         raise ValueError("unexpected loop-invariant owner predicate")
     length = "s_UInt_usize_value(_loop_ref6.s_Ref_mutable_1.make_concrete_s_UInt_usize)"
-    extra = relation("_lb0", length, "_lb1.s_std$col$$col$slice$col$$col$IterMut_3",
-                     "s_UInt_usize_value(_lb2)")
+    extra = build("_lb0", length, "_lb1.s_std$col$$col$slice$col$$col$IterMut_3",
+                  "s_UInt_usize_value(_lb2)")
     program = program.replace(end_marker, "acc(p_Slice(_lb0, s_UInt_u32_type()), write)" + extra + ")))", 1)
 
     # Strengthen the backedge package, the previous wand in its footprint, and
@@ -98,9 +111,9 @@ def strengthen(program: str) -> str:
     for index in (3, 2, 0):
         end = matches[index].end()
         if index == 0:
-            extra = labelled_relation("outer_package5", "outer_package5", "outer_package5")
+            extra = labelled_relation("outer_package5", "outer_package5", "outer_package5", build)
         else:
-            extra = labelled_relation("outer_package5", "_before_25_4", "_before_25_4")
+            extra = labelled_relation("outer_package5", "_before_25_4", "_before_25_4", build)
         program = program[:end] + extra + program[end:]
 
     # Both exit paths must consume the same strengthened loop wand.
@@ -109,8 +122,35 @@ def strengthen(program: str) -> str:
         if len(matches) != 1:
             raise ValueError(f"unexpected exit wand: {label}")
         end = matches[0].end()
-        program = (program[:end] + labelled_relation(label, "_before_25_4", "_before_25_4")
+        program = (program[:end] + labelled_relation(label, "_before_25_4", "_before_25_4", build)
                    + program[end:])
+    return program
+
+
+def add_prefix_sequence(program: str) -> str:
+    """Add ghost assignments and checked invariants, without assuming facts."""
+    method = "method m_visit(_0p: Ref, _1p: Ref)"
+    start = program.index(method)
+    body = program.index("\n{", start) + 2
+    program = (program[:body] + "\n  var _prefix: Seq[s_Param]\n  var _oldprefix: Seq[s_Param]"
+               + program[body:])
+    changes = (
+        ("  label outer_package2\n", "  _prefix := Seq[s_Param]()\n  label outer_package2\n"),
+        ("  label _before_25_4\n", "  label _before_25_4\n  _oldprefix := _prefix\n"),
+        ("    s_UInt_u32_cons(7))\n  label _before_30_3\n",
+         "    s_UInt_u32_cons(7))\n"
+         "  _prefix := _prefix ++ Seq(make_generic_s_UInt_u32(s_UInt_u32_cons(7)))\n"
+         "  label _before_30_3\n"),
+        ("    invariant _from_bb9_to_bb12\n",
+         "    invariant |_prefix| == s_UInt_usize_value(p_UInt_usize_snap(_13p))\n"
+         "    invariant (forall q: Int :: { _prefix[q] } 0 <= q && q < |_prefix| ==> "
+         "_prefix[q] == make_generic_s_UInt_u32(s_UInt_u32_cons(7)))\n"
+         "    invariant _from_bb9_to_bb12\n"),
+    )
+    for marker, replacement in changes:
+        if program.count(marker) != 1:
+            raise ValueError("unexpected ghost-prefix insertion point")
+        program = program.replace(marker, replacement, 1)
     return program
 
 
@@ -137,9 +177,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("viper_program", type=Path)
     parser.add_argument("--case", choices=("valid", "false", "wrong_prefix"))
+    parser.add_argument("--prefix-sequence", action="store_true",
+                        help="maintain an explicit ghost prefix sequence")
     args = parser.parse_args()
     root = Path(__file__).resolve().parent.parent
-    program = strengthen(args.viper_program.read_text())
+    program = strengthen(args.viper_program.read_text(), sequence_relation if args.prefix_sequence else relation)
+    if args.prefix_sequence:
+        program = add_prefix_sequence(program)
     java_home = os.environ.get("JAVA_HOME")
     java = str(Path(java_home) / "bin/java") if java_home else "java"
     env = os.environ.copy()
@@ -151,7 +195,8 @@ def main() -> None:
         "smt.qi.eager_threshold=1000 model.partial=false smt.arith.solver=6",
         "--numberOfParallelVerifiers", "1", "--timeout", "180", "--includeMethods", "m_visit",
     ]
-    logs = root / "target/stdlib-im2-loop-wand-logs"
+    logs = root / ("target/stdlib-im2-sequence-wand-logs" if args.prefix_sequence
+                   else "target/stdlib-im2-loop-wand-logs")
     logs.mkdir(parents=True, exist_ok=True)
     all_ok = True
     cases = [args.case] if args.case else ["valid", "false", "wrong_prefix"]

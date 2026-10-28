@@ -119,3 +119,59 @@ impl<K: Eq + core::hash::Hash, S: core::hash::BuildHasher, A: Allocator> HashSet
         K: core::borrow::Borrow<Q>,
         Q: core::hash::Hash + Eq;
 }
+
+#[extern_spec]
+impl<K, V, S, A: Allocator> HashMap<K, V, S, A> {
+    #[trusted]
+    #[refine_spec(where K: HashKeyModel, [
+        ensures(result == (map_contents(self).len() == Int::from(0)))
+    ])]
+    fn is_empty(&self) -> bool;
+
+    #[trusted]
+    #[refine_spec(where K: HashKeyModel, [ensures(map_contents(self) == Map::new())])]
+    fn clear(&mut self);
+}
+
+#[extern_spec]
+impl<K, S, A: Allocator> HashSet<K, S, A> {
+    #[trusted]
+    #[refine_spec(where K: HashKeyModel, [
+        ensures(result == (set_contents(self).len() == Int::from(0)))
+    ])]
+    fn is_empty(&self) -> bool;
+
+    #[trusted]
+    #[refine_spec(where K: HashKeyModel, [ensures(set_contents(self) == Set::new())])]
+    fn clear(&mut self);
+}
+
+#[extern_spec]
+impl<K: Eq + core::hash::Hash, V, S: core::hash::BuildHasher, A: Allocator> HashMap<K, V, S, A> {
+    #[trusted]
+    #[refine_spec(where K: HashKeyModel + SameKey<Q>, Q: KeyProjection<Model = K::Model>, [
+        ensures(map_contents(self) == old(map_contents(&*self)).setminus(Set::single(k.key_model()))),
+        ensures(match &result {
+            Some(previous) => old(map_contents(&*self)).contains(k.key_model())
+                && *previous === *old(map_contents(&*self))[k.key_model()],
+            None => !old(map_contents(&*self)).contains(k.key_model()),
+        })
+    ])]
+    fn remove<Q: ?Sized>(&mut self, k: &Q) -> Option<V>
+    where
+        K: core::borrow::Borrow<Q>,
+        Q: core::hash::Hash + Eq;
+}
+
+#[extern_spec]
+impl<K: Eq + core::hash::Hash, S: core::hash::BuildHasher, A: Allocator> HashSet<K, S, A> {
+    #[trusted]
+    #[refine_spec(where K: HashKeyModel + SameKey<Q>, Q: KeyProjection<Model = K::Model>, [
+        ensures(set_contents(self) == old(set_contents(&*self)).difference(Set::single(value.key_model()))),
+        ensures(result == old(set_contents(&*self)).contains(value.key_model()))
+    ])]
+    fn remove<Q: ?Sized>(&mut self, value: &Q) -> bool
+    where
+        K: core::borrow::Borrow<Q>,
+        Q: core::hash::Hash + Eq;
+}

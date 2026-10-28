@@ -883,8 +883,14 @@ integer keys, replacement by equal custom keys with different snapshots, and
 separate colliding keys. The original borrowed-key signatures for map
 `contains_key`/`get` and set `contains` have conditional contracts when a
 sealed same-type capability proves the query type is the stored key type.
-Heterogeneous lookup, removal, clearing, and mutable values remain open;
-P3-B is not complete.
+The same capability supports conditional map/set removal, including old-value
+or boolean results and preservation of unrelated entries. Conditional clear
+and emptiness contracts complete the other basic operations listed below.
+Heterogeneous lookup and mutable values remain open; P3-B is not complete.
+The [conditional-expiry reproducer](prusti-tests/tests/cargo_verify/stdlib_hash_spec/known_limits/conditional_expiry.rs)
+fails at parsing because `refine_spec` does not accept `after_expiry`. Supporting
+the `get_mut` pledge also requires selecting and applying the strengthened wand
+only when the caller's key-model evidence is proved.
 
 | Collection | Required operations and laws |
 |---|---|

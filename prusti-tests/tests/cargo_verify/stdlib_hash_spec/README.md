@@ -52,7 +52,9 @@ proof facts. Conditional map `contains_key`/`get` and set `contains` contracts
 retain their original borrowed-key signatures but currently require the sealed
 same-type capability. Negative clients check missing evidence, wrong lookup
 values and membership, and an unmodeled heterogeneous query. Removal,
-clearing, and mutable values remain open.
+clearing, and emptiness are also modeled, with negative tests for old values,
+framing, cardinality, cleared contents, and missing evidence. Mutable values
+remain open.
 The heterogeneous negative fixture deliberately provides `Borrow<u32>` for
 the custom key without claiming that the two hash implementations agree; it
 is not evidence that this borrowed form satisfies Rust's `Borrow` contract.

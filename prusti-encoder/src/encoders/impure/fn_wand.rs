@@ -91,14 +91,17 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
                     let actual: IndexVec<_, PcgRegion<'vir>> = self
                         .pcg_ctxt()
                         .extract_regions(self.body.local_decls[local].ty);
-                    // Explicit signature regions and MIR regions have the
-                    // same traversal order. Opaque types can hide regions,
-                    // so retain the previous place-based lookup when the
-                    // two lists do not have a direct correspondence.
-                    let root: BlockedNode<'vir> = if generalized.len() == actual.len()
-                        && generalized
-                            .iter()
-                            .all(|r| matches!(r, GeneralizedLifetime::Region(_)))
+                    // An explicit region preceding every opaque type has the
+                    // same index in the MIR region list. Opaque types may
+                    // introduce additional generalized lifetimes, so avoid
+                    // mapping indices at or after the first opaque entry.
+                    let index = g.region_idx().index();
+                    let root: BlockedNode<'vir> = if generalized
+                        .iter()
+                        .take(index + 1)
+                        .all(|r| matches!(r, GeneralizedLifetime::Region(_)))
+                        && index < generalized.len()
+                        && index < actual.len()
                     {
                         LifetimeProjection::from_index(
                             RemotePlace::new(local),

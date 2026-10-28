@@ -1215,25 +1215,50 @@ libraries, runtime clients, and expected diagnostics. Results are in
 The iterator library was also re-encoded after the final projection-consistency
 rejection check (two additional checks), which does not change emitted wands.
 The shared pledge-only fixture's Viper contains both `apply true --*` branches.
-The two loop limitations below were reproduced separately with the final
-build in `target/stdlib-call-projection-known-logs`.
+The two loop limitations below were reproduced on that build in
+`target/stdlib-call-projection-known-logs` before the subsequent lifecycle fix.
 
 Regression coverage includes two live shared yields, repeated referents,
 independent mutable borrows expiring in either order, shared pledge-only wands,
-and incorrect-value/false controls. General conditional calls in loops remain
-an open gate: `im3_branch_call_loop` exposes an unreached call-label error when
-the loop havocs branch flags, and `im3_retained_branch` covers a conditional
-borrow that stays live across a loop. These repros live in `known_limits`, not
-the passing suite. Clearing all alternative branch flags is not a valid fix:
-some conditions must remember earlier iterations to restore the owner's
-permissions on loop exit. A trial of that change was removed.
+and incorrect-value/false controls. The conditional-call loop repros now verify
+and have moved from `known_limits` to the borrow suite as
+`call_wand_branch_loop_*` and `call_wand_retained_branch_*`. Their stronger
+versions use symbolic loop lengths, including zero iterations, both initial
+branch choices, and alternating branches. Additional cases exercise
+`continue`, early `break`, and an outer-loop borrow retained by an inner loop.
 
-Next, distinguish the current call's execution from historical loop path
-conditions and preserve conditional call wands at loop boundaries. The current
-loop-invariant collection does not preserve edge guards. Keep the two repros,
-both branch choices, alternating choices over repeated iterations, and false
-controls in that gate. Recheck whole-prefix traversal, early exits, generic
-elements, and Vec views before changing shared control-flow bookkeeping.
+The loop invariant preserves each retained call obligation under the
+disjunction of its contributing edge guards. It also frames the shallow
+snapshot of an unchanged reference local with a readable tracked capability.
+The PCG accessor includes restrictions imposed by live loans; initialized
+storage alone does not establish readability. Assignments, moves, and mutable
+borrows of the reference slot exclude this automatic frame, while writes
+through its referent remain allowed. Positive and incorrect-value controls
+cover direct reference reassignment, a helper borrowing the reference slot,
+and a slot already loaned before entering the loop.
+
+At the invariant boundary, branch flags strictly internal to the executable
+loop body are reset for the next iteration. The dominance check follows the
+encoder's specification-branch elimination; Rust's unmodified CFG contains
+dead spec arms that can bypass the invariant block. Choices supporting a live
+edge or the incoming state, choices preceding the invariant, and loop-exit
+choices retain their history. This avoids both untaken call-label reads and
+the loss of restoration permissions caused by globally clearing branch flags.
+The change establishes the covered lifecycle patterns, not arbitrary
+conditional-loop resource support.
+
+Lifecycle validation on 2026-10-28: the full build, 34 focused borrow checks,
+and 23 focused iterator checks passed, including both specification libraries,
+runtime clients, and exact negative diagnostics. PCG passed four projection-map
+tests, eight function-shape tests, and all 248 numbered corpus inputs. The
+iterator checks cover whole-prefix traversal, early exit, `continue`, generic
+elements, two yields, Vec views, and shared referents. Consolidated results and
+build/PCG logs are in `target/stdlib-conditional-summary-logs`; individual
+iterator logs are in `target/stdlib-conditional-regressions-iterator-logs`.
+The first nested-loop test omitted the outer counter bound from its inner
+invariant and failed overflow checking; the corrected positive and false
+control both passed. The consolidated borrow results retain that superseded
+failure and link each current result to its original log.
 
 Further reference shapes can still require mappings that the structural
 correspondence cannot establish. Extend it from explicit evidence through
@@ -1254,6 +1279,19 @@ or an equivalent collection predicate with verified extraction/reassembly
 rules. Decide the representation with the IM0 probes and generated Viper;
 specify how the whole owner, an indexed element, a yielded element, and the
 remaining tail divide those resources so they are never counted twice.
+
+The current `IndirectPredicatesEnc` still returns no resources for
+`ArrayLike`, and its `ExprInput` carries a shallow snapshot but no collection
+extent. A slice snapshot has no length: that lives in the enclosing reference's
+metadata. Thread an explicit finite extent from that metadata (or an array's
+constant length) before introducing indexed permissions. Preserve its heap
+label when a mutable container changes. Start with concrete `&mut U` elements
+and prove extraction/reassembly before adding nested references or enum
+variants; a quantified element's heap read must not escape its bound index
+through the existing wand snapshot-binding mechanism. Re-encoding
+`im0_mut_ref_index_write` and `im0_mut_ref_next_write` after the lifecycle fix
+still emits no inner referent resource; saved programs are in
+`target/stdlib-conditional-inner-baseline-logs` (encoding only, not verification).
 
 Preserve the relationship between the short container/iterator borrow and
 each inner borrow. Outlives constraints must not collapse distinct lifetimes

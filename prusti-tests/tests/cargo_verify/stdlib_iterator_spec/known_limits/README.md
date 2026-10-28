@@ -178,6 +178,26 @@ processed count, for symbolic lengths and an arbitrary early-break bound.
 Their negative clients reject incorrect exit-count claims. This does not yet
 establish the processed prefix or the restored owner's final contents.
 
+The generated constructor package can already prove its initial value
+relation using the native `p_Slice` and `p_Param` predicates. The
+[constructor-wand runner](../../../../../scripts/test_stdlib_iterator_constructor_wand.py)
+inserts that checked assertion into the emitted proof script and runs both
+an equality and its deliberately false opposite. It adds no assumptions, and
+checks only initialization; the loop wand still drops the relation. After
+building Prusti, reproduce it with a fresh target directory:
+
+```sh
+CONSTRUCTOR_PROBE_TARGET="$(mktemp -d)"
+PRUSTI_DUMP_VIPER_PROGRAM=true PRUSTI_LOG_DIR="$PWD/target/stdlib-im2-constructor-input" \
+  PRUSTI_ENABLE_CACHE=false PRUSTI_NO_VERIFY_DEPS=true CARGO_TARGET_DIR="$CONSTRUCTOR_PROBE_TARGET" \
+  ./x.py exec target/debug/cargo-prusti --manifest-path prusti-tests/tests/cargo_verify/stdlib_iterator_spec/Cargo.toml --bin mut_native_tail_suffix_pass
+./x.py exec python3 scripts/test_stdlib_iterator_constructor_wand.py \
+  target/stdlib-im2-constructor-input/viper_program/program-check.vpr
+```
+
+The runner checks the expected generated fixture shape and stops if it has
+changed, rather than treating a different package as evidence.
+
 `im2_quantified_expiry_valid` and `im2_quantified_expiry_wrong` check a
 two-state pledge inside a quantifier. The valid identity pledge currently
 fails with insufficient permission to read a mutable reference, both before

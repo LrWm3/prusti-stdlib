@@ -1089,6 +1089,12 @@ suffix of the entry sequence, and the exit count is checked. These controls
 include empty inputs and reject incorrect exit-count claims. They observe the
 live tail; they do not prove that the processed prefix is restored to the owner.
 
+The constructor's initial source–tail value equality has also been checked
+inside the actual emitted Viper package, using the generated slice predicates
+and the existing constructor pledge. A deliberately opposite assertion fails.
+This checks only the base case; the generated loop wand still omits the value
+relation on its backedge and exit.
+
 Add explicit-loop clients first, followed by ordinary mutable-slice `for`
 loops and `Vec::iter_mut()`. Cover full traversal, symbolic early break,
 conditional updates with `continue`, empty input, non-`Copy` owned elements,

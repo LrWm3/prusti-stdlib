@@ -182,10 +182,11 @@ establish the processed prefix or the restored owner's final contents.
 
 The `mut_native_prefix_ghost` controls maintain a growing ghost sequence and
 verify that its length matches the number of yielded elements. A separate
-`im2_prefix_ghost_quantified` probe also asks for every completed element to
-equal `7`; its `usize`-quantified loop invariant currently fails preservation.
-The hand-strengthened Viper proof below succeeds, so this Rust-level failure
-remains a separate proof/encoding limitation to resolve.
+`im2_prefix_ghost_quantified` and `im2_prefix_ghost_quantified_int` probes
+also ask for every completed element to equal `7`; their loop invariants fail
+preservation with either `usize` or mathematical `Int` indices. The
+hand-strengthened Viper proof below succeeds, so this Rust-level failure remains
+a separate proof/encoding limitation to resolve.
 
 The generated constructor package can already prove its initial value
 relation using the native `p_Slice` and `p_Param` predicates. The

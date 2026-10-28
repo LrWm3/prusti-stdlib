@@ -116,4 +116,24 @@ path = "im0_optional_next.rs"
 name = "im0_optional_index_write"
 path = "im0_optional_index_write.rs"
 
+[[bin]]
+name = "im2_before_expiry_invariant"
+path = "im2_before_expiry_invariant.rs"
+
+[[bin]]
+name = "im2_source_read_invariant"
+path = "im2_source_read_invariant.rs"
+
+[[bin]]
+name = "im2_owner_snapshot_loop"
+path = "im2_owner_snapshot_loop.rs"
+
+[[bin]]
+name = "im2_quantified_expiry_valid"
+path = "im2_quantified_expiry_valid.rs"
+
+[[bin]]
+name = "im2_quantified_expiry_wrong"
+path = "im2_quantified_expiry_wrong.rs"
+
 [workspace]

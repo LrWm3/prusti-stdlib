@@ -452,6 +452,7 @@ impl MirSpecEnc {
                 context: ctx.context_def_id,
                 mode: ctx.enc_mode,
                 allow_after_call: type_ == "pledge rhs",
+                allow_before_expiry: matches!(type_, "pledge lhs" | "pledge rhs"),
             },
             parent_def_id: def_id,
             gargs: GArgs::new(

@@ -1812,6 +1812,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     context: self.def_id,
                     mode: MirSpecEncMode::Impure,
                     allow_after_call: true,
+                    allow_before_expiry: true,
                 },
             })?;
             result.push(PledgeExpr::new(id, spec.expr.downcast_ty::<vir::Bool>()));
@@ -3021,6 +3022,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                                         context: self.def_id,
                                         mode: MirSpecEncMode::Impure,
                                         allow_after_call: false,
+                                        allow_before_expiry: false,
                                     },
                                 })?;
                                 let expr = spec.expr.downcast_ty::<vir::Bool>().reify(

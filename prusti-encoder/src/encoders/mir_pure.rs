@@ -76,7 +76,10 @@ pub enum PureKind {
     Closure,
     /// A closure in a contract. Its captured references may contain heap
     /// reads that an `old` inside the closure must evaluate at contract entry.
-    SpecClosure,
+    SpecClosure {
+        /// Whether the enclosing contract is an expiry pledge.
+        allow_before_expiry: bool,
+    },
     /// A closure inside a body assertion/invariant. Its captured snapshots
     /// describe the current heap, unlike the pinned inputs of a contract.
     SpecBlockClosure,
@@ -91,6 +94,7 @@ pub enum PureKind {
         /// snapshots are deep (see `Enc::impure_context`).
         mode: MirSpecEncMode,
         allow_after_call: bool,
+        allow_before_expiry: bool,
     },
     Pure,
     Constant(mir::Promoted),
@@ -152,7 +156,7 @@ impl TaskEncoder for MirPureEnc {
             // instantiated with the arguments of the encoding.
             let identity = ty::GenericArgs::identity_for_item(vcx.tcx(), def_id);
             let body = match kind {
-                PureKind::Closure | PureKind::SpecClosure | PureKind::SpecBlockClosure => {
+                PureKind::Closure | PureKind::SpecClosure { .. } | PureKind::SpecBlockClosure => {
                     vcx.body_mut().get_closure_body(def_id, identity, None)
                 }
                 PureKind::Spec { context, .. } => {
@@ -325,6 +329,7 @@ struct Enc<'vir: 'enc, 'enc> {
     before_expiry_mode: bool,
     after_call_mode: bool,
     allow_after_call: bool,
+    allow_before_expiry: bool,
     impure_context: bool,
 }
 
@@ -428,11 +433,18 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
             spec_block: matches!(kind, PureKind::SpecBlock(_) | PureKind::SpecBlockClosure),
             specification: matches!(
                 kind,
-                PureKind::Spec { .. } | PureKind::SpecClosure | PureKind::SpecBlock(_) | PureKind::SpecBlockClosure
+                PureKind::Spec { .. }
+                    | PureKind::SpecClosure { .. }
+                    | PureKind::SpecBlock(_)
+                    | PureKind::SpecBlockClosure
             ),
-            spec_closure: matches!(kind, PureKind::SpecClosure),
-            inline_snapshots: matches!(kind, PureKind::SpecBlock(_) | PureKind::SpecBlockClosure | PureKind::SpecClosure)
-                || (matches!(kind, PureKind::Spec { .. }) && has_closure),
+            spec_closure: matches!(kind, PureKind::SpecClosure { .. }),
+            inline_snapshots: matches!(
+                kind,
+                PureKind::SpecBlock(_)
+                    | PureKind::SpecBlockClosure
+                    | PureKind::SpecClosure { .. }
+            ) || (matches!(kind, PureKind::Spec { .. }) && has_closure),
             body,
             rev_doms,
             ghost: GhostBlocks::new(def_id, body),
@@ -452,6 +464,11 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                     allow_after_call: true,
                     ..
                 }
+            ),
+            allow_before_expiry: matches!(
+                kind,
+                PureKind::Spec { allow_before_expiry: true, .. }
+                    | PureKind::SpecClosure { allow_before_expiry: true }
             ),
             // An impure method's specs and contained spec blocks get shallow
             // argument snapshots (and can take a snapshot of the predicates
@@ -1563,7 +1580,9 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                 kind: if self.spec_block {
                     PureKind::SpecBlockClosure
                 } else if self.specification {
-                    PureKind::SpecClosure
+                    PureKind::SpecClosure {
+                        allow_before_expiry: self.allow_before_expiry,
+                    }
                 } else {
                     PureKind::Closure
                 },
@@ -1792,6 +1811,15 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                         self.rel1_mode = true;
                     }
                     Mode::BeforeExpiry => {
+                        // `old[lhs]` has a meaning only in a wand or its proof
+                        // script. In particular, a loop invariant is outside
+                        // that scope even when it contains a heap read.
+                        if !self.allow_before_expiry {
+                            return Err(self.unsupported_rvalue(
+                                "before_expiry is only supported in expiry pledges".to_string(),
+                                self.current_span(),
+                            ));
+                        }
                         if self.before_expiry_mode {
                             return Err(self.unsupported_rvalue(
                                 "nested before_expiry expressions are not supported".to_string(),

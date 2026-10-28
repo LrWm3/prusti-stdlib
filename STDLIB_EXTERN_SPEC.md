@@ -949,8 +949,8 @@ collection models. Do not promise deterministic iteration order.
 ## Mutable-iterator follow-up plan
 
 **Status:** IM0 and the IM1 standalone proof-model gate are complete. IM2,
-carrying that value relation through Rust loop encoding, is in progress. Work began from Prusti
-`22ea24a6b` and PCG `a4eb802`. The completed native gate supplies
+carrying that value relation through Rust loop encoding, is in progress. Work
+began from Prusti `22ea24a6b` and PCG `a4eb802`. The completed native gate supplies
 construction, forward advancement, lengths, simultaneous yields, early
 iterator destruction, and ownership restoration. It does not establish the
 two extensions below. Keep that support claim unchanged until their gates pass.
@@ -1065,6 +1065,17 @@ and application on every exit. Preserve source identity and entry snapshots
 without recapturing them on backedges. Bind tail and yielded-value observations
 to the appropriate call/expiry heaps, including captures inside quantifiers.
 Maintain the existing omission of empty resource obligations.
+
+Initial expressibility probes found that an ordinary loop invariant emits an
+invalid `old[lhs]` when it uses `before_expiry`; invalid contexts now receive
+an explicit diagnostic. A saved source-reference identity also exposes an
+unreached loop-head label and overlapping restoration resources. Finally, a
+valid quantified heap-reading pledge fails permission checking, and its
+generated closure omits the requested `old[lhs]` heap selection. These
+reproducers and their current diagnostics are recorded under
+[IM2 known limits](prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/README.md#im2-expressing-a-restoration-summary-in-a-loop).
+Address them without granting access to a borrowed source or treating a
+failed positive proof as evidence for a negative case.
 
 Add explicit-loop clients first, followed by ordinary mutable-slice `for`
 loops and `Vec::iter_mut()`. Cover full traversal, symbolic early break,

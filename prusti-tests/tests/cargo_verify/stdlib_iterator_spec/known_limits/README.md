@@ -124,6 +124,47 @@ encoder, the positive case verified in an isolated 129.10-second run and the
 wrong-value case produced its expected diagnostic in 128.62 seconds. An
 earlier concurrent positive run timed out and is not included as evidence.
 
+## IM2: expressing a restoration summary in a loop
+
+`im2_before_expiry_invariant` tries to use the existing `before_expiry`
+operator directly in an ordinary `body_invariant!`. On the IM0 baseline,
+it emitted `old[lhs]` outside a wand and produced a Viper consistency error.
+The encoder now rejects this use with a specific unsupported-feature
+diagnostic: `before_expiry` is available in expiry pledges, including their
+specification closures, rather than an ordinary loop invariant. This keeps
+the future heap from being read without a restoration obligation; it does
+not yet provide an annotation for the IM1 summary.
+
+`im2_owner_snapshot_loop` saves only the source reference's ghost identity,
+uses a reflexive identity invariant, and otherwise performs the previously
+verified ownership-only mutation loop. It produces an internal
+`labelled.state.not.reached` error on the current baseline. Its pre-loop
+package refers to `old[bb_8]` before that loop-head label has been reached.
+The separate `im2_source_read_invariant` tries to read the saved owner's
+contents while its tail is borrowed; it currently encounters the same
+earlier label error. Once that is fixed, this read must still require
+permission; it is not a valid way to assert the summary unconditionally.
+
+As a diagnostic experiment, replacing the first unreached label in the dumped
+identity-only program with its package-entry label exposed a further missing
+`p_Param` permission for the original slice. The generated loop has separate
+restoration obligations for the source's lifetime projection and its
+dereferenced place, both dependent on the iterator tail. Their ownership and
+coupling must be accounted for together; the label substitution alone is not
+a fix and was not applied to the encoder. The shared-reference iterator
+probe in IM0 also exhibits repeated use of a constructor wand, which needs
+separate lifetime/coupling analysis before the reference-element gate.
+
+`im2_quantified_expiry_valid` and `im2_quantified_expiry_wrong` check a
+two-state pledge inside a quantifier. The valid identity pledge currently
+fails with insufficient permission to read a mutable reference, both before
+and after the context check. The wrong pledge reports that its pledge
+postcondition might not hold. These do not form a completed positive/negative
+gate: the valid case must first verify. The generated valid program also
+does not wrap the captured mutable-reference heap read in `old[lhs]`, so
+propagating the expiry context and checking its heap selection are separate
+work from permitting the marker in an expiry closure.
+
 The `mutable_ref_snapshot` probe attempts to model the remaining mutable
 references and relate each reference to the corresponding source element:
 

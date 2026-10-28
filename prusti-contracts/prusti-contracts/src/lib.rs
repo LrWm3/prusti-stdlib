@@ -51,6 +51,9 @@ pub use prusti_contracts_proc_macros::ensures;
 
 /// A macro for writing a pledge on a function.
 ///
+/// `before_expiry(expr)` observes mutable-reference heap reads immediately
+/// before the borrow expires. It is available only in expiry pledges.
+///
 /// In an `after_expiry` postcondition, `after_call(expr)` captures
 /// mutable-reference heap reads in `expr` at the function's normal return.
 /// Arguments retain their contract bindings, and `result` denotes the

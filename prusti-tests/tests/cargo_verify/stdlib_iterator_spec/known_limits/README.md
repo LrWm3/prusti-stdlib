@@ -88,6 +88,15 @@ Run it with `--bin region_full_reassembly`. The separately stated pledges in
 slice-backed iterator. Proving an arbitrary-length mutation loop and modeling
 the standard library's raw-pointer-backed `IterMut` remain open.
 
+`region_full_loop` attempts an arbitrary-length mutation loop using this
+contract and a length invariant. On 2026-10-28 it failed with an
+insufficient-permission obligation lacking a Viper source position, which
+Prusti reports as an internal error. This probe does not yet provide an
+invariant describing the updated prefix, so correcting the diagnostic alone
+would not establish the loop postcondition. Replacing that postcondition with
+`true` still produces the same unpositioned permission error. Run the original
+probe with `--bin region_full_loop`.
+
 Before the edge-replay fix, the wand package script in `take_mut_slice`
 converted the slot's representation a second time and consumed its permission;
 the enclosing method could not return that permission. The standalone

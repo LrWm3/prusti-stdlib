@@ -44,4 +44,8 @@ path = "region_advance.rs"
 name = "region_full_reassembly"
 path = "region_full_reassembly.rs"
 
+[[bin]]
+name = "region_full_loop"
+path = "region_full_loop.rs"
+
 [workspace]

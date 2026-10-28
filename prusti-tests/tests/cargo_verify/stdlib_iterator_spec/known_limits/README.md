@@ -13,3 +13,11 @@ a mutable reference's pure snapshot does not constrain its referent value, so
 reading that value without the appropriate heap state would be unsound. The
 probe illustrates a remaining obstacle to linking references yielded by
 `IterMut` back to the source slice after they expire.
+
+This is a snapshot and borrowing limitation, affecting the optional `IterMut`
+owner-restoration milestone. A possible next step is an identity-only model
+for yielded references combined with a heap-aware expiry rule that transfers
+each final value back to its original slice position. Such a model must also
+account for multiple simultaneously live yielded references and exhaustion;
+removing the pure dereference restriction alone would not establish those
+properties and would be unsound.

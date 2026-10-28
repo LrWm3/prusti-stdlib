@@ -876,6 +876,13 @@ other hash-collection operations are specified by this milestone.
 
 **Prerequisite:** P3-A; the `get_mut` work also depends on P2-B.
 
+**Progress:** conditional contracts for map/set `len` and `insert` connect
+the returned length, insertion state, previous map value, and set insertion
+boolean to the logical observations. Cross-crate clients cover generic keys,
+integer keys, replacement by equal custom keys with different snapshots, and
+separate colliding keys. Lookup, removal, clearing, and mutable values remain
+open; P3-B is not complete.
+
 | Collection | Required operations and laws |
 |---|---|
 | HashMap | Construction, `len`, `is_empty`, `contains_key`, `get`, `insert`, `remove`, and `clear`. Relate observations to the finite map, distinguish insertion from replacement, return the previous value where required, and preserve unrelated entries. |

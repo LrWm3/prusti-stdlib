@@ -40,5 +40,12 @@ the concrete equality/projection relationship. The bundled proof-only map and
 set observations describe projected keys, not stored key representatives.
 Conditional constructor contracts establish empty observations when key-law
 evidence is present. Clients with just a projection cannot infer those
-guarantees, and incorrect nonempty claims are rejected. These constructor
-contracts do not yet model insertion, lookup, removal, or mutable values.
+guarantees, and incorrect nonempty claims are rejected.
+
+Conditional `len` and `insert` contracts also model map and set cardinality,
+new entries, replacements, returned old values, and unaffected map entries.
+The cross-crate clients cover generic keys, integer keys, and equal or
+colliding custom keys. Negative clients reject incorrect old values, framing,
+duplicate cardinality, collision claims, and length facts without evidence.
+The runtime-only insertion check exercises the custom key without injecting
+proof facts. Lookup, removal, clearing, and mutable values remain open.

@@ -40,3 +40,45 @@ impl<K> HashSet<K> {
     #[refine_spec(where K: HashKeyModel, [ensures(set_contents(&result) == Set::new())])]
     fn new() -> Self;
 }
+
+#[extern_spec]
+impl<K, V, S, A: Allocator> HashMap<K, V, S, A> {
+    #[trusted]
+    #[refine_spec(where K: HashKeyModel, [
+        ensures(Int::from(result) == map_contents(self).len())
+    ])]
+    fn len(&self) -> usize;
+}
+
+#[extern_spec]
+impl<K, S, A: Allocator> HashSet<K, S, A> {
+    #[trusted]
+    #[refine_spec(where K: HashKeyModel, [
+        ensures(Int::from(result) == set_contents(self).len())
+    ])]
+    fn len(&self) -> usize;
+}
+
+#[extern_spec]
+impl<K: Eq + core::hash::Hash, V, S: core::hash::BuildHasher, A: Allocator> HashMap<K, V, S, A> {
+    #[trusted]
+    #[refine_spec(where K: HashKeyModel, [
+        ensures(map_contents(self) == old(map_contents(&*self)).insert(k.key_model(), v)),
+        ensures(match &result {
+            Some(previous) => old(map_contents(&*self)).contains(k.key_model())
+                && *previous === *old(map_contents(&*self))[k.key_model()],
+            None => !old(map_contents(&*self)).contains(k.key_model()),
+        })
+    ])]
+    fn insert(&mut self, k: K, v: V) -> Option<V>;
+}
+
+#[extern_spec]
+impl<K: Eq + core::hash::Hash, S: core::hash::BuildHasher, A: Allocator> HashSet<K, S, A> {
+    #[trusted]
+    #[refine_spec(where K: HashKeyModel, [
+        ensures(set_contents(self) == old(set_contents(&*self)).union(Set::single(value.key_model()))),
+        ensures(result == !old(set_contents(&*self)).contains(value.key_model()))
+    ])]
+    fn insert(&mut self, value: K) -> bool;
+}

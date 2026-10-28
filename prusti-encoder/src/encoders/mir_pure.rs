@@ -1747,12 +1747,30 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                 let (qvars, body) =
                     self.encode_spec_closure(name, arg_tys[2].expect_ty(), encoded_args[1])?;
                 let body = body.downcast_ty::<vir::Bool>();
-                let triggers =
-                    self.encode_trigger_sets(name, arg_tys[0].expect_ty(), encoded_args[0], qvars)?;
+                // Keep the trigger closures' captures outside the quantifier.
+                // If their tuple construction occurs only inside a trigger,
+                // the solver cannot reduce its projections before matching it
+                // against terms built from the captured values.
+                let trigger_snap = encoded_args[0];
+                let trigger_decl = self.vcx.mk_local_decl(
+                    vir::vir_format!(self.vcx, "_trigger_capture_{}", self.encoding_depth),
+                    trigger_snap.ty(),
+                );
+                let triggers = self.encode_trigger_sets(
+                    name,
+                    arg_tys[0].expect_ty(),
+                    self.vcx.mk_local_ex(trigger_decl).lift(),
+                    qvars,
+                )?;
                 let res = if builtin == SpecBuiltin::Forall {
                     self.vcx.mk_forall_expr(qvars, triggers, body)
                 } else {
                     self.vcx.mk_exists_expr(qvars, triggers, body)
+                };
+                let res = if triggers.is_empty() {
+                    res
+                } else {
+                    self.vcx.mk_let_expr(trigger_decl, trigger_snap, res)
                 };
                 mk_bool(res)
             }

@@ -177,8 +177,8 @@ prove that the live iterator tail is the entry sequence's suffix at the
 processed count, for symbolic lengths and an arbitrary early-break bound.
 Their negative clients reject incorrect exit-count claims. The
 `mut_native_tail_value` pair proves an untouched element's value on a
-nonempty early-break path and rejects a wrong value. This does not yet
-establish the processed prefix or the restored owner's final contents.
+nonempty early-break path and rejects a wrong value. Separate restoration
+clients now establish the processed prefix and the restored owner's contents.
 
 The `mut_native_prefix_ghost` controls maintain a growing ghost sequence and
 verify that its length matches the number of yielded elements. The
@@ -188,16 +188,17 @@ is `7`, using both `usize` and mathematical `Int` indices; wrong values and
 failure to preserve these quantified invariants across append. The sequence
 lookup model now gives its existing guarded equality an additional trigger on
 native indexing, allowing the solver to instantiate the old-prefix property.
-This proves the ghost prefix values; it does not yet relate them to the
-restored owner.
+The `body_restore_prefix!` restoration clients connect those ghost values to
+the owner after iterator expiry.
 
 The generated constructor package can already prove its initial value
 relation using the native `p_Slice` and `p_Param` predicates. The
 [constructor-wand runner](../../../../../scripts/test_stdlib_iterator_constructor_wand.py)
 inserts that checked assertion into the emitted proof script and runs both
 an equality and its deliberately false opposite. It adds no assumptions, and
-checks only initialization; the loop wand still drops the relation. After
-building Prusti, reproduce it with a fresh target directory:
+checks only initialization; the Rust loop annotation now carries the relation
+on the selected loop wand. After building Prusti, reproduce the original
+constructor experiment with a fresh target directory:
 
 ```sh
 CONSTRUCTOR_PROBE_TARGET="$(mktemp -d)"
@@ -216,8 +217,8 @@ uses the same dumped program. It strengthens the existing generated loop
 wand with a processed-prefix relation and the tail-at-expiry suffix, then
 checks the final owner contents. The constructor and `next` pledges establish
 the packages; no new assumptions are added. The runner also checks that `false`
-and an incorrect final value fail. This is a generated-Viper experiment, not
-support for a Rust restoration annotation. Its `--prefix-sequence` variant
+and an incorrect final value fail. This generated-Viper experiment predates
+the Rust restoration annotation. Its `--prefix-sequence` variant
 adds ghost assignments for a sequence of completed snapshots and proves the
 planned `source = prefix ++ tail_at_expiry` relation. Run it after the
 preceding dump:

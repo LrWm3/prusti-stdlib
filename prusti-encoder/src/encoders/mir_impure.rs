@@ -175,6 +175,7 @@ where
     pub wandless_calls: FxHashSet<mir::BasicBlock>,
     pub from_to_vars: FromToVars<'vir>,
     pub loop_snapshot_frames: Vec<LoopSnapshotFrame<'vir>>,
+    pub loop_restoration_frames: FxHashMap<mir::BasicBlock, LoopRestorationFrame<'vir>>,
 
     // for the current basic block
     pub current_fpcs: Option<PcgBasicBlock<'enc, 'vir>>,
@@ -192,6 +193,19 @@ pub(crate) struct LoopSnapshotFrame<'vir> {
     pub loop_id: LoopId,
     pub head: vir::CfgBlockLabel<'vir>,
     pub snapshots: Vec<(vir::ExprSnap<'vir>, vir::ExprSnap<'vir>)>,
+}
+
+/// Snapshots of the annotation inputs taken at the start of each iteration.
+/// A previous loop wand must use these values even after the prefix changes.
+#[derive(Clone)]
+pub(crate) struct LoopRestorationFrame<'vir> {
+    pub loop_id: LoopId,
+    pub span: Span,
+    pub edge: PcgCoupledEdgeKind<'vir>,
+    pub source: Place<'vir>,
+    pub iterator: mir::Local,
+    pub restoration: super::mir_pure::MirPureEncOutput<'vir>,
+    pub saved: FxHashMap<mir::Local, vir::ExprSnap<'vir>>,
 }
 
 /// Represents the translation of a MIR place. If the place crosses a shared
@@ -967,6 +981,21 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     }
                     _ => unreachable!(),
                 }
+            }
+            BorrowPcgEdgeKind::Coupled(edge)
+                if let Some(head) = edge.loop_head()
+                    && let Some((_, span)) = self
+                        .spec_blocks
+                        .loop_specs
+                        .values()
+                        .find(|spec| spec.original_head_block == head)
+                        .and_then(|spec| spec.restorations.first()) =>
+            {
+                return Err(self.unsupported_rvalue(
+                    "body_restore_prefix requires a singleton iterator restoration edge"
+                        .to_string(),
+                    *span,
+                ));
             }
             BorrowPcgEdgeKind::Abstraction(at @ AbstractionEdge::Loop(_)) => {
                 self.pcs_handle_wand(
@@ -2158,7 +2187,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
     /// Identify the single loop edge described by a restoration annotation.
     /// This depends only on the loop-head PCG state, so the same selection can
     /// later be used when encoding entry packages as well as the loop invariant.
-    fn select_restoration_edge(
+    pub(crate) fn select_restoration_edge(
         &mut self,
         original_head: mir::BasicBlock,
         spec_block: mir::BasicBlock,
@@ -2204,11 +2233,11 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             .graph()
             .edges()
             .filter_map(|edge| {
-                let edge = match edge.kind() {
+                let (edge, singleton) = match edge.kind() {
                     BorrowPcgEdgeKind::Abstraction(edge @ AbstractionEdge::Loop(_)) => {
-                        edge.clone().into_singleton_coupled_edge()
+                        (edge.clone().into_singleton_coupled_edge(), true)
                     }
-                    BorrowPcgEdgeKind::Coupled(edge) => edge.clone(),
+                    BorrowPcgEdgeKind::Coupled(edge) => (edge.clone(), false),
                     _ => return None,
                 };
                 if edge.loop_head() != Some(original_head) {
@@ -2227,7 +2256,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         _ => false,
                     }
                 });
-                mentions_iterator.then_some(edge)
+                mentions_iterator.then_some((edge, singleton))
             })
             .collect::<Vec<_>>();
         if matched_edges.len() != 1 {
@@ -2237,8 +2266,14 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 span,
             ));
         }
-        let inputs = matched_edges[0].inputs(self.pcg_ctxt());
-        let outputs = matched_edges[0].outputs();
+        if !matched_edges[0].1 {
+            return Err(self.unsupported_rvalue(
+                "body_restore_prefix requires a singleton iterator restoration edge".to_string(),
+                span,
+            ));
+        }
+        let inputs = matched_edges[0].0.inputs(self.pcg_ctxt());
+        let outputs = matched_edges[0].0.outputs();
         let source = if inputs.len() == 1 && outputs.len() == 1 {
             match *inputs[0] {
                 PcgNode::Place(MaybeLabelledPlace::Current(source))
@@ -2280,16 +2315,226 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         }
         Ok((
             restoration,
-            matched_edges.into_iter().next().unwrap(),
+            matched_edges.into_iter().next().unwrap().0,
             source,
             iterator,
         ))
     }
 
+    /// Prepare the selected edge and its iteration-local snapshot variables.
+    /// The saved values identify the previous wand after the body advances the
+    /// iterator or changes the ghost prefix.
+    pub(crate) fn prepare_restoration_frame(
+        &mut self,
+        original_head: mir::BasicBlock,
+        cfpcs: &PcgBasicBlock<'_, 'vir>,
+        loop_id: LoopId,
+        spec_block: mir::BasicBlock,
+        span: Span,
+    ) -> EncodeResult<'vir, LoopRestorationFrame<'vir>, E> {
+        if let Some(frame) = self.loop_restoration_frames.get(&original_head) {
+            return Ok(frame.clone());
+        }
+        let (restoration, edge, source, iterator) =
+            self.select_restoration_edge(original_head, spec_block, span, cfpcs)?;
+        let inputs = restoration
+            .inputs
+            .iter()
+            .copied()
+            .chain([source.local, iterator])
+            .collect::<FxHashSet<_>>();
+        let mut saved = FxHashMap::default();
+        for local in inputs.into_iter().sorted_by_key(|local| local.index()) {
+            let ty = self.ty_use_pure(self.body.local_decls[local].ty).snapshot;
+            let name = vir::vir_format!(
+                self.vcx,
+                "_loop_restore{}_{}",
+                original_head.index(),
+                local.index()
+            );
+            let decl = self.vcx.mk_local_decl(name, ty);
+            self.stmt(self.vcx.mk_local_decl_stmt(decl, None));
+            saved.insert(local, self.vcx.mk_local_ex(decl));
+        }
+        let frame = LoopRestorationFrame {
+            loop_id,
+            span,
+            edge,
+            source,
+            iterator,
+            restoration,
+            saved,
+        };
+        self.loop_restoration_frames
+            .insert(original_head, frame.clone());
+        Ok(frame)
+    }
+
+    pub(crate) fn capture_restoration_frame(
+        &mut self,
+        frame: &LoopRestorationFrame<'vir>,
+    ) -> EncodeResult<'vir, (), E> {
+        for (local, saved) in frame.saved.iter().sorted_by_key(|(local, _)| local.index()) {
+            let current = self.encode_place_with_snap((*local).into())?.1;
+            self.stmt(self.vcx.mk_pure_assign_stmt(*saved, current));
+        }
+        Ok(())
+    }
+
+    fn restoration_frame_for_edge(
+        &mut self,
+        edge: &PcgCoupledEdgeKind<'vir>,
+        inside_script: bool,
+    ) -> EncodeResult<'vir, Option<LoopRestorationFrame<'vir>>, E> {
+        let Some(original_head) = edge.loop_head() else {
+            return Ok(None);
+        };
+        let Some((head, loop_id, annotations)) = self
+            .spec_blocks
+            .loop_specs
+            .values()
+            .find(|spec| spec.original_head_block == original_head && !spec.restorations.is_empty())
+            .map(|spec| (spec.head_block, spec.loop_id, spec.restorations.clone()))
+        else {
+            return Ok(None);
+        };
+        let (spec_block, span) = annotations[0];
+        if annotations.len() != 1 {
+            return Err(self.unsupported_rvalue(
+                "body_restore_prefix requires exactly one restoration annotation per loop"
+                    .to_string(),
+                span,
+            ));
+        }
+        if inside_script && !self.loop_restoration_frames.contains_key(&original_head) {
+            return Err(self.unsupported_rvalue(
+                "body_restore_prefix requires an entry package outside a proof script".to_string(),
+                span,
+            ));
+        }
+        let frame = if let Some(frame) = self.loop_restoration_frames.get(&original_head) {
+            frame.clone()
+        } else {
+            let Ok(Some(cfpcs)) = self.fpcs_analysis.get_all_for_bb(head) else {
+                return Err(self.unsupported_rvalue(
+                    "body_restore_prefix requires a reachable loop invariant".to_string(),
+                    span,
+                ));
+            };
+            self.prepare_restoration_frame(original_head, &cfpcs, loop_id, spec_block, span)?
+        };
+        let selected_outputs = frame.edge.outputs();
+        let outputs = edge.outputs();
+        let mentions_iterator = outputs.iter().any(|output| {
+            let PcgNode::LifetimeProjection(output) = **output else {
+                return false;
+            };
+            matches!(output.base().to_pcg_lifetime_projection_base(),
+                PlaceOrConst::Place(MaybeRemotePlace::Local(place))
+                    if place.place() == frame.iterator.into())
+        });
+        if !mentions_iterator {
+            return Ok(None);
+        }
+        let inputs = edge.inputs(self.pcg_ctxt());
+        if inputs.len() != 1 || outputs.len() != 1 || selected_outputs.len() != 1 {
+            return Err(self.unsupported_rvalue(
+                "body_restore_prefix requires a stable matching iterator restoration edge"
+                    .to_string(),
+                span,
+            ));
+        }
+        let PcgNode::Place(MaybeLabelledPlace::Current(source)) = *inputs[0] else {
+            return Err(self.unsupported_rvalue(
+                "body_restore_prefix requires a stable matching iterator restoration edge"
+                    .to_string(),
+                span,
+            ));
+        };
+        let PcgNode::LifetimeProjection(output) = *outputs[0] else {
+            unreachable!()
+        };
+        let PcgNode::LifetimeProjection(selected) = *selected_outputs[0] else {
+            unreachable!()
+        };
+        if source != frame.source || output.region_idx() != selected.region_idx() {
+            return Err(self.unsupported_rvalue(
+                "body_restore_prefix requires a stable matching iterator restoration edge"
+                    .to_string(),
+                span,
+            ));
+        }
+        Ok(Some(frame))
+    }
+
+    pub(crate) fn with_restoration_wand(
+        &mut self,
+        wand: vir::Wand<'vir>,
+        edge: &PcgCoupledEdgeKind<'vir>,
+        old_outer: &mut WandOldOuter<'vir>,
+        use_saved: bool,
+        inside_script: bool,
+    ) -> EncodeResult<'vir, vir::Wand<'vir>, E> {
+        let Some(frame) = self.restoration_frame_for_edge(edge, inside_script)? else {
+            return Ok(wand);
+        };
+        let locals = if use_saved {
+            if self
+                .current_block_pres
+                .as_ref()
+                .is_some_and(|pres| pres.contains(&frame.loop_id.index()))
+            {
+                return Err(self.unsupported_rvalue(
+                    "body_restore_prefix requires the invariant before applying its loop wand"
+                        .to_string(),
+                    frame.span,
+                ));
+            }
+            frame.saved.clone()
+        } else {
+            let mut locals = FxHashMap::default();
+            for local in frame
+                .saved
+                .keys()
+                .copied()
+                .sorted_by_key(|local| local.index())
+            {
+                let snap = self.encode_place_with_snap(local.into())?.1;
+                locals.insert(local, self.mk_wand_outer(snap, old_outer));
+            }
+            locals
+        };
+        let relation = self.encode_restoration_relation(
+            &frame.restoration,
+            frame.source,
+            frame.iterator,
+            locals,
+            frame.span,
+        )?;
+        let lhs = if use_saved {
+            // A `next` call can change the live tail even when it returns
+            // `None`. Its expiry pledge restores the pre-call resource, so
+            // apply the loop-head wand to the saved tail rather than the
+            // iterator snapshot at the later drop or backedge.
+            let output = edge.outputs()[0].expect_lifetime_projection();
+            let resources = self.encode_lifetime_projection_with_snapshot(
+                output,
+                old_outer,
+                Some(frame.saved[&frame.iterator]),
+            )?;
+            self.vcx.mk_conj(&resources)
+        } else {
+            wand.lhs
+        };
+        Ok(self
+            .vcx
+            .mk_wand(lhs, self.vcx.mk_conj(&[wand.rhs, relation])))
+    }
+
     /// Reify the restoration formula using one consistent set of snapshots.
     /// Callers must choose the capture point for every local before invoking
     /// this method, including the edge's source and the iterator itself.
-    fn encode_restoration_relation(
+    pub(crate) fn encode_restoration_relation(
         &mut self,
         restoration: &super::mir_pure::MirPureEncOutput<'vir>,
         source: Place<'vir>,
@@ -2300,7 +2545,12 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         let Some((&source_snap, &iterator_snap)) = locals
             .get(&source.local)
             .zip(locals.get(&iterator))
-            .filter(|_| restoration.inputs.iter().all(|local| locals.contains_key(local)))
+            .filter(|_| {
+                restoration
+                    .inputs
+                    .iter()
+                    .all(|local| locals.contains_key(local))
+            })
         else {
             return Err(self.unsupported_rvalue(
                 "body_restore_prefix requires snapshots for all restoration inputs".to_string(),
@@ -2645,41 +2895,32 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         // loop head by default
         let mut invariant = None;
         if let Some(loop_spec) = self.spec_blocks.loop_specs.get(&block) {
-            if let Some((spec_block, span)) = loop_spec.restorations.first().copied() {
-                if loop_spec.restorations.len() != 1 {
+            let original_head = loop_spec.original_head_block;
+            let loop_id = loop_spec.loop_id;
+            let restorations = loop_spec.restorations.clone();
+            let invariants = loop_spec.invariants.clone();
+            if let Some((spec_block, span)) = restorations.first().copied() {
+                if restorations.len() != 1 {
                     return Err(self.unsupported_rvalue(
                         "body_restore_prefix requires exactly one restoration annotation per loop"
                             .to_string(),
                         span,
                     ));
                 }
-                let (restoration, _edge, source, iterator) = self.select_restoration_edge(
-                    loop_spec.original_head_block,
+                let frame = self.prepare_restoration_frame(
+                    original_head,
+                    &cfpcs,
+                    loop_id,
                     spec_block,
                     span,
-                    &cfpcs,
                 )?;
-                let mut locals = FxHashMap::default();
-                for local in restoration.inputs.iter().copied().chain([source.local, iterator]) {
-                    if !locals.contains_key(&local) {
-                        locals.insert(local, self.encode_place_with_snap(local.into())?.1);
-                    }
-                }
-                let _relation = self.encode_restoration_relation(
-                    &restoration, source, iterator, locals, span,
-                )?;
-                return Err(self.unsupported_rvalue(
-                    "body_restore_prefix is not yet supported".to_string(),
-                    span,
-                ));
+                self.capture_restoration_frame(&frame)?;
             }
             let loop_place_usages = self
                 .fpcs_analysis
                 .analysis()
-                .loop_place_usages(loop_spec.loop_id)
+                .loop_place_usages(loop_id)
                 .clone();
-            let invariants = loop_spec.invariants.clone();
-            let loop_id = loop_spec.loop_id;
             let mut invariant_inputs = FxHashSet::default();
             for (spec_block, _) in &invariants {
                 let enc_output = self.deps.require_dep::<MirPureEnc>(MirPureEncTask {

@@ -81,10 +81,19 @@ pub use prusti_contracts_proc_macros::invariant;
 /// A macro for writing a loop body invariant.
 pub use prusti_contracts_proc_macros::body_invariant;
 
-/// Declare a mutable iterator's prefix restoration summary in a loop.
+/// Declare the restoration summary for a native mutable slice iterator.
 ///
-/// This annotation is not yet supported by the verifier. It is reserved for
-/// a saved source identity, the live iterator, and a ghost prefix sequence.
+/// Write `body_restore_prefix!(&iterator, *owner, *prefix)` in the loop,
+/// where `owner` is a ghost snapshot of the original `*const [T]` and
+/// `prefix` is a ghost `Seq<T>` containing the final snapshots of completed
+/// elements. When the iterator's remaining tail expires, the summary states
+/// that the restored source is `prefix` followed by the tail at expiry.
+/// The verifier checks this obligation on loop entry and each backedge; it
+/// does not make the borrowed source readable inside the loop.
+///
+/// Currently this requires one matching singleton loop edge from a local
+/// mutable slice reference to a local native `slice::IterMut`. Ambiguous edges
+/// and unsupported control-flow shapes are rejected.
 pub use prusti_contracts_proc_macros::body_restore_prefix;
 
 /// Internal marker emitted by `body_restore_prefix!`.

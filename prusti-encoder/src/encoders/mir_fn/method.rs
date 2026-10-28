@@ -316,6 +316,7 @@ impl TaskEncoder for MethodEnc {
                     wandless_calls: Default::default(),
                     from_to_vars: Default::default(),
                     loop_snapshot_frames: Vec::new(),
+                    loop_restoration_frames: Default::default(),
 
                     current_block: None,
                     current_block_pres: None,

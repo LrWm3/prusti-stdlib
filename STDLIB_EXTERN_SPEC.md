@@ -1088,14 +1088,14 @@ and early break: at each loop head the remaining tail equals the corresponding
 suffix of the entry sequence, and the exit count is checked. These controls
 include empty inputs and reject incorrect exit-count claims. A separate
 nonempty early-break case proves a particular untouched tail value and rejects
-a wrong value. These observe the live tail; they do not prove that the
-processed prefix is restored to the owner.
+a wrong value. Those controls observe the live tail; the restoration tests
+below separately prove the restored owner's prefix and suffix.
 
 The constructor's initial source–tail value equality has also been checked
 inside the actual emitted Viper package, using the generated slice predicates
 and the existing constructor pledge. A deliberately opposite assertion fails.
-This checks only the base case; the generated loop wand still omits the value
-relation on its backedge and exit.
+This historical experiment checks only the base case; the loop annotation
+below now carries the relation on backedges and exits.
 
 A further experiment strengthens the actual emitted loop wand with a
 processed-prefix and tail-at-expiry relation. The existing constructor and
@@ -1103,11 +1103,12 @@ processed-prefix and tail-at-expiry relation. The existing constructor and
 empty input; an incorrect final prefix and `false` are rejected. A second
 variant explicitly maintains a ghost sequence of completed values and proves
 `source_at_restoration = prefix ++ tail_at_expiry` with the same controls.
-These are manual transformations of generated Viper, not yet a Rust-facing
-feature. Rust loops can now maintain a ghost prefix sequence and prove its
-quantified element values across append with either `usize` or `Int` indices;
-negative value and consistency checks exercise that proof separately from the
-still-unimplemented owner restoration relation.
+These were manual transformations of generated Viper. The Rust annotation
+now emits the sequence relation on the selected loop wand. Rust clients prove
+full traversal and early break for symbolic lengths; a generic unchanged-value
+client uses element snapshots without a `Copy` bound. Rust loops also prove
+quantified prefix values across append with either `usize` or `Int` indices.
+The remaining IM2 cases and IM3–IM5 are still open.
 
 Implement the Rust connection in these steps:
 
@@ -1119,24 +1120,21 @@ Implement the Rust connection in these steps:
    by loop-spec analysis. Its typed source–prefix–tail equation is encoded,
    and the iterator must have one matching singleton slice-restoration edge;
    duplicate annotations, missing edges, and overlapping edges are rejected.
-   The reified equation also binds source and tail addresses and slice lengths
-   to that edge, with checks ordered before the slice observations. This binding
-   is currently checked during encoding only; the annotation still reports an
-   explicit unsupported-feature error until the equation is connected to the
-   wand and its labels.
-2. At each loop head, identify the unique PCG restoration edge for that source
-   and tail, and check the saved identity and metadata against the edge. Reject
-   ambiguous, missing, or mismatched resources instead of guessing an edge or
-   adding a second overlapping wand.
+   The equation binds source and tail addresses and slice lengths to that edge,
+   with checks ordered before the slice observations.
+2. Identify the unique PCG restoration edge at the loop head. Reject
+   ambiguous or mismatched resources instead of guessing an edge or adding a
+   second overlapping wand.
 3. Attach the value relation to that edge's existing wand at entry, backedges,
-   and all exits. Capture the source identity, tail reference, and prefix
-   snapshots at the correct labels, and prove the relation in each package
-   using the existing expiry pledges. Preserve the resource-only behavior when
-   no restoration annotation is present.
-4. Verify Rust clients that maintain the prefix sequence, then test symbolic
-   full and early-break exits, wrong prefix and suffix values, `false`, and
-   attempts to read the still-borrowed owner. Extend beyond the first native
-   iterator shape only after these cases verify.
+   and exits. Capture source, tail, and prefix snapshots at the loop head, and
+   use the saved pre-`next` iterator when applying the previous wand. The
+   existing expiry pledges prove full traversal and symbolic early break in
+   explicit Rust loops, including empty inputs. Resource-only loops retain
+   their existing behavior.
+4. Complete the remaining Rust acceptance cases: conditional updates and
+   `continue`, ordinary `for` loops and Vec views, multiple yields, and
+   cross-crate contracts. Keep wrong-prefix, wrong-suffix, `false`, borrowed
+   owner, mismatched identity, and mismatched length checks alongside them.
 
 Add explicit-loop clients first, followed by ordinary mutable-slice `for`
 loops and `Vec::iter_mut()`. Cover full traversal, symbolic early break,

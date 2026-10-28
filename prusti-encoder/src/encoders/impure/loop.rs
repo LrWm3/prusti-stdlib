@@ -211,6 +211,7 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         for edge in edges {
             let mut let_bind = WandOldOuter::LetBind(Vec::new());
             let (wand, _) = self.coupled_wand(&edge, &mut let_bind)?;
+            let wand = self.with_restoration_wand(wand, &edge, &mut let_bind, false, false)?;
             // The empty resource wand is a tautology and does not need a
             // packaged wand instance at the loop boundary.
             if matches!(
@@ -336,35 +337,55 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         r: LifetimeProjection<'vir, T>,
         old_outer: &mut WandOldOuter<'vir>,
     ) -> EncodeResult<'vir, Vec<vir::ExprBool<'vir>>, E> {
+        self.encode_lifetime_projection_with_snapshot(r, old_outer, None)
+    }
+
+    pub(crate) fn encode_lifetime_projection_with_snapshot<
+        T: PcgLifetimeProjectionBaseLike<'vir>,
+    >(
+        &mut self,
+        r: LifetimeProjection<'vir, T>,
+        old_outer: &mut WandOldOuter<'vir>,
+        saved: Option<vir::ExprSnap<'vir>>,
+    ) -> EncodeResult<'vir, Vec<vir::ExprBool<'vir>>, E> {
         let place = r.base().to_pcg_lifetime_projection_base();
         let heap_label = match r.label() {
             Some(LifetimeProjectionLabel::Location(at)) => Some(self.get_location_label(at)),
             _ => None,
         };
-        let (place_snap, ty, _) = match place {
-            PcgLifetimeProjectionBase::Place(MaybeRemotePlace::Local(
-                MaybeLabelledPlace::Current(p),
-            )) if heap_label.is_some() => {
-                let (_, snap, ty, ty_out) = self.encode_place_with_snap(p)?;
-                (self.vcx.maybe_apply_label(snap, heap_label), ty, ty_out)
-            }
-            PcgLifetimeProjectionBase::Place(MaybeRemotePlace::Local(
-                MaybeLabelledPlace::Labelled(p),
-            )) if matches!(r.label(), Some(LifetimeProjectionLabel::Location(at))
+        let (place_snap, ty) = if let Some(saved) = saved {
+            let PcgLifetimeProjectionBase::Place(place) = place else {
+                unreachable!()
+            };
+            let p = Self::get_place(place);
+            (saved, (*p).ty(self.local_decls, self.vcx.tcx()))
+        } else {
+            match place {
+                PcgLifetimeProjectionBase::Place(MaybeRemotePlace::Local(
+                    MaybeLabelledPlace::Current(p),
+                )) if heap_label.is_some() => {
+                    let (_, snap, ty, _) = self.encode_place_with_snap(p)?;
+                    (self.vcx.maybe_apply_label(snap, heap_label), ty)
+                }
+                PcgLifetimeProjectionBase::Place(MaybeRemotePlace::Local(
+                    MaybeLabelledPlace::Labelled(p),
+                )) if matches!(r.label(), Some(LifetimeProjectionLabel::Location(at))
                 if self.snapshot_precedes(at, p.at())) =>
-            {
-                // Moving the base later must not replace the earlier value
-                // selected by its lifetime projection (e.g. an iterator's
-                // tail before `next`). When the base was moved first, retain
-                // its saved shallow value and use the projection's heap label
-                // only for resources reached through that value.
-                let (_, snap, ty, ty_out) = self.encode_place_with_snap(p.place())?;
-                (self.vcx.maybe_apply_label(snap, heap_label), ty, ty_out)
+                {
+                    // Moving the base later must not replace the earlier value
+                    // selected by its lifetime projection (e.g. an iterator's
+                    // tail before `next`). When the base was moved first, retain
+                    // its saved shallow value and use the projection's heap label
+                    // only for resources reached through that value.
+                    let (_, snap, ty, _) = self.encode_place_with_snap(p.place())?;
+                    (self.vcx.maybe_apply_label(snap, heap_label), ty)
+                }
+                PcgLifetimeProjectionBase::Place(p) => {
+                    let (snap, ty, _) = self.encode_maybe_remote_place_snap(p, old_outer)?;
+                    (snap, ty)
+                }
+                PcgLifetimeProjectionBase::Const(c) => todo!("{c:?}"),
             }
-            PcgLifetimeProjectionBase::Place(p) => {
-                self.encode_maybe_remote_place_snap(p, old_outer)?
-            }
-            PcgLifetimeProjectionBase::Const(c) => todo!("{c:?}"),
         };
         let ty = RustTyDecomposition::from_ty(ty.ty, self.def_id);
         let indirect = self
@@ -445,7 +466,7 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         }
     }
 
-    fn mk_wand_outer<T: SnapOrRef>(
+    pub(crate) fn mk_wand_outer<T: SnapOrRef>(
         &mut self,
         expr: vir::Expr<'vir, T>,
         old_outer: &mut WandOldOuter<'vir>,
@@ -470,7 +491,7 @@ type LetBind<'vir> = Result<
     (vir::LocalDeclRef<'vir>, vir::ExprRef<'vir>),
 >;
 
-trait SnapOrRef: vir::CompType {
+pub(crate) trait SnapOrRef: vir::CompType {
     fn as_result<'vir>(d: vir::LocalDecl<'vir, Self>, e: vir::Expr<'vir, Self>) -> LetBind<'vir>;
 }
 

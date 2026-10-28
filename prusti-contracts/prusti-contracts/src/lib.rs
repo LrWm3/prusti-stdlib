@@ -51,9 +51,10 @@ pub use prusti_contracts_proc_macros::ensures;
 
 /// A macro for writing a pledge on a function.
 ///
-/// In a pledge, `after_call(expr)` captures mutable-reference heap reads in
-/// `expr` at the function's normal return. Arguments retain their contract
-/// bindings, and `result` denotes the returned value. The captured snapshot
+/// In an `after_expiry` postcondition, `after_call(expr)` captures
+/// mutable-reference heap reads in `expr` at the function's normal return.
+/// Arguments retain their contract bindings, and `result` denotes the
+/// returned value. The captured snapshot
 /// does not itself grant access to the referenced heap. The marker currently
 /// cannot be nested with temporal operators or contain a heap-dependent
 /// `mut_slice_contents` call.

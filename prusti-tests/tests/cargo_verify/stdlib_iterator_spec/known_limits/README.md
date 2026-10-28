@@ -69,8 +69,18 @@ metadata-only observation that does not read the mutable slice's elements.
 The `mut_region_value_pass` regression uses `mut_slice_contents`, which
 requires slice permission, in an expiry pledge and proves that writing through
 one yielded reference updates the original slice. Its incorrect-value case is
-rejected. Restoring the final values of multiple yielded elements, and modeling
-the standard library's raw-pointer-backed `IterMut`, remain open.
+rejected. The `mut_region_reassembly_pass` case and its reverse-order
+counterpart use `after_call` to retain each call's post-call tail snapshot and
+prove the final values of two simultaneously live yields. The untrusted `next` contract
+applies to an arbitrary nonempty tail; incorrect values and a false assertion
+are rejected. The separate functional regression covers exhaustion.
+
+`region_full_reassembly` combines that expiry pledge with the `Some`/`None`
+contract in a single `next`. The implementation verifies on its own, but the
+two-call client timed out with the 90-second verifier limit on 2026-10-28.
+Run it with `--bin region_full_reassembly`. Completing this combined proof,
+proving an arbitrary-length mutation loop, and modeling the standard library's
+raw-pointer-backed `IterMut` remain open.
 
 Before the edge-replay fix, the wand package script in `take_mut_slice`
 converted the slot's representation a second time and consumed its permission;

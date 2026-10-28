@@ -40,4 +40,8 @@ path = "take_mut_slice.rs"
 name = "region_advance"
 path = "region_advance.rs"
 
+[[bin]]
+name = "region_full_reassembly"
+path = "region_full_reassembly.rs"
+
 [workspace]

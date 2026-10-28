@@ -1022,3 +1022,13 @@ runner configuration and toolchain remain those recorded for P3-B. A later
 follow-up narrows the change to types with inferred regions and no aliases or
 unevaluated constants; its new-lifetime positive case was also checked
 separately.
+
+On 2026-10-28, the mutable-argument lifetime-resource implementation at
+`65312bd57` passed the full borrow suite (80 checks, 1820.32 seconds; longest
+`frame_pass`, 86.62 seconds) and iterator suite (75 checks, 1239.22 seconds;
+longest `spec-library`, 72.37 seconds). The optional-empty addition and the
+negative simultaneous-yield branch were also checked separately. The runner
+used the pinned Rust, Viper, Z3, and Java versions and the verification
+settings recorded above. These checks cover an explicit borrowed tail and
+restoration of its length; they do not establish a functional standard
+`IterMut` model or restoration of its elements.

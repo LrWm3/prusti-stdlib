@@ -36,4 +36,8 @@ path = "region_next.rs"
 name = "take_mut_slice"
 path = "take_mut_slice.rs"
 
+[[bin]]
+name = "region_advance"
+path = "region_advance.rs"
+
 [workspace]

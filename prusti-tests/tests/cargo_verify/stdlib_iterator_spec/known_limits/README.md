@@ -50,26 +50,30 @@ functional iterator: the probe never actually splits or advances the slice.
 The raw-pointer-backed standard iterator still needs its own remaining-element
 resource and a way to relate yielded elements to the original slice.
 
-The `take_mut_slice` probe isolates a separate borrow-transfer failure in a
-safe implementation that moves a borrowed tail out of an `Option` using
-`mem::replace`. Both the earlier encoder and the revised encoder report an
-insufficient-permission error during verification, currently exposed as an
-internal backtranslation error. This also prevents verifying a slice-backed
-iterator implementation that advances by taking and splitting its tail.
-Run it with `--bin take_mut_slice`.
+The `take_mut_slice` probe isolates borrow transfer when a safe implementation
+moves a borrowed tail out of an `Option` using `mem::replace`. It now verifies:
+the encoder avoids repeating graph edges already restored before the wand is
+packaged. The regression suite also checks a caller that drops the slot before
+using the returned borrow and rejects a false claim in the returned-`Some` path.
+Run the probe with `--bin take_mut_slice`.
 
-In the generated program for this probe, the wand package script converts the
-slot's representation and consumes its permission; the enclosing method then
-cannot return that permission. The standalone `slot_unframed.vpr` isolates
-this effect and fails with an insufficient-permission postcondition, while
+The `region_advance` probe implements `next` by taking and splitting that
+tail. It still reports an insufficient-permission error while packaging the
+iterator's old slice resource, currently exposed as an internal
+backtranslation error. Run it with `--bin region_advance`.
+
+Before the edge-replay fix, the wand package script in `take_mut_slice`
+converted the slot's representation a second time and consumed its permission;
+the enclosing method could not return that permission. The standalone
+`slot_unframed.vpr` isolates this effect and fails with an insufficient-permission postcondition, while
 `slot_frame.vpr` verifies when the slot is included on both sides of the wand.
 The latter also makes the slot a requirement for applying the wand, so a
 Prusti fix must account for that dependency and prove the relevant call and
 expiry paths; the standalone example is not itself an encoder fix. Run these
 files with the Silicon command below, replacing its final filename. Adding the
-same frame to both sides of the wand in the generated `take_mut_slice` Viper
-program also makes that method verify. That experiment checks the callee only;
-it does not establish that callers can apply the resulting wand correctly.
+same frame to both sides of the earlier generated `take_mut_slice` Viper
+program also made that method verify. The implemented fix instead avoids the
+repeated conversion, so it does not require callers to retain the slot.
 
 The standalone `spatial_iter.vpr` experiment models elements as distinct
 *logical* locations with quantified permissions. It verifies splitting off

@@ -172,11 +172,78 @@ method repeated_views()
   unfold payload(a)
   a.value := 7
   fold payload(a)
-  if (perm(payload(a)) > none) { fold indexed_payload(0, a) }
-  else { assert indexed_payload(0, a) }
-  if (perm(payload(a)) > none) { fold indexed_payload(0, a) }
-  else { assert indexed_payload(0, a) }
+  if (perm(indexed_payload(0, a)) > none) { assert indexed_payload(0, a) }
+  else { fold indexed_payload(0, a) }
+  if (perm(indexed_payload(0, a)) > none) { assert indexed_payload(0, a) }
+  else { fold indexed_payload(0, a) }
   unfold indexed_payload(0, a)
   unfold payload(a)
   assert a.value == 7
+}
+
+// The address behind a nested reference is read with its enclosing resource.
+// Capturing that address before opening preserves its identity at restoration.
+field link: Ref
+predicate slot(r: Ref) { acc(r.link) }
+predicate indexed_slot(i: Int, r: Ref) { slot(r) }
+function target(r: Ref): Ref
+  requires slot(r)
+{ unfolding slot(r) in r.link }
+function nested_target(i: Int, r: Ref): Ref
+  requires indexed_slot(i, r)
+{ unfolding indexed_slot(i, r) in target(r) }
+function nested_value(i: Int, r: Ref): Int
+  requires indexed_slot(i, r) && indexed_payload(i, nested_target(i, r))
+{ unfolding indexed_payload(i, nested_target(i, r)) in
+    unfolding payload(nested_target(i, r)) in nested_target(i, r).value }
+
+method nested_resources(xs: Seq[Ref], i: Int, other: Int)
+  requires 0 <= i && i < |xs| && 0 <= other && other < |xs| && i != other
+  requires forall j: Int :: {xs[j]}
+    0 <= j && j < |xs| ==> indexed_slot(j, xs[j])
+  requires forall j: Int :: {xs[j]}
+    0 <= j && j < |xs| ==> indexed_payload(j, nested_target(j, xs[j]))
+  ensures forall j: Int :: {xs[j]}
+    0 <= j && j < |xs| ==> indexed_slot(j, xs[j])
+  ensures forall j: Int :: {xs[j]}
+    0 <= j && j < |xs| ==> indexed_payload(j, nested_target(j, xs[j]))
+  ensures nested_value(i, xs[i]) == 7
+  ensures nested_value(other, xs[other]) == old(nested_value(other, xs[other]))
+{
+  var r: Ref := nested_target(i, xs[i])
+  unfold indexed_slot(i, xs[i])
+  unfold indexed_payload(i, r)
+  unfold payload(r)
+  r.value := 7
+  fold payload(r)
+  fold indexed_slot(i, xs[i])
+  assert nested_target(i, xs[i]) == r
+  fold indexed_payload(i, r)
+}
+
+// A replacement must return the updated collection immediately. Its wand
+// consumes a future collection and returns both the original collection and
+// the replacement's referent. The old referent comes from the captured frame.
+method replace_resources(xs: Seq[Ref], i: Int, replacement: Ref) returns (ys: Seq[Ref])
+  requires 0 <= i && i < |xs|
+  requires forall j: Int :: {xs[j]} 0 <= j && j < |xs| ==> indexed_payload(j, xs[j])
+  requires payload(replacement)
+  ensures ys == xs[i := replacement]
+  ensures forall j: Int :: {ys[j]} 0 <= j && j < |ys| ==> indexed_payload(j, ys[j])
+  ensures (forall j: Int :: {ys[j]} 0 <= j && j < |ys| ==> indexed_payload(j, ys[j])) --*
+    ((forall j: Int :: {xs[j]} 0 <= j && j < |xs| ==> indexed_payload(j, xs[j])) && payload(replacement))
+{
+  var previous: Ref := xs[i]
+  unfold indexed_payload(i, previous)
+  fold indexed_payload(i, replacement)
+  ys := xs[i := replacement]
+  label pkg
+  package (forall j: Int :: {ys[j]} 0 <= j && j < |ys| ==> indexed_payload(j, ys[j])) --*
+    ((forall j: Int :: {xs[j]} 0 <= j && j < |xs| ==> indexed_payload(j, xs[j])) && payload(replacement)) {
+    assert old[pkg](perm(payload(previous))) > none ==> payload(previous)
+    if (perm(payload(replacement)) > none) { assert payload(replacement) }
+    else { unfold indexed_payload(i, replacement) }
+    if (perm(indexed_payload(i, previous)) > none) { assert indexed_payload(i, previous) }
+    else { fold indexed_payload(i, previous) }
+  }
 }

@@ -39,6 +39,18 @@ def main():
   fold referents(xs, 0)
   two_yields(xs, false)
 """
+    nested_witness = """
+  var a: Ref := new(value)
+  var b: Ref := new(value)
+  var ra: Ref := new(link)
+  var rb: Ref := new(link)
+  a.value := 1; b.value := 2; ra.link := a; rb.link := b
+  fold payload(a); fold payload(b)
+  fold slot(ra); fold slot(rb)
+  fold indexed_slot(0, ra); fold indexed_slot(1, rb)
+  fold indexed_payload(0, a); fold indexed_payload(1, b)
+  nested_resources(Seq(ra, rb), 0, 1)
+"""
     negatives = {
         "false": (witness + "  assert false\n", "Assertion false might not hold"),
         "stale": (witness + "  assert at(xs, 0, 0) == 1\n", "Assertion at(xs, 0, 0) == 1 might not hold"),
@@ -73,16 +85,37 @@ def main():
 """, "There might be insufficient permission to access payload(a)"),
         "missing_close": ("""
   var a: Ref
-  if (perm(payload(a)) > none) { fold indexed_payload(0, a) }
-  else { assert indexed_payload(0, a) }
-""", "There might be insufficient permission to access indexed_payload(0, a)"),
+  if (perm(indexed_payload(0, a)) > none) { assert indexed_payload(0, a) }
+  else { fold indexed_payload(0, a) }
+""", "Folding indexed_payload(0, a) might fail. There might be insufficient permission to access payload(r)"),
         "duplicate_wrapper": ("""
   var a: Ref := new(value)
   fold payload(a)
   fold indexed_payload(0, a)
-  if (perm(payload(a)) > none) { fold indexed_payload(1, a) }
-  else { assert indexed_payload(1, a) }
-""", "There might be insufficient permission to access indexed_payload(1, a)"),
+  if (perm(indexed_payload(1, a)) > none) { assert indexed_payload(1, a) }
+  else { fold indexed_payload(1, a) }
+""", "Folding indexed_payload(1, a) might fail. There might be insufficient permission to access payload(r)"),
+        "missing_future": ("""
+  var a: Ref
+  if (perm(payload(a)) > none) { assert payload(a) }
+  else { unfold indexed_payload(0, a) }
+""", "Unfolding indexed_payload(0, a) might fail. There might be insufficient permission to access indexed_payload(0, a)"),
+        "replacement_resources_false": ("""
+  var a: Ref := new(value)
+  var b: Ref := new(value)
+  fold payload(a); fold payload(b)
+  fold indexed_payload(0, a)
+  var ys: Seq[Ref]
+  ys := replace_resources(Seq(a), 0, b)
+  assert false
+""", "Assertion false might not hold"),
+        "nested_wrong_frame": (nested_witness + "  assert nested_value(1, rb) == 7\n",
+            "Assertion nested_value(1, rb) == 7 might not hold"),
+        "nested_saved_identity": (nested_witness + """
+  var saved: Ref := nested_target(0, ra)
+  exhale indexed_payload(0, saved)
+  assert saved.value == 7
+""", "There might be insufficient permission to access saved.value"),
         "repeated_views_false": ("  repeated_views()\n  assert false\n", "Assertion false might not hold"),
         "zero_sized_false": ("""
   var r: Ref

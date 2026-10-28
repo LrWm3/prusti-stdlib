@@ -1177,6 +1177,13 @@ ownership-only loops continue to work with their current annotations.
 
 ### IM3: Track referent permissions inside concrete elements
 
+The shared-reference single-yield repro now verifies, with incorrect-value and
+`false` controls, after duplicate call-wand applications in one PCG phase were
+removed. A two-yield repro still applies the constructor wand again in a later
+phase for a resource-free nested shared lifetime; see the
+[resource ledger](prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/README.md#im0-native-loop-values-and-references-inside-elements).
+This is a narrow preliminary result, not the IM3 exit gate.
+
 Keep reference identity and referent value separate. `Seq<&mut U>` and the
 iterator identity observations continue to describe reference snapshots;
 reading `U` requires the corresponding heap permission. Shared references may

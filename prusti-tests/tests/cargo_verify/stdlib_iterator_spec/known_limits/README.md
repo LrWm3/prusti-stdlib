@@ -48,6 +48,16 @@ iterator variants for mutable references, holders, and optional references
 all reach the missing-permission error. The shared-reference iterator case
 instead reaches the separate missing-wand error above.
 
+The single-yield shared-reference case now verifies after call-wand removals
+are deduplicated within each PCG phase; its incorrect-value and `false`
+counterparts are rejected in the main iterator suite. This does not complete
+shared-reference support. `im3_shared_ref_two_yields` holds two yields and
+then reads the restored slice. It still reports `apply.failed:wand.not.found`:
+the constructor's resource-bearing lifetime projection applies its wand,
+but a later phase attempts to apply the same wand again for the nested shared
+lifetime. The runtime examples include both repeated and distinct shared
+referents; they are not evidence that the verifier handles the two-yield case.
+
 The scalar loop's generated invariant retains the iterator tail permission,
 the source reference's shallow snapshot, and a wand from the tail resource to
 the original slice resource. The constructor's inner expiry wand includes a

@@ -15,7 +15,7 @@ use pcg::{
         region_projection::{PcgLifetimeProjectionBaseLike, PlaceOrConst},
         state::BorrowsState,
         unblock_graph::{BorrowPcgUnblockAction, UnblockGraph},
-        validity_conditions::BranchChoices,
+        validity_conditions::{BranchChoices, ValidityConditions},
     },
     coupling::PcgCoupledEdgeKind,
     free_pcs::{RepackGuide, RepackOp},
@@ -747,7 +747,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         edge: &BorrowPcgEdge<'vir>,
         edge_action: EdgeAction,
         edge_to_loop: bool,
-        to_skip: &mut Vec<mir::BasicBlock>,
+        to_skip: &mut Vec<(mir::BasicBlock, ValidityConditions)>,
         mut footprint: Option<&mut Footprint<'_, 'vir>>,
     ) -> EncodeResult<'vir, (), E> {
         let cond_conjuncts = self.edge_condition(edge);
@@ -797,7 +797,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         edge: &BorrowPcgEdge<'vir>,
         edge_action: EdgeAction,
         edge_to_loop: bool,
-        to_skip: &mut Vec<mir::BasicBlock>,
+        to_skip: &mut Vec<(mir::BasicBlock, ValidityConditions)>,
         mut footprint: Option<&mut Footprint<'_, 'vir>>,
     ) -> EncodeResult<'vir, (), E> {
         // In a package script, current places are read in the state before the
@@ -914,13 +914,14 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     return Ok(());
                 }
                 let call = call_edge.metadata();
-                // We may be encoding multiple edges as a single wand, skip
-                // further edge removals. This is a hack to get around the fact
-                // that Viper doesn't support hyperwands.
-                if to_skip.contains(&call.location().block) {
+                // Multiple lifetime-projection edges can refer to the same
+                // call wand. Apply it once for the same path condition; a
+                // differently guarded edge may still be needed on another path.
+                let key = (call.location().block, edge.conditions().clone());
+                if to_skip.contains(&key) {
                     return Ok(());
                 }
-                to_skip.push(call.location().block);
+                to_skip.push(key);
                 for wand in self.encode_function_call_wands(coupled)? {
                     if let Some(footprint) = &mut footprint {
                         footprint.parts.push(self.vcx.mk_wand_expr(wand));
@@ -1163,9 +1164,14 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         actions: &PcgActions<'vir>,
         edge_to_loop: bool,
     ) -> EncodeResult<'vir, (), E> {
+        // A PCG phase may remove several projections of the same call. They
+        // share a Viper wand even when emitted as separate actions.
+        let mut to_skip = Vec::new();
         for action in actions.iter() {
             match action {
-                PcgAction::Borrow(action) => self.borrow_action(pcg, action, edge_to_loop)?,
+                PcgAction::Borrow(action) => {
+                    self.borrow_action(pcg, action, edge_to_loop, &mut to_skip)?
+                }
                 PcgAction::Owned(action) => self.pcg_repack(action.kind())?,
             }
         }
@@ -1190,8 +1196,8 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         pcg: &Pcg<'_, 'vir>,
         action: &BorrowPcgAction<'vir>,
         edge_to_loop: bool,
+        to_skip: &mut Vec<(mir::BasicBlock, ValidityConditions)>,
     ) -> EncodeResult<'vir, (), E> {
-        let mut to_skip = Vec::new();
         match action.kind() {
             //Restore(RestoreCapability<'tcx>),
             //MakePlaceOld(Place<'tcx>),
@@ -1202,7 +1208,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 edge,
                 EdgeAction::Remove,
                 edge_to_loop,
-                &mut to_skip,
+                to_skip,
                 None,
             ),
             BorrowPcgActionKind::AddEdge { edge } => self.pcs_handle_edge(
@@ -1210,7 +1216,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 edge,
                 EdgeAction::Add,
                 edge_to_loop,
-                &mut to_skip,
+                to_skip,
                 None,
             ),
             BorrowPcgActionKind::Weaken(weaken)

@@ -79,6 +79,8 @@ pub enum PureKind {
     SpecClosure {
         /// Whether the enclosing contract is an expiry pledge.
         allow_before_expiry: bool,
+        /// Whether mutable-reference reads use the surrounding heap.
+        impure_context: bool,
     },
     /// A closure inside a body assertion/invariant. Its captured snapshots
     /// describe the current heap, unlike the pinned inputs of a contract.
@@ -468,7 +470,7 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
             allow_before_expiry: matches!(
                 kind,
                 PureKind::Spec { allow_before_expiry: true, .. }
-                    | PureKind::SpecClosure { allow_before_expiry: true }
+                    | PureKind::SpecClosure { allow_before_expiry: true, .. }
             ),
             // An impure method's specs and contained spec blocks get shallow
             // argument snapshots (and can take a snapshot of the predicates
@@ -480,6 +482,7 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                     mode: MirSpecEncMode::Impure,
                     ..
                 } | PureKind::SpecBlock(..)
+                    | PureKind::SpecClosure { impure_context: true, .. }
             ),
         }
     }
@@ -1544,6 +1547,15 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
         closure_ty: ty::Ty<'vir>,
         closure_snap: ExprRet<'vir>,
     ) -> EncodeResult<'vir, SpecClosure<'vir>, MirPureEnc> {
+        // The closure is encoded separately from its enclosing expression.
+        // Until the temporal mode is propagated into that encoding, accepting
+        // a closure here would silently read its body from the wrong heap.
+        if self.before_expiry_mode {
+            return Err(self.unsupported_rvalue(
+                "specification closures inside before_expiry are not supported".to_string(),
+                self.current_span(),
+            ));
+        }
         let (qvar_tys, cl_kind, cl_def_id) = match closure_ty.kind() {
             TyKind::Closure(cl_def_id, cl_args) => (
                 match cl_args.as_closure().sig().skip_binder().inputs()[0].kind() {
@@ -1582,6 +1594,10 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                 } else if self.specification {
                     PureKind::SpecClosure {
                         allow_before_expiry: self.allow_before_expiry,
+                        // Pledge closures may read the restored owner and
+                        // the borrow at expiry. Ordinary contract closures
+                        // retain their existing snapshot-only semantics.
+                        impure_context: self.impure_context && self.allow_before_expiry,
                     }
                 } else {
                     PureKind::Closure

@@ -1134,17 +1134,33 @@ Implement the Rust connection in these steps:
    existing expiry pledges prove full traversal and symbolic early break in
    explicit Rust loops, including empty inputs. Resource-only loops retain
    their existing behavior. The first supported shape reaches the annotation
-   before any iterator `next` call on the loop entry path; the named `for`
-   macro reaches it after yielding an element and is rejected until the current
-   yield can be included in the restoration wand.
+   before any iterator `next` call on the loop entry path. The named `for`
+   macro supports this through `before_next { ... }`, where full-traversal
+   restoration, quantified final values, and symbolic early-break suffix
+   framing verify. An annotation in the
+   ordinary body runs after a yield and is rejected until the current yield can
+   be included in the restoration wand.
 4. Complete the remaining Rust acceptance cases: conditional updates and
-   ordinary `for` loops and direct `Vec::iter_mut`. Conditional updates with a
-   `continue` backedge, two simultaneous yields per iteration, and an explicit
+   ordinary `for` loops and direct `Vec::iter_mut`. Named `prusti_for!` loops
+   with a `before_next` annotation, conditional updates with a `continue`
+   backedge, two simultaneous yields per iteration, and an explicit
    `Vec::as_mut_slice` view now verify; wrong-value and `false` controls are
    rejected. Direct `Vec::iter_mut` currently has a PCG source edge for the
    vector rather than a slice and receives an unsupported-feature diagnostic.
    Keep wrong-prefix, wrong-suffix, `false`, borrowed owner, mismatched identity,
    and mismatched length checks alongside them.
+
+For a named mutable-slice traversal, place the restoration annotation and
+loop invariants before advancement:
+
+```rust
+prusti_for!(iterator, for element in &mut *values => before_next {
+    body_restore_prefix!(&iterator, *owner, *completed);
+    // Other invariants for the processed prefix and remaining tail.
+} {
+    // Update `element` and append its final snapshot to `completed`.
+});
+```
 
 Add explicit-loop clients first, followed by ordinary mutable-slice `for`
 loops and `Vec::iter_mut()`. Cover full traversal, symbolic early break,

@@ -176,13 +176,18 @@ pub fn mut_iter_refs<'a, T>(_iterator: &core::slice::IterMut<'a, T>) -> Seq<&'a 
 /// `prusti_for!(iter, 'outer: for item in values => { ... })`.
 /// An optional `init { ... }` block before the body runs once after iterator
 /// construction and can capture its initial state for the loop invariant.
+/// A `before_next { ... }` block runs at the start of each iteration, before
+/// advancing the iterator, including the final attempt that returns `None`.
+/// Place `body_restore_prefix!` and its associated invariants there when
+/// proving mutable-slice iterator restoration.
 #[macro_export]
 macro_rules! prusti_for {
-    ($iter:ident, $( $label:lifetime : )? for $pattern:pat in $values:expr => init { $($init:tt)* } $body:block) => {
+    ($iter:ident, $( $label:lifetime : )? for $pattern:pat in $values:expr => init { $($init:tt)* } before_next { $($before_next:tt)* } $body:block) => {
         match ::core::iter::IntoIterator::into_iter($values) {
             mut $iter => {
                 $($init)*
                 $( $label: )? loop {
+                    $($before_next)*
                     match ::core::iter::Iterator::next(&mut $iter) {
                         ::core::option::Option::Some($pattern) => $body,
                         ::core::option::Option::None => break,
@@ -190,6 +195,12 @@ macro_rules! prusti_for {
                 }
             },
         }
+    };
+    ($iter:ident, $( $label:lifetime : )? for $pattern:pat in $values:expr => before_next { $($before_next:tt)* } $body:block) => {
+        $crate::prusti_for!($iter, $( $label: )? for $pattern in $values => init {} before_next { $($before_next)* } $body)
+    };
+    ($iter:ident, $( $label:lifetime : )? for $pattern:pat in $values:expr => init { $($init:tt)* } $body:block) => {
+        $crate::prusti_for!($iter, $( $label: )? for $pattern in $values => init { $($init)* } before_next {} $body)
     };
     ($iter:ident, $( $label:lifetime : )? for $pattern:pat in $values:expr => $body:block) => {
         $crate::prusti_for!($iter, $( $label: )? for $pattern in $values => init {} $body)

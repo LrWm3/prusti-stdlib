@@ -66,8 +66,11 @@ The `mut_region_functional_pass` regression goes further: the untrusted
 implementation proves its remaining length and `Some`/`None` behavior, and
 the caller proves two yields and exhaustion. It uses `mut_slice_len`, a
 metadata-only observation that does not read the mutable slice's elements.
-These examples do not yet prove the final element values or model the standard
-library's raw-pointer-backed `IterMut`.
+The `mut_region_value_pass` regression uses `mut_slice_contents`, which
+requires slice permission, in an expiry pledge and proves that writing through
+one yielded reference updates the original slice. Its incorrect-value case is
+rejected. Restoring the final values of multiple yielded elements, and modeling
+the standard library's raw-pointer-backed `IterMut`, remain open.
 
 Before the edge-replay fix, the wand package script in `take_mut_slice`
 converted the slot's representation a second time and consumed its permission;

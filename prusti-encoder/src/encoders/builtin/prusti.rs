@@ -137,6 +137,7 @@ pub enum PrustiBuiltin {
     SnapClone,
     MutRefSameAddress,
     MutRefSharedSameAddress,
+    MutSliceLen,
     Seq(SeqOp),
     /// An operation on `Set` (`multiset: false`) or `Multiset` (`true`).
     AnySet {
@@ -238,6 +239,7 @@ impl PrustiBuiltin {
                     "ghost_erased" => Self::Ghost(GhostOp::Erased),
                     "mut_ref_same_address" => Self::MutRefSameAddress,
                     "mut_ref_shared_same_address" => Self::MutRefSharedSameAddress,
+                    "mut_slice_len" => Self::MutSliceLen,
                     "old_start" => Self::Spec(SpecBuiltin::ModeStart(Mode::Old)),
                     "old_end" => Self::Spec(SpecBuiltin::ModeEnd(Mode::Old)),
                     "rel_start" => Self::Spec(SpecBuiltin::ModeStart(Mode::Rel(rel_index()))),
@@ -560,6 +562,13 @@ impl PrustiBuiltinEnc {
                         .addr_access(ctxt.operands[1].downcast_ty())
                 };
                 ctxt.native_cmp(vir::BinOpKind::CmpEq, left, right)
+                    .upcast_ty()
+            }
+            PrustiBuiltin::MutSliceLen => {
+                let slice = ctxt.deref_operand::<vir::CSnap>(0)?;
+                ctxt.e_input_deref(0)?
+                    .expect_mutref()
+                    .metadata_access(slice)
                     .upcast_ty()
             }
             PrustiBuiltin::Seq(op) => ctxt.encode_seq(op)?,

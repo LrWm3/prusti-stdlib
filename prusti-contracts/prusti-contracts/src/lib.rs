@@ -95,6 +95,12 @@ pub fn mut_ref_shared_same_address<T>(left: &&mut T, right: &T) -> bool {
     core::ptr::eq(&**left, right)
 }
 
+/// Observe a mutable slice reference's length without reading its elements.
+#[pure]
+pub fn mut_slice_len<T>(slice: &&mut [T]) -> usize {
+    slice.len()
+}
+
 /// Traverse an `IntoIterator` while giving its iterator a name for specifications.
 ///
 /// `prusti_for!(iter, for item in values => { ... })` expands to a `match` and

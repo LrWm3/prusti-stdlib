@@ -32,6 +32,10 @@ use vir::{CastType, CompType, add_debug_note};
 pub struct MirPureEnc;
 
 pub(crate) const FOR_ITERATOR_MARKER: &str = "__prusti_for_iterator_";
+pub(crate) const RESTORE_SOURCE_ADDR: &str = "__prusti_restore_source_addr";
+pub(crate) const RESTORE_SOURCE_LEN: &str = "__prusti_restore_source_len";
+pub(crate) const RESTORE_TAIL_ADDR: &str = "__prusti_restore_tail_addr";
+pub(crate) const RESTORE_TAIL_LEN: &str = "__prusti_restore_tail_len";
 
 pub(crate) fn for_iterator_marker(ty: ty::Ty<'_>) -> String {
     // Rustc interns types: the address uniquely identifies the exact type
@@ -1838,7 +1842,32 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                 let tail_contents = slice_use.expect_array().to_seq(tail_value.downcast_ty(), tail_len);
                 let tail_contents = self.vcx.mk_old_lhs_expr(tail_contents);
                 let restored = self.vcx.mk_seq_concat_expr(prefix.downcast_ty(), tail_contents);
-                mk_bool(self.vcx.mk_eq_expr(source, restored))
+                // These placeholders are replaced with the selected PCG edge's
+                // actual addresses and metadata by the impure encoder. Check
+                // them before reading either slice in the wand consequent.
+                let source_addr = self
+                    .vcx
+                    .mk_local_ex(self.vcx.mk_local_decl(RESTORE_SOURCE_ADDR, vir::TYPE_REF))
+                    .lift();
+                let source_len = self
+                    .vcx
+                    .mk_local_ex(self.vcx.mk_local_decl(RESTORE_SOURCE_LEN, vir::TYPE_INT))
+                    .lift();
+                let edge_tail_addr = self
+                    .vcx
+                    .mk_local_ex(self.vcx.mk_local_decl(RESTORE_TAIL_ADDR, vir::TYPE_REF))
+                    .lift();
+                let edge_tail_len = self
+                    .vcx
+                    .mk_local_ex(self.vcx.mk_local_decl(RESTORE_TAIL_LEN, vir::TYPE_INT))
+                    .lift();
+                mk_bool(self.vcx.mk_conj(&[
+                    self.vcx.mk_eq_expr(owner_addr, source_addr),
+                    self.vcx.mk_eq_expr(owner_len, source_len),
+                    self.vcx.mk_eq_expr(tail_addr, edge_tail_addr),
+                    self.vcx.mk_eq_expr(tail_len, edge_tail_len),
+                    self.vcx.mk_eq_expr(source, restored),
+                ]))
             }
             SpecBuiltin::MutIterTail => {
                 if !self.specification {

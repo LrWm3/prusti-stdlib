@@ -1116,8 +1116,11 @@ Implement the Rust connection in these steps:
    by loop-spec analysis. Its typed source–prefix–tail equation is encoded,
    and the iterator must have one matching singleton slice-restoration edge;
    duplicate annotations, missing edges, and overlapping edges are rejected.
-   It still reports an explicit unsupported-feature error until the equation is
-   connected to the wand and its labels.
+   The reified equation also binds source and tail addresses and slice lengths
+   to that edge, with checks ordered before the slice observations. This binding
+   is currently checked during encoding only; the annotation still reports an
+   explicit unsupported-feature error until the equation is connected to the
+   wand and its labels.
 2. At each loop head, identify the unique PCG restoration edge for that source
    and tail, and check the saved identity and metadata against the edge. Reject
    ambiguous, missing, or mismatched resources instead of guessing an edge or

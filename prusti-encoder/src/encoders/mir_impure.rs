@@ -329,6 +329,32 @@ impl<'vir> Folder<'vir, (), !> for ForIteratorSubstitution<'vir> {
     }
 }
 
+/// Bind restoration markers only to expressions obtained from the selected
+/// PCG edge. A missing or incorrectly typed marker must never reach Viper.
+struct RestorationSubstitution<'vir> {
+    replacements: FxHashMap<&'static str, vir::ExprDyn<'vir>>,
+    seen: FxHashSet<&'static str>,
+    invalid: bool,
+}
+
+impl<'vir> Folder<'vir, (), !> for RestorationSubstitution<'vir> {
+    fn fold_expr(&mut self, expr: vir::ExprDyn<'vir>) -> Option<vir::ExprDyn<'vir>> {
+        if let vir::ExprKindData::Local(local) = expr.kind
+            && local.name.starts_with("__prusti_restore_")
+        {
+            if let Some((&name, &replacement)) = self.replacements.get_key_value(local.name)
+                && replacement.ty() == expr.ty()
+            {
+                self.seen.insert(name);
+                return Some(replacement);
+            }
+            self.invalid = true;
+            return None;
+        }
+        expr.super_fold_with(self)
+    }
+}
+
 impl<'vir, E: TaskEncoder> From<EncodeFullError<'vir, E>> for EncodeRvalueError<'vir, E> {
     fn from(e: EncodeFullError<'vir, E>) -> Self {
         EncodeRvalueError::EncoderError(e)
@@ -2481,38 +2507,108 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 }
                 let inputs = matched_edges[0].inputs(self.pcg_ctxt());
                 let outputs = matched_edges[0].outputs();
-                let supported_source = if inputs.len() == 1 && outputs.len() == 1 {
+                let source = if inputs.len() == 1 && outputs.len() == 1 {
                     match *inputs[0] {
-                        PcgNode::Place(MaybeLabelledPlace::Current(source)) => {
-                            matches!(source.projection.as_ref(), [mir::ProjectionElem::Deref])
+                        PcgNode::Place(MaybeLabelledPlace::Current(source))
+                            if matches!(source.projection.as_ref(), [mir::ProjectionElem::Deref])
                                 && matches!(source.ty(self.pcg_ctxt()).ty.kind(), TyKind::Slice(_))
+                                && matches!(
+                                    self.body.local_decls[source.local].ty.kind(),
+                                    TyKind::Ref(_, _, ty::Mutability::Mut)
+                                ) =>
+                        {
+                            Some(source)
                         }
-                        _ => false,
+                        _ => None,
                     }
                 } else {
-                    false
+                    None
                 };
-                if !supported_source {
+                let Some(source) = source else {
                     return Err(self.unsupported_rvalue(
                         "body_restore_prefix requires a unique matching iterator restoration edge"
                             .to_string(),
                         span,
                     ));
+                };
+                let slice_ty = source.ty(self.pcg_ctxt()).ty;
+                let iterator_ty = self.body.local_decls[iterator].ty;
+                let TyKind::Adt(_, iterator_args) = iterator_ty.kind() else {
+                    unreachable!()
+                };
+                let TyKind::Slice(element_ty) = slice_ty.kind() else {
+                    unreachable!()
+                };
+                if *element_ty != iterator_args.type_at(1) {
+                    return Err(self.unsupported_rvalue(
+                        "body_restore_prefix requires matching source and iterator element types"
+                            .to_string(),
+                        span,
+                    ));
                 }
+                let source_snap = self.encode_place_with_snap(source.local.into())?.1;
+                let source_use = self.ty_use_pure(self.body.local_decls[source.local].ty);
+                let source_ref = source_use.expect_mutref();
+                let source_addr = source_ref.deref_access(source_snap.downcast_ty());
+                let source_len = source_ref.metadata_access(source_snap.downcast_ty());
+                let usize_use = self.ty_use_pure(self.vcx.tcx().types.usize);
+                let source_len = usize_use
+                    .expect_primitive()
+                    .snap_to_prim(source_len.downcast_ty())
+                    .downcast_ty::<vir::Int>();
+                let iterator_snap = self.encode_place_with_snap(iterator.into())?.1;
+                let iterator_use = self.ty_use_pure(iterator_ty);
+                let tail = iterator_use
+                    .expect_structlike()
+                    .fields
+                    .last()
+                    .unwrap()
+                    .read(iterator_snap.downcast_ty());
+                let tail_ty =
+                    ty::Ty::new_mut_ref(self.vcx.tcx(), iterator_args.region_at(0), slice_ty);
+                let tail_use = self.ty_use_pure(tail_ty);
+                let tail_ref = tail_use.expect_mutref();
+                let tail_addr = tail_ref.deref_access(tail.downcast_ty());
+                let tail_len = tail_ref.metadata_access(tail.downcast_ty());
+                let tail_len = usize_use
+                    .expect_primitive()
+                    .snap_to_prim(tail_len.downcast_ty())
+                    .downcast_ty::<vir::Int>();
                 let mut locals = FxHashMap::default();
                 for local in restoration.inputs {
                     locals.insert(local, self.encode_place_with_snap(local.into())?.1);
                 }
-                use vir::Reify;
-                let _relation = restoration.expr.reify(
-                    self.vcx,
-                    (
-                        self.def_id,
-                        self.vcx.alloc(locals),
-                        vir::OldLabel::None,
-                        None,
-                    ),
-                );
+                let relation = restoration
+                    .expr
+                    .reify(
+                        self.vcx,
+                        (
+                            self.def_id,
+                            self.vcx.alloc(locals),
+                            vir::OldLabel::None,
+                            None,
+                        ),
+                    )
+                    .downcast_ty::<vir::Bool>();
+                let mut substitution = RestorationSubstitution {
+                    replacements: FxHashMap::from_iter([
+                        (super::mir_pure::RESTORE_SOURCE_ADDR, source_addr.as_dyn()),
+                        (super::mir_pure::RESTORE_SOURCE_LEN, source_len.as_dyn()),
+                        (super::mir_pure::RESTORE_TAIL_ADDR, tail_addr.as_dyn()),
+                        (super::mir_pure::RESTORE_TAIL_LEN, tail_len.as_dyn()),
+                    ]),
+                    seen: FxHashSet::default(),
+                    invalid: false,
+                };
+                let _relation = relation.fold_with(&mut substitution).unwrap_or(relation);
+                if substitution.invalid || substitution.seen.len() != substitution.replacements.len()
+                {
+                    return Err(self.unsupported_rvalue(
+                        "body_restore_prefix could not bind the selected iterator restoration edge"
+                            .to_string(),
+                        span,
+                    ));
+                }
                 return Err(self.unsupported_rvalue(
                     "body_restore_prefix is not yet supported".to_string(),
                     span,

@@ -185,3 +185,33 @@ pub fn count_shared_for_source<T>(values: &[T], expected: usize) -> usize {
     });
     count
 }
+
+/// Test-only snapshot of the unyielded elements of a mutable slice iterator.
+/// This does not describe elements already yielded or restore the source slice.
+#[pure]
+#[trusted]
+pub fn mut_remaining<T>(_iter: &core::slice::IterMut<'_, T>) -> Seq<T> {
+    Seq::new()
+}
+
+// Reviewed against the pinned implementation: construction starts at the
+// beginning, and each forward step yields the first remaining element.
+#[extern_spec]
+impl<T> [T] {
+    #[trusted]
+    #[ensures(mut_remaining(&result) == old(Seq::from_slice(&*self)))]
+    fn iter_mut(&mut self) -> core::slice::IterMut<'_, T>;
+}
+
+#[extern_spec]
+impl<'a, T> Iterator for core::slice::IterMut<'a, T> {
+    #[trusted]
+    #[ensures(match &result {
+        Some(value) => old(mut_remaining(&*self)).len() > Int::from(0)
+            && Ghost::new_ref(&**value) == Ghost::new_ref(&*old(mut_remaining(&*self))[0])
+            && mut_remaining(&*self) == old(mut_remaining(&*self))[1..],
+        None => old(mut_remaining(&*self)).len() == Int::from(0)
+            && mut_remaining(&*self) == old(mut_remaining(&*self)),
+    })]
+    fn next(&mut self) -> Option<&'a mut T>;
+}

@@ -1,5 +1,15 @@
 # Iterator contract progress
 
+The fixture also probes `slice::IterMut` separately from the bundled iterator
+model. A trusted, test-only observation describes the unyielded element
+snapshots. Trusted external contracts connect construction to the original
+slice and describe forward advancement, the returned reference's initial
+value, and exhaustion. A cross-crate client checks two mutable yields and the
+remaining lengths; negative clients reject an incorrect yielded value and a
+claim that the original slice is restored after mutation. The latter requires
+tracking yielded references and remains open. These probes do not expose a
+bundled `IterMut` contract.
+
 This fixture checks the bundled contracts for `Vec::into_iter` and
 `Iterator::next` on `Vec::IntoIter`. The sealed `ModeledIterator` capability
 observes the remaining sequence. Constructing an iterator preserves the

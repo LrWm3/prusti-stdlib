@@ -988,7 +988,7 @@ claimed.
 | **M2: Vec/slice phase complete** | P2-A, P2-B, P2-C | Integration and cross-crate validation | Passed locally: component gates and the sequence, Vec, collection, borrow, external-spec, and iterator integration checks pass. |
 | P3-A: explicit key models | M2, logical Map/Set | Key-model interfaces and conditional contracts | Passed locally: 20 checks cover projections, explicitly trusted key laws, collisions, and conditional empty map/set observations. |
 | **M3: HashMap/HashSet phase complete** | P3-A, P3-B, P2-B expiry support | Map/set contracts and mutable lookup | Untested; key, cardinality, framing, and mutable-value cases pass. |
-| `IterMut` | P2-B and iterator models | Yielded-reference tracking and owner restoration | Deferred from M2; investigate after mutable access works. |
+| `IterMut` | P2-B and iterator models | Yielded-reference tracking and owner restoration | In progress: test-only construction and direct advancement probes; restoring the source after yielded references expire remains open. |
 | Adapters, closures, callbacks, general `collect` | Iterator and higher-order contracts | Separate closure/callback and composition work | Deferred from all three gates. |
 | Reference-containing elements, interior mutability, nested collections | Snapshot and ownership extensions | Additional modeling and permission support | Deferred; no unrestricted nested-generic support claim. |
 | Entry APIs, hash-collection iteration, heterogeneous lookup | M3 and additional models | API-specific state, representative, and borrowed-key contracts | Deferred from M3. |

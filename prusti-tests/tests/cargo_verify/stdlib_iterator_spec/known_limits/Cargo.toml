@@ -20,4 +20,8 @@ path = "for_named.rs"
 name = "exact_length_mut_ref"
 path = "exact_length_mut_ref.rs"
 
+[[bin]]
+name = "mutable_ref_snapshot"
+path = "mutable_ref_snapshot.rs"
+
 [workspace]

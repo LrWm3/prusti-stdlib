@@ -48,6 +48,27 @@ pub fn advance_with_lengths<I: ModeledIterator + ExactSizeIterator>(
     (before, after)
 }
 
+#[requires(expected == values.len())]
+#[requires(stop_after > 0)]
+#[ensures(result <= expected)]
+#[ensures(result <= stop_after)]
+#[ensures(result == if expected < stop_after { expected } else { stop_after })]
+pub fn prefix_owned<T>(values: Vec<T>, expected: usize, stop_after: usize) -> usize {
+    let mut seen = 0usize;
+    prusti_for!(iterator, for _value in values => {
+        body_invariant!(expected == old(expected));
+        body_invariant!(stop_after == old(stop_after));
+        body_invariant!(seen < stop_after);
+        body_invariant!(Int::from(seen) + iterator.remaining().len() + Int::from(1)
+            == Int::from(expected));
+        seen += 1;
+        if seen == stop_after {
+            break;
+        }
+    });
+    seen
+}
+
 #[requires(values.len() > 0)]
 #[ensures(result === &values[0])]
 pub fn first_shared<'a, T>(values: &'a [T]) -> &'a T {

@@ -23,6 +23,11 @@ and permanent exhaustion for an arbitrary `Iterator` without model evidence.
 The capability is sealed so arbitrary iterator implementations cannot assume
 these finite-sequence or permanent-exhaustion laws.
 
+The verified `prefix_owned` helper exercises a symbolic early `break` and
+returns exactly the smaller of the input length and a positive stopping point.
+A cross-crate client checks non-`Copy` elements; a negative client rejects
+claiming that a shortened traversal processed the whole input.
+
 The same capability models `slice::Iter`: its constructor records references
 to the source elements. Clients use `next` directly and through the verified
 generic `advance` wrapper. A cross-crate `first_shared` wrapper returns the
@@ -103,8 +108,9 @@ borrowed-item probe starts with an existing iterator; it does not establish a
 model for constructing a vector of references.
 
 Some lifetime-dependent evidence remains unsupported, including markers for
-shared iterators. This does not complete P2-C or M2. An existing owned iterator
-of borrowed elements supports both direct `next` calls and the generic wrapper.
+shared iterators. P2-C's stated iterator gate passes; M2 integration is still
+in progress. An existing owned iterator of borrowed elements supports both
+direct `next` calls and the generic wrapper.
 
 The `known_limits/for_count` probe omits the marker and reproduces the original
 gap: a symbolic count does not preserve the relation between the hidden

@@ -374,7 +374,8 @@ normal-return contracts with allocation, capacity failure, unwinding, and
 arbitrary destructors outside the proof. Mutable slice swaps are exercised
 through direct slice arguments and arrays; restoration through mutable Vec
 views is not established. The next gate is **P2-B**, mutable views and
-borrow-expiry contracts. P2-C iteration and the overall M2 gate remain open.
+borrow-expiry contracts. At that point, P2-C iteration and the overall M2 gate
+were still open.
 
 ### P2-B progress: mutable Vec slice restoration
 
@@ -471,9 +472,10 @@ as `as_mut_slice`, matching the pinned standard-library implementation. Direct
 branch, reborrowing, and restoration of whole sequences; a separately verified
 generic library and client exercise owned non-`Copy` elements. An additional
 exhausted-inclusive indexing proof and negative framing checks pass. These
-results satisfy the P2-B mutable-view gate; P2-C and M2 remain open.
+results satisfy the P2-B mutable-view gate; at that stage P2-C and M2 remained
+open.
 
-### P2-C progress: owned and shared iterator models
+### P2-C: owned and shared iterator models
 
 **Verified locally on 2026-10-27:** the focused iterator suite passes 20
 checks, including its separately verified `no_std` library and negative cases.
@@ -553,6 +555,14 @@ iterator cannot be read in a `for`-body invariant because the loop holds its mut
 the [probes](prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/)
 record both this Rust error and the hidden-iterator overflow failure. Shared
 traversal can refer directly to the source in its loop invariant.
+
+The final encoder passed all 58 iterator checks and all 79 external-spec checks.
+The added symbolic early-break helper and its positive, negative, and runtime
+clients were checked separately: it processes exactly the smaller of the input
+length and a positive stopping point, including for non-`Copy` elements. The
+return-permission change passed 76 borrow checks, plus a separate negative test
+for a stale owner after a returned mutable borrow. These results satisfy P2-C's
+iterator gate. M2's integration checks remain in progress.
 
 An attempted universal-lifetime check using rustc's region-insensitive solver
 was rejected: it accepted an implementation whose nested type argument had a
@@ -924,8 +934,8 @@ claimed.
 | **M1: unbounded functional Vec** | P1-A through P1-D | Minimal contracts plus reproduced blockers | Verified locally: 21 Vec checks, symbolic append/pop/round-trip and whole-prefix loop proofs for owned non-`Copy` elements, cross-crate clients, and negative cases. |
 | P2-A: Vec and shared slices | M1 | Contracts, sequence lemmas, any slice encoding fixes | Verified locally: 27 checks cover symbolic mutations, shared lookup/ranges, splits, swaps, boundaries, ordering, and framing. |
 | P2-B: mutable collection views | P2-A, two-state snapshots | Pledges, expiry, generic reference framing | Verified locally: 74 checks cover slice and Vec views, lookup, indexing, splits, reborrowing, inclusive range state, and negative framing cases. |
-| P2-C: shared and owned iterators | Sequence model, generic trait probes | Opt-in models, refinement, lifetimes, loop support | In progress: 58 iterator checks cover owned and shared traversal, exact lengths, symbolic loops, `prusti_for!`, and ordinary owned `for` loops; final integration is running. |
-| **M2: Vec/slice phase complete** | P2-A, P2-B, P2-C | Integration and cross-crate validation | Untested; all required gates pass. |
+| P2-C: shared and owned iterators | Sequence model, generic trait probes | Opt-in models, refinement, lifetimes, loop support | Passed locally: 58 iterator checks plus focused symbolic early-break checks cover owned and shared traversal, exact lengths, refinement, and loops. |
+| **M2: Vec/slice phase complete** | P2-A, P2-B, P2-C | Integration and cross-crate validation | In progress: component gates pass; Vec and collection integration pass, with sequence integration running. |
 | P3-A: explicit key models | M2, logical Map/Set | Key-model interfaces and conditional contracts | Untested; equality/hash/model evidence is enforced. |
 | **M3: HashMap/HashSet phase complete** | P3-A, P3-B, P2-B expiry support | Map/set contracts and mutable lookup | Untested; key, cardinality, framing, and mutable-value cases pass. |
 | `IterMut` | P2-B and iterator models | Yielded-reference tracking and owner restoration | Deferred from M2; investigate after mutable access works. |

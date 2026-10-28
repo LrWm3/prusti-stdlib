@@ -1552,7 +1552,10 @@ impl TaskEncoder for CollectionOpsEnc {
                         CollectionOpFn::SeqLookup(fn_idn),
                         CollectionOpOutput::DomainMember(
                             vcx.mk_domain_function(fn_idn, false, None),
-                            vec![Self::seq_lookup_axiom(vcx, fn_idn)],
+                            vec![
+                                Self::seq_lookup_axiom(vcx, fn_idn, false),
+                                Self::seq_lookup_axiom(vcx, fn_idn, true),
+                            ],
                         ),
                     )
                 }
@@ -1690,17 +1693,27 @@ impl CollectionOpsEnc {
     fn seq_lookup_axiom<'vir>(
         vcx: &'vir vir::VirCtxt<'vir>,
         fn_idn: FunctionIdn<'vir, (vir::Seq, vir::Int), vir::PSnap>,
+        native_trigger: bool,
     ) -> vir::DomainAxiom<'vir> {
         let s_decl = vcx.mk_local_decl("s", vcx.mk_ty_seq(vir::TYPE_PSNAP));
         let i_decl = vcx.mk_local_decl("i", vir::TYPE_INT);
         let s = vcx.mk_local_ex(s_decl);
         let i = vcx.mk_local_ex(i_decl);
         let sl = fn_idn(s, i);
+        let index = vcx.mk_seq_index_expr(s, i).downcast_ty::<vir::PSnap>();
         let guard = Self::in_bounds(vcx, i, s);
+        // The same guarded equality is useful in both directions. In
+        // particular, native sequence append creates an index of the old
+        // prefix, which must instantiate a lookup-based quantified invariant.
+        let (name, trigger) = if native_trigger {
+            ("prusti_seq_lookup_native_index_trigger", index)
+        } else {
+            ("prusti_seq_lookup_native", sl)
+        };
         vcx.mk_domain_axiom(
-            vir::ViperIdent::new("prusti_seq_lookup_native"),
+            vir::ViperIdent::new(name),
             vir::expr! { vcx;
-                forall [s_decl], [i_decl] :: {[sl]} (guard) ==> ((sl) == (((s)[i]) as PSnap))
+                forall [s_decl], [i_decl] :: {[trigger]} (guard) ==> ((sl) == (index))
             },
         )
     }

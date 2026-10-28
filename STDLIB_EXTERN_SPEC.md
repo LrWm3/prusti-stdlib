@@ -1104,7 +1104,10 @@ empty input; an incorrect final prefix and `false` are rejected. A second
 variant explicitly maintains a ghost sequence of completed values and proves
 `source_at_restoration = prefix ++ tail_at_expiry` with the same controls.
 These are manual transformations of generated Viper, not yet a Rust-facing
-feature.
+feature. Rust loops can now maintain a ghost prefix sequence and prove its
+quantified element values across append with either `usize` or `Int` indices;
+negative value and consistency checks exercise that proof separately from the
+still-unimplemented owner restoration relation.
 
 Implement the Rust connection in these steps:
 

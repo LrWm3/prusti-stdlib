@@ -181,12 +181,15 @@ nonempty early-break path and rejects a wrong value. This does not yet
 establish the processed prefix or the restored owner's final contents.
 
 The `mut_native_prefix_ghost` controls maintain a growing ghost sequence and
-verify that its length matches the number of yielded elements. A separate
-`im2_prefix_ghost_quantified` and `im2_prefix_ghost_quantified_int` probes
-also ask for every completed element to equal `7`; their loop invariants fail
-preservation with either `usize` or mathematical `Int` indices. The
-hand-strengthened Viper proof below succeeds, so this Rust-level failure remains
-a separate proof/encoding limitation to resolve.
+verify that its length matches the number of yielded elements. The
+`mut_native_prefix_values` controls additionally prove every completed value
+is `7`, using both `usize` and mathematical `Int` indices; wrong values and
+`false` are rejected. Earlier `im2_prefix_ghost_quantified` probes exposed a
+failure to preserve these quantified invariants across append. The sequence
+lookup model now gives its existing guarded equality an additional trigger on
+native indexing, allowing the solver to instantiate the old-prefix property.
+This proves the ghost prefix values; it does not yet relate them to the
+restored owner.
 
 The generated constructor package can already prove its initial value
 relation using the native `p_Slice` and `p_Param` predicates. The

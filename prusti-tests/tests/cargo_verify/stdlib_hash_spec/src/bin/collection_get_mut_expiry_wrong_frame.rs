@@ -7,6 +7,5 @@ fn main() {
     if let Some(value) = map.get_mut(&2) {
         *value = 10;
     }
-    prusti_assert!(*prusti_contracts::std_spec::hash::map_contents(&map)[3] == 10);
-    // expected-error: assertion might not hold
+    prusti_assert!(*prusti_contracts::std_spec::hash::map_contents(&map)[3] == 10); // expected-error: assertion might not hold
 }

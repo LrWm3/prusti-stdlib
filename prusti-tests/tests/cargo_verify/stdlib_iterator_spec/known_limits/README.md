@@ -96,6 +96,12 @@ invariant describing the updated prefix, so correcting the diagnostic alone
 would not establish the loop postcondition. Replacing that postcondition with
 `true` still produces the same unpositioned permission error. Run the original
 probe with `--bin region_full_loop`.
+The dumped Viper program identifies the missing permission as the predicate
+for the original mutable-reference argument. Its loop invariant preserves the
+iterator and tail permissions, but a later package expression still reads the
+argument's snapshot. Omitting the user-written loop invariant also produces the
+same unpositioned error. This points to a missing frame or saved snapshot in
+the loop's borrow-restoration encoding; it does not yet identify a sound fix.
 
 Before the edge-replay fix, the wand package script in `take_mut_slice`
 converted the slot's representation a second time and consumed its permission;

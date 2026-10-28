@@ -948,8 +948,9 @@ collection models. Do not promise deterministic iteration order.
 
 ## Mutable-iterator follow-up plan
 
-**Status:** IM0 reproducers and the resource inventory are complete; IM1's
-standalone restoration model is under validation. Work began from Prusti
+**Status:** IM0 reproducers and the resource inventory are complete. IM1's
+standalone restoration model and its negative cases verify; an isolated
+repeat of the untrusted Rust control is in progress. Work began from Prusti
 `22ea24a6b` and PCG `a4eb802`. The completed native gate supplies
 construction, forward advancement, lengths, simultaneous yields, early
 iterator destruction, and ownership restoration. It does not establish the
@@ -963,7 +964,7 @@ The final gate combines both extensions.
 | Step | Deliverable | Depends on | Exit gate |
 |---|---|---|---|
 | IM0 | Minimal reproducers and resource/state inventory | Native core gate | Complete: [17 probes and the resource ledger](prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/README.md#im0-native-loop-values-and-references-inside-elements) record the observed failures and controls. |
-| IM1 | Proven loop restoration summary | IM0 | In progress: the standalone summary proves arbitrary-length full and partial traversal; its negative and consistency checks are being validated. |
+| IM1 | Proven loop restoration summary | IM0 | In progress: the standalone summary and negative checks pass; an isolated Rust control repeat is in progress. |
 | IM2 | Functional native iterator loops | IM1 | Rust clients prove whole-slice updates and exact early-break prefix/suffix behavior for symbolic lengths. |
 | IM3 | Concrete reference-containing slice elements | IM0; implemented after IM2 | Reads, writes, framing, and expiry work for shared references, mutable references, and reference-bearing structs/enums. |
 | IM4 | Generic and cross-crate reference resources | IM3 | Generic definitions retain the same referent permissions under substitution and through Vec/slice views. |
@@ -1037,6 +1038,15 @@ as a control for composing the existing expiry pledges.
 or assumed update laws. Wrong prefix values, an altered untouched suffix,
 and `false` at exit are rejected. Record whether existing ghost state and
 pledges can express the summary before choosing any new annotation syntax.
+
+**Standalone evidence:** [prefix_wand.vpr](prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/prefix_wand.vpr)
+proves full and early-exit updates, unchanged suffixes, and pointwise bounded
+increments using an abstract, permission-checked snapshot observation. The
+snapshot axioms are stated explicitly; no update law is assumed. The
+accompanying runner checks wrong-prefix, wrong-suffix, wrong-increment,
+overflow, and consistency clients. A concurrent repeat of the existing
+untrusted Rust iterator control timed out; it is being rerun in isolation and
+the timeout is not counted as proof evidence.
 
 ### IM2: Carry the summary through Rust loop encoding
 

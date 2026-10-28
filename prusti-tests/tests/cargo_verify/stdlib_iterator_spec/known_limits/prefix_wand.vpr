@@ -1,0 +1,205 @@
+// Logical element locations are distinct; this makes no claim about their
+// physical Rust addresses. The snapshot function below is an abstract
+// observation of the owned fields, with no law relating different heaps.
+field value: Int
+
+predicate elements(xs: Seq[Ref]) {
+  (forall i: Int, j: Int :: { xs[i], xs[j] } 0 <= i && i < j && j < |xs| ==> xs[i] != xs[j]) ==>
+    (forall i: Int :: { xs[i] } 0 <= i && i < |xs| ==> acc(xs[i].value))
+}
+
+// A snapshot observation, not an update law: it records the values at the
+// owned logical element locations and requires the complete slice predicate.
+function values(xs: Seq[Ref]): Seq[Int]
+  requires elements(xs)
+  requires forall i: Int, j: Int :: { xs[i], xs[j] } 0 <= i && i < j && j < |xs| ==> xs[i] != xs[j]
+  ensures |result| == |xs|
+  ensures unfolding elements(xs) in (forall i: Int :: { xs[i] }
+    0 <= i && i < |xs| ==> result[i] == xs[i].value)
+
+method take_first(xs: Seq[Ref]) returns (head: Ref, tail: Seq[Ref])
+  requires |xs| > 0 && elements(xs)
+  requires forall i: Int, j: Int :: { xs[i], xs[j] } 0 <= i && i < j && j < |xs| ==> xs[i] != xs[j]
+  ensures head == xs[0] && tail == xs[1..]
+  ensures acc(head.value) && elements(tail)
+  ensures forall i: Int, j: Int :: { tail[i], tail[j] } 0 <= i && i < j && j < |tail| ==> tail[i] != tail[j]
+  ensures head.value == old(values(xs))[0]
+  ensures values(tail) == old(values(xs))[1..]
+  ensures (acc(head.value) && elements(tail)) --*
+    (elements(xs) && values(xs) == Seq(old[lhs](head.value)) ++ old[lhs](values(tail)))
+{
+  var initial_values: Seq[Int] := values(xs)
+  assert unfolding elements(xs) in (forall i: Int :: { xs[i] }
+    0 <= i && i < |xs| ==> initial_values[i] == xs[i].value)
+  unfold elements(xs)
+  head := xs[0]
+  tail := xs[1..]
+  fold elements(tail)
+  var remaining_values: Seq[Int] := values(tail)
+  assert unfolding elements(tail) in (forall i: Int :: { remaining_values[i] }
+    0 <= i && i < |tail| ==>
+      remaining_values[i] == tail[i].value && initial_values[i+1] == tail[i].value)
+  assert forall i: Int :: { remaining_values[i] }
+    0 <= i && i < |tail| ==> remaining_values[i] == initial_values[i+1]
+  assert remaining_values == initial_values[1..]
+  package (acc(head.value) && elements(tail)) --*
+    (elements(xs) && values(xs) == Seq(old[lhs](head.value)) ++ old[lhs](values(tail))) {
+    var first_value: Int := head.value
+    var tail_values: Seq[Int] := values(tail)
+    assert first_value == old[lhs](head.value)
+    assert tail_values == old[lhs](values(tail))
+    assert unfolding elements(tail) in (forall i: Int :: { tail_values[i], tail[i] }
+      0 <= i && i < |tail| ==> tail_values[i] == tail[i].value)
+    unfold elements(tail)
+    fold elements(xs)
+    assert |values(xs)| == |Seq(first_value) ++ tail_values|
+    assert values(xs)[0] == first_value
+    assert forall i: Int :: { tail[i] }
+      0 <= i && i < |tail| ==> tail[i] == xs[i+1]
+    // These intermediate facts expose the matching field snapshots to the
+    // solver with triggers that remain stable across fold/unfold operations.
+    var all_values: Seq[Int] := values(xs)
+    assert unfolding elements(xs) in (forall j: Int :: { xs[j] }
+      0 <= j && j < |xs| ==> all_values[j] == xs[j].value)
+    assert unfolding elements(xs) in (forall i: Int :: { tail[i] }
+      0 <= i && i < |tail| ==> tail_values[i] == tail[i].value)
+    assert unfolding elements(xs) in (forall i: Int :: { tail[i] }
+      0 <= i && i < |tail| ==> all_values[i+1] == tail[i].value)
+    assert unfolding elements(xs) in (forall i: Int :: { tail_values[i] }
+      0 <= i && i < |tail| ==>
+        all_values[i+1] == tail[i].value && tail_values[i] == tail[i].value)
+    assert unfolding elements(xs) in (forall i: Int :: { tail_values[i] }
+      0 <= i && i < |tail| ==> all_values[i+1] == tail_values[i])
+    assert forall i: Int :: { tail_values[i] }
+      0 <= i && i < |tail| ==> all_values[i+1] == tail_values[i]
+    assert forall i: Int :: { values(xs)[i] }
+      0 <= i && i < |xs| ==> values(xs)[i] == (Seq(first_value) ++ tail_values)[i]
+    assert values(xs) == Seq(first_value) ++ tail_values
+  }
+}
+
+method fill_prefix(xs: Seq[Ref], stop: Int)
+  requires elements(xs) && 0 <= stop
+  requires forall i: Int, j: Int :: { xs[i], xs[j] } 0 <= i && i < j && j < |xs| ==> xs[i] != xs[j]
+  ensures elements(xs)
+  ensures forall i: Int :: { values(xs)[i] }
+    0 <= i && i < |xs| && i < stop ==> values(xs)[i] == 7
+  ensures forall i: Int :: { values(xs)[i] }
+    0 <= i && i < |xs| && i >= stop ==> values(xs)[i] == old(values(xs))[i]
+{
+  var initial: Seq[Int] := values(xs)
+  var remaining: Seq[Ref] := xs
+  var prefix: Seq[Int] := Seq[Int]()
+  package elements(remaining) --*
+    (elements(xs) && values(xs) == prefix ++ old[lhs](values(remaining))) {}
+  while (|remaining| > 0 && |prefix| < stop)
+    invariant 0 <= |prefix| && |prefix| <= |initial| && |prefix| <= stop
+    invariant remaining == xs[|prefix|..]
+    invariant forall i: Int, j: Int :: { xs[i], xs[j] } 0 <= i && i < j && j < |xs| ==> xs[i] != xs[j]
+    invariant elements(remaining)
+    invariant values(remaining) == initial[|prefix|..]
+    invariant forall i: Int :: { prefix[i] } 0 <= i && i < |prefix| ==> prefix[i] == 7
+    invariant elements(remaining) --*
+      (elements(xs) && values(xs) == prefix ++ old[lhs](values(remaining)))
+  {
+    var previous: Seq[Ref] := remaining
+    var before: Seq[Int] := prefix
+    var head: Ref
+    var tail: Seq[Ref]
+    head, tail := take_first(previous)
+    head.value := 7
+    package elements(tail) --*
+      (elements(xs) && values(xs) == (before ++ Seq(7)) ++ old[lhs](values(tail))) {
+      assert acc(head.value) && elements(tail)
+      apply (acc(head.value) && elements(tail)) --*
+        (elements(previous) && values(previous) == Seq(old[lhs](head.value)) ++ old[lhs](values(tail)))
+      apply elements(previous) --*
+        (elements(xs) && values(xs) == before ++ old[lhs](values(previous)))
+    }
+    prefix := before ++ Seq(7)
+    remaining := tail
+  }
+  apply elements(remaining) --*
+    (elements(xs) && values(xs) == prefix ++ old[lhs](values(remaining)))
+}
+
+// The same summary supports a pointwise update; the bound matches u32
+// addition without overflow. The source remains a mathematical model.
+method increment_prefix(xs: Seq[Ref], stop: Int)
+  requires elements(xs) && 0 <= stop
+  requires forall i: Int, j: Int :: { xs[i], xs[j] } 0 <= i && i < j && j < |xs| ==> xs[i] != xs[j]
+  requires forall i: Int :: { values(xs)[i] }
+    0 <= i && i < |xs| ==> 0 <= values(xs)[i] && values(xs)[i] < 4294967295
+  ensures elements(xs)
+  ensures forall i: Int :: { values(xs)[i] }
+    0 <= i && i < |xs| && i < stop ==> values(xs)[i] == old(values(xs))[i] + 1
+  ensures forall i: Int :: { values(xs)[i] }
+    0 <= i && i < |xs| && i >= stop ==> values(xs)[i] == old(values(xs))[i]
+{
+  var initial: Seq[Int] := values(xs)
+  var remaining: Seq[Ref] := xs
+  var prefix: Seq[Int] := Seq[Int]()
+  package elements(remaining) --*
+    (elements(xs) && values(xs) == prefix ++ old[lhs](values(remaining))) {}
+  while (|remaining| > 0 && |prefix| < stop)
+    invariant 0 <= |prefix| && |prefix| <= |initial| && |prefix| <= stop
+    invariant remaining == xs[|prefix|..]
+    invariant forall i: Int, j: Int :: { xs[i], xs[j] } 0 <= i && i < j && j < |xs| ==> xs[i] != xs[j]
+    invariant elements(remaining)
+    invariant values(remaining) == initial[|prefix|..]
+    invariant forall i: Int :: { prefix[i] } 0 <= i && i < |prefix| ==> prefix[i] == initial[i] + 1
+    invariant elements(remaining) --*
+      (elements(xs) && values(xs) == prefix ++ old[lhs](values(remaining)))
+  {
+    var previous: Seq[Ref] := remaining
+    var before: Seq[Int] := prefix
+    var head: Ref
+    var tail: Seq[Ref]
+    head, tail := take_first(previous)
+    assert head.value == initial[|before|]
+    assert 0 <= head.value && head.value < 4294967295
+    head.value := head.value + 1
+    var updated: Int := head.value
+    package elements(tail) --*
+      (elements(xs) && values(xs) == (before ++ Seq(updated)) ++ old[lhs](values(tail))) {
+      assert acc(head.value) && elements(tail)
+      apply (acc(head.value) && elements(tail)) --*
+        (elements(previous) && values(previous) == Seq(old[lhs](head.value)) ++ old[lhs](values(tail)))
+      apply elements(previous) --*
+        (elements(xs) && values(xs) == before ++ old[lhs](values(previous)))
+    }
+    prefix := before ++ Seq(updated)
+    remaining := tail
+  }
+  apply elements(remaining) --*
+    (elements(xs) && values(xs) == prefix ++ old[lhs](values(remaining)))
+}
+
+// Both exits are reachable with a concrete owned slice.
+method concrete_witness() {
+  var item: Ref := new(value)
+  item.value := 1
+  var xs: Seq[Ref] := Seq(item)
+  fold elements(xs)
+  assert values(xs)[0] == 1
+  increment_prefix(xs, 1)
+  assert values(xs)[0] == 2
+  fill_prefix(xs, 0)
+  assert values(xs)[0] == 2
+  fill_prefix(xs, 1)
+  assert values(xs)[0] == 7
+}
+
+// Both the updated prefix and the unchanged suffix are nonempty here.
+method two_element_witness() {
+  var first: Ref := new(value)
+  var second: Ref := new(value)
+  first.value := 1
+  second.value := 2
+  var xs: Seq[Ref] := Seq(first, second)
+  fold elements(xs)
+  increment_prefix(xs, 1)
+  assert values(xs)[0] == 2 && values(xs)[1] == 2
+  fill_prefix(xs, 1)
+  assert values(xs)[0] == 7 && values(xs)[1] == 2
+}

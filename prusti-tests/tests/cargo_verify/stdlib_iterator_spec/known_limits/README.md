@@ -77,6 +77,50 @@ fresh, set `JAVA_HOME` to the recorded Java installation, and inspect the
 diagnostic and dumped `viper_program/program-check.vpr` rather than treating
 the exit code alone as proof of a particular failure.
 
+## IM1: prefix restoration with a wand
+
+[prefix_wand.vpr](prefix_wand.vpr) models a borrowed tail as a sequence of
+distinct *logical* element locations, each with an owned value field. Its
+abstract `values` function is a heap-dependent snapshot observation: its
+only assumed properties are the sequence length and equality of each entry
+to the corresponding owned field. It grants no permissions and assumes no
+law relating values across updates. Logical location distinctness is not a
+claim that Rust pointer addresses differ for zero-sized elements.
+
+The Viper body of `take_first` is verified: it splits the first field from
+the tail and packages an expiry wand. That wand reassembles the original
+owner and relates its restored snapshot to the yielded value and tail
+snapshot at `old[lhs]`. The loop carries a second wand relating the source to
+the completed prefix and the remaining tail. On each backedge, its package
+script imports the yielded field, applies the single-step wand, then applies
+the previous summary. This makes the prefix relation inductive while the
+source remains inaccessible during iteration.
+
+`fill_prefix` proves that the first `min(stop, len)` elements become `7` and
+the remaining suffix retains its entry values. `increment_prefix` proves the
+same framing and adds one to each processed value, with an explicit
+`u32`-compatible overflow bound on entry. Both use arbitrary symbolic finite
+lengths. Concrete one- and two-element witnesses exercise empty/full and
+mixed prefix/suffix outcomes without assuming the result.
+
+On 2026-10-28, the pinned Silicon/Z3/Java configuration verified the model;
+the negative clients rejected a wrong prefix, wrong suffix, wrong increment,
+an overflow-causing call, and `false` at reachable states. Reproduce those six
+checks with:
+
+```sh
+./x.py exec python3 scripts/test_stdlib_prefix_wand.py
+```
+
+The runner checks each negative diagnostic, rejects timeouts and internal
+errors, and saves logs under `target/stdlib-im1-prefix-logs`. The abstract
+snapshot observation and the logical-location model are explicit assumptions:
+this is not yet a proof that Prusti can express the invariant in Rust or that
+its whole-slice encoding implements the same summary. The existing untrusted
+[`mut_region_full_pass`](../src/bin/mut_region_full_pass.rs) and
+[`mut_region_full_wrong`](../src/bin/mut_region_full_wrong.rs) cases separately
+exercise composition of Rust expiry pledges for two yields.
+
 The `mutable_ref_snapshot` probe attempts to model the remaining mutable
 references and relate each reference to the corresponding source element:
 

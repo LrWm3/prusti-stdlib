@@ -12,7 +12,8 @@ use crate::encoders::{
 };
 use pcg::borrow_pcg::{
     FunctionData, FunctionShape, FunctionShapeInput, FunctionShapeNode, FunctionShapeOutput,
-    MakeFunctionShapeError, region_projection::Generalized, state::BorrowsState,
+    MakeFunctionShapeError, borrow_pcg_edge::BorrowPcgEdge, region_projection::Generalized,
+    state::BorrowsState,
 };
 use prusti_interface::PrustiError;
 use prusti_rustc_interface::{
@@ -35,6 +36,7 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
     pub fn package_wands(
         &mut self,
         final_borrow_state: &BorrowsState<'_, 'vir>,
+        already_unblocked: &[BorrowPcgEdge<'vir>],
     ) -> EncodeResult<'vir, Vec<vir::Stmt<'vir>>, E> {
         let mut wand_packages = Vec::new();
         let label = self.new_label("package_post");
@@ -79,7 +81,8 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
                     )
                 })
                 .collect();
-            let mut package_script = self.pcs_package_script(final_borrow_state, rhs, label)?;
+            let mut package_script =
+                self.pcs_package_script(final_borrow_state, rhs, label, already_unblocked)?;
 
             for EncodedPledge {
                 expiry_postcondition,

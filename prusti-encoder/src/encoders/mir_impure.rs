@@ -974,19 +974,27 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
     /// in the package state, and a resource of the state outside is only moved
     /// there when consumed. Asserting the footprint first moves it there before
     /// any statement, which may need it earlier (e.g. to read the address of a
-    /// `Box` that is folded).
+    /// `Box` that is folded). Edges already unblocked before packaging must
+    /// not be replayed: doing so can consume resources that the enclosing
+    /// method must return separately.
     pub(crate) fn pcs_package_script<N: Into<BlockedNode<'vir>>>(
         &mut self,
         borrows_state: &BorrowsState<'_, 'vir>,
         rhs: Vec<(N, Vec<vir::ExprBool<'vir>>)>,
         label: &'vir str,
+        already_unblocked: &[BorrowPcgEdge<'vir>],
     ) -> EncodeResult<'vir, Vec<vir::Stmt<'vir>>, E> {
         let mut parts = Vec::new();
         let mut unblock = Vec::new();
         for (node, resources) in rhs {
             let node = node.into();
             let ug = UnblockGraph::for_node(node, borrows_state, self.pcg_ctxt());
-            let actions = ug.actions(self.pcg_ctxt()).unwrap();
+            let actions = ug
+                .actions(self.pcg_ctxt())
+                .unwrap()
+                .into_iter()
+                .filter(|action| !already_unblocked.contains(action.edge()))
+                .collect::<Vec<_>>();
             let mut footprint = Footprint {
                 actions: &actions,
                 label,
@@ -2782,6 +2790,12 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         Vec::new()
                     }
                 };
+                // The graph describes the state before these actions. Pass the
+                // actions along so the package script does not replay them.
+                let already_unblocked = actions
+                    .iter()
+                    .map(|action| action.edge().clone())
+                    .collect::<Vec<_>>();
                 let mut to_skip = Vec::new();
                 for action in actions {
                     self.pcs_handle_edge(
@@ -2793,7 +2807,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         None,
                     )?;
                 }
-                let wand_packages = self.package_wands(borrows)?;
+                let wand_packages = self.package_wands(borrows, &already_unblocked)?;
                 self.current_fpcs = Some(current_fpcs);
                 self.stmts(wand_packages);
 

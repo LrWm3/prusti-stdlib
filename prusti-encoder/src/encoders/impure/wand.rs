@@ -35,7 +35,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             unreachable!()
         };
         let label = *label.get_or_insert_with(|| self.new_label("outer_package"));
-        let proof_block = self.pcs_package_script(borrows_state, rhs, label)?;
+        let proof_block = self.pcs_package_script(borrows_state, rhs, label, &[])?;
         let proof_block = self.vcx.alloc_slice(&proof_block);
         self.stmt(self.vcx.mk_package_stmt(wand, proof_block));
         Ok(())

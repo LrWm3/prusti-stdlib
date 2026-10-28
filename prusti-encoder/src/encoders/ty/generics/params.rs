@@ -159,6 +159,16 @@ impl<'tcx> GParams<'tcx> {
                 traits::{FulfillmentEngine, FulfillmentError, NormalizeExt, ObligationCause},
             },
         };
+        // A fresh inference context cannot interpret the caller's region
+        // variables. Keep them when there is no alias to normalize: erasing
+        // them here can make a call-site lifetime projection disappear.
+        let arg: ty::GenericArg<'tcx> = ty.into();
+        if !arg.walk().any(|arg| {
+            arg.as_type()
+                .is_some_and(|inner| matches!(inner.kind(), ty::TyKind::Alias(..)))
+        }) {
+            return Some(ty);
+        }
         vir::with_vcx(|vcx| {
             // Erase ReVars before normalizing with a fresh InferCtxt that
             // doesn't know about ReVars from the original type-checking

@@ -32,4 +32,8 @@ path = "expiry_ref_heap.rs"
 name = "region_next"
 path = "region_next.rs"
 
+[[bin]]
+name = "take_mut_slice"
+path = "take_mut_slice.rs"
+
 [workspace]

@@ -1,0 +1,16 @@
+predicate Slot(x: Ref)
+predicate Element(x: Ref)
+
+method convert(x: Ref)
+  requires acc(Slot(x))
+  ensures acc(Slot(x))
+
+method package_with_frame(s: Ref, element: Ref)
+  requires acc(Slot(s))
+  ensures acc(Slot(s))
+  ensures (acc(Element(element)) && acc(Slot(s))) --* (acc(Element(element)) && acc(Slot(s)))
+{
+  package (acc(Element(element)) && acc(Slot(s))) --* (acc(Element(element)) && acc(Slot(s))) {
+    convert(s)
+  }
+}

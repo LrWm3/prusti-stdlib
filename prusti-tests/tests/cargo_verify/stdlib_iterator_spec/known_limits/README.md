@@ -37,22 +37,39 @@ iterator's remaining elements and a way to transfer and reassemble the
 individual element permissions as yields expire.
 
 The `region_next` probe replaces the raw-pointer-backed iterator with a
-struct containing an explicit `&mut [u32]`. Its trusted `next` has no
-functional guarantees and its body always returns `None`; the caller must
-still handle an unconstrained `Some`. With the first possible result live,
-the second call reports insufficient permission. This happens without any
-pledge. Adding an iterator lifetime predicate alone therefore will not allow
-successive yields: the call contract must retain a resource for the
-unconsumed tail while the yielded reference owns a separate element resource.
-The command above can also be run with `--bin region_next`.
-With `PRUSTI_DUMP_VIPER_PROGRAM=true`, the generated `next` contract puts the
-slice predicate and the possible returned-element predicate together on the
-wand's left side; it does not return a separately usable tail predicate in
-the immediate postcondition. The original slice resource is therefore still
-blocked at the second call. A solution must describe the changed tail and
-the yielded element as separate resources and preserve their relationship to
-the original slice through the wand; simply inhaling another slice predicate
-would duplicate permission.
+struct containing an explicit `&mut [u32]`. Its `next` has no functional
+guarantees and its body always returns `None`; the caller must still handle
+an unconstrained `Some`. This probe now verifies with two possible results
+live at once. The call contract returns the post-call tail resource while a
+wand retains the relationship needed to restore the original resource when
+the results and tail expire. Additional tests cover both expiry orders and
+optional tail state. Run the probe with `--bin region_next`.
+
+This establishes the lifetime plumbing for an explicitly borrowed tail, not a
+functional iterator: the probe never actually splits or advances the slice.
+The raw-pointer-backed standard iterator still needs its own remaining-element
+resource and a way to relate yielded elements to the original slice.
+
+The `take_mut_slice` probe isolates a separate borrow-transfer failure in a
+safe implementation that moves a borrowed tail out of an `Option` using
+`mem::replace`. Both the earlier encoder and the revised encoder report an
+insufficient-permission error during verification, currently exposed as an
+internal backtranslation error. This also prevents verifying a slice-backed
+iterator implementation that advances by taking and splitting its tail.
+Run it with `--bin take_mut_slice`.
+
+In the generated program for this probe, the wand package script converts the
+slot's representation and consumes its permission; the enclosing method then
+cannot return that permission. The standalone `slot_unframed.vpr` isolates
+this effect and fails with an insufficient-permission postcondition, while
+`slot_frame.vpr` verifies when the slot is included on both sides of the wand.
+The latter also makes the slot a requirement for applying the wand, so a
+Prusti fix must account for that dependency and prove the relevant call and
+expiry paths; the standalone example is not itself an encoder fix. Run these
+files with the Silicon command below, replacing its final filename. Adding the
+same frame to both sides of the wand in the generated `take_mut_slice` Viper
+program also makes that method verify. That experiment checks the callee only;
+it does not establish that callers can apply the resulting wand correctly.
 
 The standalone `spatial_iter.vpr` experiment models elements as distinct
 *logical* locations with quantified permissions. It verifies splitting off

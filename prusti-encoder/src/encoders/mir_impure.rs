@@ -2155,6 +2155,137 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         Ok(())
     }
 
+    /// Identify the single loop edge described by a restoration annotation.
+    /// This depends only on the loop-head PCG state, so the same selection can
+    /// later be used when encoding entry packages as well as the loop invariant.
+    fn select_restoration_edge(
+        &mut self,
+        original_head: mir::BasicBlock,
+        spec_block: mir::BasicBlock,
+        span: Span,
+        cfpcs: &PcgBasicBlock<'_, 'vir>,
+    ) -> EncodeResult<
+        'vir,
+        (
+            super::mir_pure::MirPureEncOutput<'vir>,
+            PcgCoupledEdgeKind<'vir>,
+            Place<'vir>,
+            mir::Local,
+        ),
+        E,
+    > {
+        let restoration = self.deps.require_dep::<MirPureEnc>(MirPureEncTask {
+            encoding_depth: 0,
+            parent_def_id: self.def_id,
+            gargs: GParams::from(self.def_id).identity_args(),
+            kind: PureKind::RestorationBlock(spec_block),
+        })?;
+        let iterator_locals = restoration
+            .inputs
+            .iter()
+            .copied()
+            .filter(|local| {
+                RustTyDecomposition::from_ty(self.body.local_decls[*local].ty, self.context())
+                    .ty
+                    .special
+                    == RustTySpecial::SliceIterMut
+            })
+            .collect::<Vec<_>>();
+        if iterator_locals.len() != 1 {
+            return Err(self.unsupported_rvalue(
+                "body_restore_prefix requires a unique local mutable slice iterator".to_string(),
+                span,
+            ));
+        }
+        let iterator = iterator_locals[0];
+        let state = &cfpcs.statements[0].states[EvalStmtPhase::PreOperands];
+        let matched_edges = state
+            .borrow_pcg()
+            .graph()
+            .edges()
+            .filter_map(|edge| {
+                let edge = match edge.kind() {
+                    BorrowPcgEdgeKind::Abstraction(edge @ AbstractionEdge::Loop(_)) => {
+                        edge.clone().into_singleton_coupled_edge()
+                    }
+                    BorrowPcgEdgeKind::Coupled(edge) => edge.clone(),
+                    _ => return None,
+                };
+                if edge.loop_head() != Some(original_head) {
+                    return None;
+                }
+                let outputs = edge.outputs();
+                let mentions_iterator = outputs.iter().any(|output| {
+                    let PcgNode::LifetimeProjection(output) = **output else {
+                        return false;
+                    };
+                    match output.base().to_pcg_lifetime_projection_base() {
+                        PlaceOrConst::Place(MaybeRemotePlace::Local(place)) => {
+                            let place = place.place();
+                            place.local == iterator && place.projection.is_empty()
+                        }
+                        _ => false,
+                    }
+                });
+                mentions_iterator.then_some(edge)
+            })
+            .collect::<Vec<_>>();
+        if matched_edges.len() != 1 {
+            return Err(self.unsupported_rvalue(
+                "body_restore_prefix requires a unique matching iterator restoration edge"
+                    .to_string(),
+                span,
+            ));
+        }
+        let inputs = matched_edges[0].inputs(self.pcg_ctxt());
+        let outputs = matched_edges[0].outputs();
+        let source = if inputs.len() == 1 && outputs.len() == 1 {
+            match *inputs[0] {
+                PcgNode::Place(MaybeLabelledPlace::Current(source))
+                    if matches!(source.projection.as_ref(), [mir::ProjectionElem::Deref])
+                        && matches!(source.ty(self.pcg_ctxt()).ty.kind(), TyKind::Slice(_))
+                        && matches!(
+                            self.body.local_decls[source.local].ty.kind(),
+                            TyKind::Ref(_, _, ty::Mutability::Mut)
+                        ) =>
+                {
+                    Some(source)
+                }
+                _ => None,
+            }
+        } else {
+            None
+        };
+        let Some(source) = source else {
+            return Err(self.unsupported_rvalue(
+                "body_restore_prefix requires a unique matching iterator restoration edge"
+                    .to_string(),
+                span,
+            ));
+        };
+        let slice_ty = source.ty(self.pcg_ctxt()).ty;
+        let iterator_ty = self.body.local_decls[iterator].ty;
+        let TyKind::Adt(_, iterator_args) = iterator_ty.kind() else {
+            unreachable!()
+        };
+        let TyKind::Slice(element_ty) = slice_ty.kind() else {
+            unreachable!()
+        };
+        if *element_ty != iterator_args.type_at(1) {
+            return Err(self.unsupported_rvalue(
+                "body_restore_prefix requires matching source and iterator element types"
+                    .to_string(),
+                span,
+            ));
+        }
+        Ok((
+            restoration,
+            matched_edges.into_iter().next().unwrap(),
+            source,
+            iterator,
+        ))
+    }
+
     /// Reify the restoration formula using one consistent set of snapshots.
     /// Callers must choose the capture point for every local before invoking
     /// this method, including the edge's source and the iterator itself.
@@ -2522,114 +2653,12 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         span,
                     ));
                 }
-                let restoration = self.deps.require_dep::<MirPureEnc>(MirPureEncTask {
-                    encoding_depth: 0,
-                    parent_def_id: self.def_id,
-                    gargs: GParams::from(self.def_id).identity_args(),
-                    kind: PureKind::RestorationBlock(spec_block),
-                })?;
-                let iterator_locals = restoration
-                    .inputs
-                    .iter()
-                    .copied()
-                    .filter(|local| {
-                        RustTyDecomposition::from_ty(
-                            self.body.local_decls[*local].ty,
-                            self.context(),
-                        )
-                        .ty
-                        .special
-                            == RustTySpecial::SliceIterMut
-                    })
-                    .collect::<Vec<_>>();
-                if iterator_locals.len() != 1 {
-                    return Err(self.unsupported_rvalue(
-                        "body_restore_prefix requires a unique local mutable slice iterator"
-                            .to_string(),
-                        span,
-                    ));
-                }
-                let iterator = iterator_locals[0];
-                let state = &cfpcs.statements[0].states[EvalStmtPhase::PreOperands];
-                let matched_edges = state
-                    .borrow_pcg()
-                    .graph()
-                    .edges()
-                    .filter_map(|edge| {
-                        let edge = match edge.kind() {
-                            BorrowPcgEdgeKind::Abstraction(edge @ AbstractionEdge::Loop(_)) => {
-                                edge.clone().into_singleton_coupled_edge()
-                            }
-                            BorrowPcgEdgeKind::Coupled(edge) => edge.clone(),
-                            _ => return None,
-                        };
-                        if edge.loop_head() != Some(loop_spec.original_head_block) {
-                            return None;
-                        }
-                        let outputs = edge.outputs();
-                        let mentions_iterator = outputs.iter().any(|output| {
-                            let PcgNode::LifetimeProjection(output) = **output else {
-                                return false;
-                            };
-                            match output.base().to_pcg_lifetime_projection_base() {
-                                PlaceOrConst::Place(MaybeRemotePlace::Local(place)) => {
-                                    let place = place.place();
-                                    place.local == iterator && place.projection.is_empty()
-                                }
-                                _ => false,
-                            }
-                        });
-                        mentions_iterator.then_some(edge)
-                    })
-                    .collect::<Vec<_>>();
-                if matched_edges.len() != 1 {
-                    return Err(self.unsupported_rvalue(
-                        "body_restore_prefix requires a unique matching iterator restoration edge"
-                            .to_string(),
-                        span,
-                    ));
-                }
-                let inputs = matched_edges[0].inputs(self.pcg_ctxt());
-                let outputs = matched_edges[0].outputs();
-                let source = if inputs.len() == 1 && outputs.len() == 1 {
-                    match *inputs[0] {
-                        PcgNode::Place(MaybeLabelledPlace::Current(source))
-                            if matches!(source.projection.as_ref(), [mir::ProjectionElem::Deref])
-                                && matches!(source.ty(self.pcg_ctxt()).ty.kind(), TyKind::Slice(_))
-                                && matches!(
-                                    self.body.local_decls[source.local].ty.kind(),
-                                    TyKind::Ref(_, _, ty::Mutability::Mut)
-                                ) =>
-                        {
-                            Some(source)
-                        }
-                        _ => None,
-                    }
-                } else {
-                    None
-                };
-                let Some(source) = source else {
-                    return Err(self.unsupported_rvalue(
-                        "body_restore_prefix requires a unique matching iterator restoration edge"
-                            .to_string(),
-                        span,
-                    ));
-                };
-                let slice_ty = source.ty(self.pcg_ctxt()).ty;
-                let iterator_ty = self.body.local_decls[iterator].ty;
-                let TyKind::Adt(_, iterator_args) = iterator_ty.kind() else {
-                    unreachable!()
-                };
-                let TyKind::Slice(element_ty) = slice_ty.kind() else {
-                    unreachable!()
-                };
-                if *element_ty != iterator_args.type_at(1) {
-                    return Err(self.unsupported_rvalue(
-                        "body_restore_prefix requires matching source and iterator element types"
-                            .to_string(),
-                        span,
-                    ));
-                }
+                let (restoration, _edge, source, iterator) = self.select_restoration_edge(
+                    loop_spec.original_head_block,
+                    spec_block,
+                    span,
+                    &cfpcs,
+                )?;
                 let mut locals = FxHashMap::default();
                 for local in restoration.inputs.iter().copied().chain([source.local, iterator]) {
                     if !locals.contains_key(&local) {

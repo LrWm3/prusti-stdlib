@@ -1,0 +1,56 @@
+field value: Int
+
+predicate elements(xs: Seq[Ref]) {
+  (forall i: Int, j: Int :: { xs[i], xs[j] } 0 <= i && i < j && j < |xs| ==> xs[i] != xs[j]) ==> (forall i: Int :: { xs[i] } 0 <= i && i < |xs| ==> acc(xs[i].value))
+}
+
+method next(xs: Seq[Ref]) returns (head: Ref, tail: Seq[Ref])
+  requires |xs| > 0 && (forall i: Int, j: Int :: { xs[i], xs[j] } 0 <= i && i < j && j < |xs| ==> xs[i] != xs[j]) && elements(xs)
+  ensures head == xs[0] && tail == xs[1..]
+  ensures acc(head.value) && (forall i: Int, j: Int :: { tail[i], tail[j] } 0 <= i && i < j && j < |tail| ==> tail[i] != tail[j]) && elements(tail)
+{
+  unfold elements(xs)
+  head := xs[0]
+  tail := xs[1..]
+  fold elements(tail)
+}
+
+method visit(xs: Seq[Ref])
+  requires |xs| == 2 && (forall i: Int, j: Int :: { xs[i], xs[j] } 0 <= i && i < j && j < |xs| ==> xs[i] != xs[j]) && elements(xs)
+  ensures elements(xs)
+  ensures unfolding elements(xs) in xs[0].value == 7 && xs[1].value == 8
+{
+  var a: Ref
+  var b: Ref
+  var tail: Seq[Ref]
+  var end: Seq[Ref]
+  a, tail := next(xs)
+  b, end := next(tail)
+  a.value := 7
+  b.value := 8
+  unfold elements(end)
+  fold elements(xs)
+}
+
+method visit_all(xs: Seq[Ref])
+  requires (forall i: Int, j: Int :: { xs[i], xs[j] } 0 <= i && i < j && j < |xs| ==> xs[i] != xs[j])
+  requires elements(xs)
+  ensures elements(xs)
+  ensures unfolding elements(xs) in (forall i: Int :: { xs[i].value } 0 <= i && i < |xs| ==> xs[i].value == 8)
+{
+  var i: Int := 0
+  while (i < |xs|)
+    invariant 0 <= i && i <= |xs|
+    invariant (forall j: Int, k: Int :: { xs[j], xs[k] } 0 <= j && j < k && k < |xs| ==> xs[j] != xs[k])
+    invariant elements(xs[i..])
+    invariant forall j: Int :: { xs[j] } 0 <= j && j < i ==> acc(xs[j].value) && xs[j].value == 7
+  {
+    var head: Ref
+    var tail: Seq[Ref]
+    head, tail := next(xs[i..])
+    head.value := 7
+    i := i + 1
+  }
+  unfold elements(xs[i..])
+  fold elements(xs)
+}

@@ -53,3 +53,25 @@ blocked at the second call. A solution must describe the changed tail and
 the yielded element as separate resources and preserve their relationship to
 the original slice through the wand; simply inhaling another slice predicate
 would duplicate permission.
+
+The standalone `spatial_iter.vpr` experiment models elements as distinct
+*logical* locations with quantified permissions. It verifies splitting off
+two simultaneously live elements, restoring their owner, and an unbounded
+loop that updates every element. `spatial_iter_wrong.vpr` changes the loop's
+postcondition to an incorrect value and is rejected. Run them with the pinned
+Viper distribution, for example:
+
+```sh
+Z3_EXE="$PWD/viper_tools/z3/bin/z3" "$JAVA_HOME/bin/java" -Xss16m \
+  -cp viper_tools/backends/viperserver.jar viper.silicon.SiliconRunner \
+  --numberOfParallelVerifiers 1 --timeout 90 \
+  prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/spatial_iter.vpr
+```
+
+Replace the last filename with `spatial_iter_wrong.vpr` for the negative
+check. Both ran on 2026-10-28 with Viper `v-2026-09-01-0834`, Z3 `4.16.0`,
+and Java `21.0.2`. The distinctness premise is required: the predicate alone
+does not assert ownership when locations are not distinct. These locations
+are ghost identities, not Rust pointer addresses, which may coincide for
+zero-sized elements. The experiment does not yet connect those identities
+to Rust slices, encode empty `next`, or establish a bundled `IterMut` model.

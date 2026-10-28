@@ -1,0 +1,12 @@
+[package]
+name = "stdlib_hash_spec"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+prusti-contracts = { path = "../../../../prusti-contracts/prusti-contracts" }
+key_specs = { path = "specs" }
+
+[workspace]
+members = ["specs"]

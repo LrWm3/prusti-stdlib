@@ -201,6 +201,8 @@ jobs:
         run: python x.py exec python3 scripts/test_stdlib_extern_spec.py --suite borrow
       - name: Check owned iterator contracts
         run: python x.py exec python3 scripts/test_stdlib_extern_spec.py --suite iterator
+      - name: Check key model probes
+        run: python x.py exec python3 scripts/test_stdlib_extern_spec.py --suite hash
       - name: Check prusti-contracts
         run: |
           cd prusti-contracts/prusti-contracts-test/

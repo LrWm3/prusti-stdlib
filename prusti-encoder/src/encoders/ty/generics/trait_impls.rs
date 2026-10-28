@@ -1097,6 +1097,37 @@ impl TaskEncoder for TraitImplItemEnc {
                             posts.push(vir::expr! {
                                 ([func_ret]) == ([pure_func_app])
                             });
+                            // Connect a pure trait call directly to this
+                            // implementation's result under its precondition.
+                            // In particular, an associated result can be a
+                            // generic snapshot at the trait boundary even
+                            // when the impl returns a concrete type; the
+                            // postcondition axiom alone may not instantiate
+                            // for that generic result.
+                            if let Some(stub) = assoc_fn.call_stub_pure_function {
+                                let trait_call =
+                                    stub.call()(casted_args_slice, trait_tys, trait_consts);
+                                let normalized = signature.output.decompose_compare_normalize(
+                                    trait_item_context,
+                                    impl_item_args,
+                                );
+                                let caster = deps.require_dep::<GArgsCastEnc<Pure>>(normalized)?;
+                                let impl_call = caster.cast_to_callee_ctx(pure_func_app);
+                                axioms.push(vcx.mk_domain_axiom(
+                                    vir_format_identifier!(vcx, "{impl_name}_fn_body_{item_name}"),
+                                    TraitImplEnc::guarded_forall(
+                                        vcx,
+                                        deps,
+                                        impl_did,
+                                        impl_item_def_id,
+                                        &arg_decls,
+                                        trait_call.upcast_ty(),
+                                        guard_inherited(
+                                            vir::expr! { (pres) ==> ((trait_call) == (impl_call)) },
+                                        ),
+                                    )?,
+                                ));
+                            }
                         }
                         let posts = vcx.mk_conj(&posts);
                         let post_func_call = assoc_fn.post_func.call()(

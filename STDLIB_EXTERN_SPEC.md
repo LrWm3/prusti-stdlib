@@ -852,6 +852,18 @@ to satisfy the stronger modeled contract.
 snapshots from unequal colliding keys, and clients without the required evidence
 cannot use the stronger guarantees.
 
+**Progress:** the [key-model fixture](prusti-tests/tests/cargo_verify/stdlib_hash_spec/README.md)
+verifies a generic associated projection, logical-map insertion, integer keys,
+and a custom key whose equality ignores a field. It proves the custom equality
+laws and distinguishes equal keys with different snapshots from unequal keys
+with the same hash observation. The custom `Hash` implementation is explicitly
+trusted and reviewed as writing the same byte for every key. The projection
+interface only specifies its own comparison; a negative test confirms that an
+arbitrary implementation does not thereby acquire a Rust `Eq` relationship.
+No stronger `HashMap` or `HashSet` contract is exposed yet: the generic bridge
+to Rust equality and hashing, storage stability, and collection observations
+remain open. P3-A is not complete.
+
 ### P3-B: Core map/set operations and mutable map values
 
 **Prerequisite:** P3-A; the `get_mut` work also depends on P2-B.
@@ -947,7 +959,7 @@ claimed.
 | P2-B: mutable collection views | P2-A, two-state snapshots | Pledges, expiry, generic reference framing | Verified locally: 74 checks cover slice and Vec views, lookup, indexing, splits, reborrowing, inclusive range state, and negative framing cases. |
 | P2-C: shared and owned iterators | Sequence model, generic trait probes | Opt-in models, refinement, lifetimes, loop support | Passed locally: 58 iterator checks plus focused symbolic early-break checks cover owned and shared traversal, exact lengths, refinement, and loops. |
 | **M2: Vec/slice phase complete** | P2-A, P2-B, P2-C | Integration and cross-crate validation | Passed locally: component gates and the sequence, Vec, collection, borrow, external-spec, and iterator integration checks pass. |
-| P3-A: explicit key models | M2, logical Map/Set | Key-model interfaces and conditional contracts | Untested; equality/hash/model evidence is enforced. |
+| P3-A: explicit key models | M2, logical Map/Set | Key-model interfaces and conditional contracts | In progress: generic projection and collision probes pass; equality/hash evidence and collection observations remain open. |
 | **M3: HashMap/HashSet phase complete** | P3-A, P3-B, P2-B expiry support | Map/set contracts and mutable lookup | Untested; key, cardinality, framing, and mutable-value cases pass. |
 | `IterMut` | P2-B and iterator models | Yielded-reference tracking and owner restoration | Deferred from M2; investigate after mutable access works. |
 | Adapters, closures, callbacks, general `collect` | Iterator and higher-order contracts | Separate closure/callback and composition work | Deferred from all three gates. |

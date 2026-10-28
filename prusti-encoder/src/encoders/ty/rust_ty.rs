@@ -321,6 +321,9 @@ pub enum RustTySpecial {
     /// `alloc::boxed::Box`: its snapshot also carries the value of the boxed
     /// `T` and its predicate permission to it (see the structlike encoder).
     Box,
+    /// A logical borrowed tail supplements the raw-pointer representation of
+    /// `core::slice::IterMut`. Its identity is independent of physical addresses.
+    SliceIterMut,
 }
 
 impl<'tcx> RustTyData<'tcx> {
@@ -619,9 +622,18 @@ impl<'tcx, D: TyDatas<'tcx>> TyData<'tcx, (RustTyDatas, D)> {
 }
 
 impl RustTySpecial {
+    fn is_slice_iter_mut(adt: ty::AdtDef<'_>) -> bool {
+        vir::with_vcx(|vcx| {
+            let tcx = vcx.tcx();
+            tcx.crate_name(adt.did().krate).as_str() == "core"
+                && tcx.def_path(adt.did()).to_string_no_crate_verbose() == "::slice::iter::IterMut"
+        })
+    }
+
     fn from_ty(ty: ty::Ty<'_>) -> Self {
         match ty.kind() {
             ty::TyKind::Adt(adt, _) if adt.is_box() => RustTySpecial::Box,
+            ty::TyKind::Adt(adt, _) if Self::is_slice_iter_mut(*adt) => RustTySpecial::SliceIterMut,
             _ => RustTySpecial::None,
         }
     }
@@ -781,6 +793,34 @@ impl<'tcx> TySpecifics<'tcx, RustTyDatas> {
                             fid: abi::FieldIdx::from_usize(data.fields.len()),
                             ty: LazyRustTy(Self::new_param_ty(0)),
                             address: RustFieldAddress::Dynamic,
+                        });
+                    }
+                    if RustTySpecial::is_slice_iter_mut(adt) {
+                        // The pinned standard type ends in PhantomData<&'a mut T>.
+                        // Add a verification-only &'a mut [T] field. Unlike a
+                        // function of the raw pointers, this gives distinct
+                        // logical owners even when ZST addresses coincide.
+                        let tail_ty = vir::with_vcx(|vcx| {
+                            let marker = data.fields.last().unwrap().ty.0;
+                            let ty::TyKind::Adt(_, args) = marker.kind() else {
+                                unreachable!("IterMut marker must be PhantomData")
+                            };
+                            let ty::TyKind::Ref(region, elem, ty::Mutability::Mut) =
+                                args.type_at(0).kind()
+                            else {
+                                unreachable!("IterMut marker must contain a mutable reference")
+                            };
+                            ty::Ty::new_mut_ref(
+                                vcx.tcx(),
+                                *region,
+                                ty::Ty::new_slice(vcx.tcx(), *elem),
+                            )
+                        });
+                        data.fields.push(RustFieldData {
+                            name: symbol::Symbol::intern("prusti_tail"),
+                            fid: abi::FieldIdx::from_usize(data.fields.len()),
+                            ty: LazyRustTy(tail_ty),
+                            address: RustFieldAddress::Constant,
                         });
                     }
                     Self::StructLike(data)

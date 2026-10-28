@@ -1,5 +1,14 @@
 # Mutable iterator reference snapshots
 
+These historical probes record the steps leading to the current native
+iterator model. The `mut_native_*` regressions in `../src/bin` now exercise a
+logical borrowed tail for `core::slice::IterMut`, with test-only contracts for
+yielding elements and restoring their source. The older identity-only probes
+below do not supply those contracts. Pure mutable-reference snapshots still
+cannot read referent values without permission. A functional invariant for an
+arbitrary updated prefix and reference-containing generic elements remain
+outside the established examples.
+
 The `mutable_ref_snapshot` probe attempts to model the remaining mutable
 references and relate each reference to the corresponding source element:
 

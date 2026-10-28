@@ -8,10 +8,28 @@ value, and exhaustion. A separate reference sequence and address-only
 observations connect each yield to its original position without reading the
 referent from a mutable-reference snapshot. Cross-crate clients check two
 simultaneously live mutable yields and their identities; negative clients
-reject an incorrect identity, value, and owner restoration. A runtime check
+reject an incorrect identity, value, and owner restoration under those limited
+contracts. A runtime check
 also covers the shared address of zero-sized slice elements. Restoring the
-original slice after mutation requires heap-aware permissions and remains
-open. These probes do not expose a bundled `IterMut` contract.
+original slice after mutation requires heap-aware permissions. These probes
+do not expose a bundled `IterMut` contract.
+
+The `mut_native_*` cases provide separate test-only contracts for native
+`core::slice::IterMut`. Its encoded representation now includes a logical
+`&mut [T]` tail, observed by the specification-only `mut_iter_tail` marker.
+The tail carries the remaining element permissions; each `next` pledge
+reassembles the yielded element and the final tail at expiry. This supports
+two simultaneous yields, non-`Copy` elements, empty and exhausted iterators,
+and source-slice reuse after mutation. Yielded references remain usable after
+the iterator itself is dropped. A loop also restores ownership of the source;
+it does not yet prove a value invariant for the entire updated prefix.
+
+The marker supplies an identity, not permission to read elements. Negative
+cases check that a saved tail cannot be read after a yield, that incorrect
+restored values fail, and that zero-sized elements are not assumed to have
+distinct physical addresses. Executable code and ordinary pure functions
+cannot call the marker. Reference-containing element types and additional
+iterator operations are outside these examples.
 
 A separate untrusted iterator stores an explicit borrowed tail and implements
 `next` with `mem::replace` and `split_at_mut`. Its regressions restore multiple

@@ -1034,6 +1034,7 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                                     builtin,
                                     arg_tys,
                                     args,
+                                    destination.ty(self.body, self.vcx.tcx()).ty,
                                     &new_curr_ver,
                                 )
                             }
@@ -1645,6 +1646,7 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
         builtin: SpecBuiltin,
         arg_tys: ty::GenericArgsRef<'vir>,
         args: &[Spanned<mir::Operand<'vir>>],
+        result_ty: ty::Ty<'vir>,
         curr_ver: &FxHashMap<mir::Local, Version<'vir>>,
     ) -> EncodeResult<'vir, ExprRet<'vir>, MirPureEnc> {
         let mk_bool = |prim: vir::ExprGenBool<'vir, _, _>| prim.upcast_ty::<vir::CSnap>();
@@ -1693,6 +1695,42 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                 )?;
                 assert!(qvars.is_empty(), "`spec_block` closures take no arguments");
                 mk_bool(body.downcast_ty::<vir::Bool>())
+            }
+            SpecBuiltin::MutIterTail => {
+                if !self.specification {
+                    return Err(self.unsupported_rvalue(
+                        "mut_iter_tail is only available in specifications".to_string(),
+                        self.current_span(),
+                    ));
+                }
+                let operand = &args[0].node;
+                let reference_ty = operand.ty(self.body, self.vcx.tcx());
+                let ty::TyKind::Ref(_, iterator_ty, _) = reference_ty.kind() else {
+                    unreachable!("mutable iterator observation requires a reference")
+                };
+                if RustTyDecomposition::from_ty(*iterator_ty, self.context).ty.special
+                    != crate::encoders::ty::RustTySpecial::SliceIterMut
+                {
+                    return Err(self.unsupported_rvalue(
+                        "mutable iterator representation is not supported".to_string(),
+                        self.current_span(),
+                    ));
+                }
+                let reference = self.encode_operand_snap(operand, curr_ver)?;
+                let snapshot = self
+                    .ty_use(reference_ty)
+                    .expect_immref()
+                    .value_access(reference.downcast_ty());
+                let iterator = self.ty_use(*iterator_ty);
+                let tail = iterator
+                    .expect_structlike()
+                    .fields
+                    .last()
+                    .unwrap()
+                    .read(snapshot.downcast_ty());
+                self.ty_use(result_ty)
+                    .expect_structlike()
+                    .field_snaps_to_snap(vec![tail])
             }
             SpecBuiltin::ForIterator => {
                 if !self.spec_block {

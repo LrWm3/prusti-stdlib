@@ -1009,7 +1009,7 @@ unsupported; a hosted CI run is not claimed.
 | P3-A: explicit key models | M2, logical Map/Set | Key-model interfaces and conditional contracts | Passed locally: 20 checks cover projections, explicitly trusted key laws, collisions, and conditional empty map/set observations. |
 | P3-B: core hash collection operations | P3-A, P2-B expiry support | Conditional map/set contracts and mutable value restoration | Passed locally within the modeled key domain, including generic, non-`Copy`, collision, and negative clients. |
 | **M3: HashMap/HashSet phase complete** | P3-A, P3-B, P2-B expiry support | Map/set contracts and mutable lookup | Passed locally: 51 hash checks cover the modeled core operations and mutable lookup with explicit key laws and same-type queries. |
-| `IterMut` | P2-B and iterator models | Yielded-reference tracking and owner restoration | In progress: an untrusted slice-backed iterator restores two simultaneously yielded elements and ownership after a mutation loop, but the raw-pointer-backed standard iterator still needs a resource model. |
+| `IterMut` | P2-B and iterator models | Yielded-reference tracking and owner restoration | In progress: a logical borrowed tail gives the native iterator element permissions and expiry restoration under test-only contracts. Bundled contracts remain to be added. |
 | Adapters, closures, callbacks, general `collect` | Iterator and higher-order contracts | Separate closure/callback and composition work | Deferred from all three gates. |
 | Reference-containing elements, interior mutability, nested collections | Snapshot and ownership extensions | Additional modeling and permission support | Deferred; no unrestricted nested-generic support claim. |
 | Entry APIs, hash-collection iteration, heterogeneous lookup | M3 and additional models | API-specific state, representative, and borrowed-key contracts | Deferred from M3. |
@@ -1054,7 +1054,7 @@ fix and diagnostic changes. The generic non-`Copy` positive and wrong-value
 cases, including two simultaneously live yields, were verified separately with
 the generic-lifetime fix.
 
-This evidence does not yet give `core::slice::IterMut` an element-restoration
+The slice-backed evidence alone does not give `core::slice::IterMut` an element-restoration
 contract: its raw-pointer representation does not carry the slice-backed
 iterator's encoded lifetime resources. In particular, any resource model must
 distinguish logical elements even when zero-sized elements share a physical
@@ -1068,3 +1068,28 @@ loop abstractions and the original reference's shallow value, honors lifetime
 projection heap labels, and imports a composed wand's inputs before its
 `old[lhs]` reads. This establishes the loop's resource restoration; the
 whole-prefix value postcondition still needs a functional loop invariant.
+
+The native iterator prototype now supplements its raw-pointer representation
+with a verification-only borrowed slice tail. `mut_iter_tail` observes that
+tail's identity in specifications, while `mut_slice_contents` separately
+requires element permissions. Test-only construction and `next` contracts
+transfer and reassemble those permissions with expiry pledges. The runtime
+layout is unchanged, and the logical tail identity does not assert distinct
+physical addresses for zero-sized elements.
+
+A call-shape regression exposed a separate PCG issue: normalizing
+`Iterator::Item` created a fresh lifetime equal to the iterator's element
+lifetime, but that equality was lost with the inference context. PCG now
+resolves equal region variables before building the shape. This keeps the
+yielded-reference dependency alive even when the iterator is dropped first.
+The regression failed before the fix; all eight function-shape tests, the
+alias and closure tests, and all 248 numbered PCG fixtures pass afterward.
+
+With that fix, the native and legacy mutable-iterator regression run passed
+31 checks, including runtime checks, two live non-`Copy` yields after iterator
+destruction, empty/exhausted states, loop ownership restoration, and exact
+negative diagnostics for values, addresses, and permission misuse. The
+quantified-`old` capture fix also passed all 97 borrow checks on the preceding
+PCG revision. These runs disabled caching and used a 180-second verifier
+limit with one parallel verifier. Native contracts are still test-only at
+this checkpoint.

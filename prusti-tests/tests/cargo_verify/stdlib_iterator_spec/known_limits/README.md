@@ -175,7 +175,9 @@ iterator is live is still rejected by Rust.
 The regular `mut_native_tail_suffix` and `mut_native_tail_early_break` tests
 prove that the live iterator tail is the entry sequence's suffix at the
 processed count, for symbolic lengths and an arbitrary early-break bound.
-Their negative clients reject incorrect exit-count claims. This does not yet
+Their negative clients reject incorrect exit-count claims. The
+`mut_native_tail_value` pair proves an untouched element's value on a
+nonempty early-break path and rejects a wrong value. This does not yet
 establish the processed prefix or the restored owner's final contents.
 
 The generated constructor package can already prove its initial value

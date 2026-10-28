@@ -1086,8 +1086,10 @@ failed positive proof as evidence for a negative case.
 The native iterator now has symbolic-length Rust controls for full traversal
 and early break: at each loop head the remaining tail equals the corresponding
 suffix of the entry sequence, and the exit count is checked. These controls
-include empty inputs and reject incorrect exit-count claims. They observe the
-live tail; they do not prove that the processed prefix is restored to the owner.
+include empty inputs and reject incorrect exit-count claims. A separate
+nonempty early-break case proves a particular untouched tail value and rejects
+a wrong value. These observe the live tail; they do not prove that the
+processed prefix is restored to the owner.
 
 The constructor's initial source–tail value equality has also been checked
 inside the actual emitted Viper package, using the generated slice predicates

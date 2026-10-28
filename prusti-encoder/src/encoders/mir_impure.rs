@@ -173,6 +173,7 @@ where
     /// created no wand to apply on expiry.
     pub wandless_calls: FxHashSet<mir::BasicBlock>,
     pub from_to_vars: FromToVars<'vir>,
+    pub loop_reference_frames: Vec<LoopReferenceFrame<'vir>>,
 
     // for the current basic block
     pub current_fpcs: Option<PcgBasicBlock<'enc, 'vir>>,
@@ -184,6 +185,12 @@ where
     pub current_terminator: Option<vir::TerminatorStmt<'vir>>,
 
     pub encoded_blocks: Vec<vir::CfgBlock<'vir>>, // TODO: use IndexVec ?
+}
+
+pub(crate) struct LoopReferenceFrame<'vir> {
+    pub loop_id: LoopId,
+    pub head: vir::CfgBlockLabel<'vir>,
+    pub snapshots: Vec<(vir::ExprSnap<'vir>, vir::ExprSnap<'vir>)>,
 }
 
 /// Represents the translation of a MIR place. If the place crosses a shared
@@ -922,6 +929,11 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         for wand in wands {
                             if let Some(footprint) = &mut footprint {
                                 footprint.parts.push(self.vcx.mk_wand_expr(wand));
+                                // Import the resources before applying the wand.
+                                // In a package, `old[lhs]` in an applied pledge
+                                // must see the complete input heap, including
+                                // resources pulled from the enclosing state.
+                                self.stmt(self.vcx.mk_assert_stmt(wand.lhs));
                             }
                             self.stmt(self.vcx.mk_apply_stmt(wand));
                         }
@@ -2409,6 +2421,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             }
             let (permissions, place_capabilities) = self.get_loop_inv(
                 &cfpcs,
+                loop_id,
                 &loop_place_usages,
                 &invariant_inputs,
                 self.pcg_ctxt(),

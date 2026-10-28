@@ -27,6 +27,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         if !package {
             if let Some(footprint) = footprint {
                 footprint.parts.push(self.vcx.mk_wand_expr(wand));
+                self.stmt(self.vcx.mk_assert_stmt(wand.lhs));
             }
             self.stmt(self.vcx.mk_apply_stmt(wand));
             return Ok(());

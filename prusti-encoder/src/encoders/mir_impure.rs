@@ -12,7 +12,7 @@ use pcg::{
             kind::BorrowPcgEdgeKind,
         },
         edge_data::EdgeData,
-        region_projection::PlaceOrConst,
+        region_projection::{PcgLifetimeProjectionBaseLike, PlaceOrConst},
         state::BorrowsState,
         unblock_graph::{BorrowPcgUnblockAction, UnblockGraph},
         validity_conditions::BranchChoices,
@@ -25,6 +25,7 @@ use pcg::{
     utils::{
         CompilerCtxt, HasPlace, Place, PrefixRelation, SnapshotLocation, display::DisplayWithCtxt,
         maybe_old::MaybeLabelledPlace,
+        maybe_remote::MaybeRemotePlace,
     },
 };
 use prusti_interface::PrustiError;
@@ -2403,10 +2404,118 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         // loop head by default
         let mut invariant = None;
         if let Some(loop_spec) = self.spec_blocks.loop_specs.get(&block) {
-            if let Some((_, span)) = loop_spec.restorations.first() {
+            if let Some((spec_block, span)) = loop_spec.restorations.first().copied() {
+                if loop_spec.restorations.len() != 1 {
+                    return Err(self.unsupported_rvalue(
+                        "body_restore_prefix requires exactly one restoration annotation per loop"
+                            .to_string(),
+                        span,
+                    ));
+                }
+                let restoration = self.deps.require_dep::<MirPureEnc>(MirPureEncTask {
+                    encoding_depth: 0,
+                    parent_def_id: self.def_id,
+                    gargs: GParams::from(self.def_id).identity_args(),
+                    kind: PureKind::RestorationBlock(spec_block),
+                })?;
+                let iterator_locals = restoration
+                    .inputs
+                    .iter()
+                    .copied()
+                    .filter(|local| {
+                        RustTyDecomposition::from_ty(
+                            self.body.local_decls[*local].ty,
+                            self.context(),
+                        )
+                        .ty
+                        .special
+                            == RustTySpecial::SliceIterMut
+                    })
+                    .collect::<Vec<_>>();
+                if iterator_locals.len() != 1 {
+                    return Err(self.unsupported_rvalue(
+                        "body_restore_prefix requires a unique local mutable slice iterator"
+                            .to_string(),
+                        span,
+                    ));
+                }
+                let iterator = iterator_locals[0];
+                let state = &cfpcs.statements[0].states[EvalStmtPhase::PreOperands];
+                let matched_edges = state
+                    .borrow_pcg()
+                    .graph()
+                    .edges()
+                    .filter_map(|edge| {
+                        let edge = match edge.kind() {
+                            BorrowPcgEdgeKind::Abstraction(edge @ AbstractionEdge::Loop(_)) => {
+                                edge.clone().into_singleton_coupled_edge()
+                            }
+                            BorrowPcgEdgeKind::Coupled(edge) => edge.clone(),
+                            _ => return None,
+                        };
+                        if edge.loop_head() != Some(loop_spec.original_head_block) {
+                            return None;
+                        }
+                        let outputs = edge.outputs();
+                        let mentions_iterator = outputs.iter().any(|output| {
+                            let PcgNode::LifetimeProjection(output) = **output else {
+                                return false;
+                            };
+                            match output.base().to_pcg_lifetime_projection_base() {
+                                PlaceOrConst::Place(MaybeRemotePlace::Local(place)) => {
+                                    let place = place.place();
+                                    place.local == iterator && place.projection.is_empty()
+                                }
+                                _ => false,
+                            }
+                        });
+                        mentions_iterator.then_some(edge)
+                    })
+                    .collect::<Vec<_>>();
+                if matched_edges.len() != 1 {
+                    return Err(self.unsupported_rvalue(
+                        "body_restore_prefix requires a unique matching iterator restoration edge"
+                            .to_string(),
+                        span,
+                    ));
+                }
+                let inputs = matched_edges[0].inputs(self.pcg_ctxt());
+                let outputs = matched_edges[0].outputs();
+                let supported_source = if inputs.len() == 1 && outputs.len() == 1 {
+                    match *inputs[0] {
+                        PcgNode::Place(MaybeLabelledPlace::Current(source)) => {
+                            matches!(source.projection.as_ref(), [mir::ProjectionElem::Deref])
+                                && matches!(source.ty(self.pcg_ctxt()).ty.kind(), TyKind::Slice(_))
+                        }
+                        _ => false,
+                    }
+                } else {
+                    false
+                };
+                if !supported_source {
+                    return Err(self.unsupported_rvalue(
+                        "body_restore_prefix requires a unique matching iterator restoration edge"
+                            .to_string(),
+                        span,
+                    ));
+                }
+                let mut locals = FxHashMap::default();
+                for local in restoration.inputs {
+                    locals.insert(local, self.encode_place_with_snap(local.into())?.1);
+                }
+                use vir::Reify;
+                let _relation = restoration.expr.reify(
+                    self.vcx,
+                    (
+                        self.def_id,
+                        self.vcx.alloc(locals),
+                        vir::OldLabel::None,
+                        None,
+                    ),
+                );
                 return Err(self.unsupported_rvalue(
                     "body_restore_prefix is not yet supported".to_string(),
-                    *span,
+                    span,
                 ));
             }
             let loop_place_usages = self

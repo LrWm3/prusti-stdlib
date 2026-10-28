@@ -879,7 +879,7 @@ other hash-collection operations are specified by this milestone.
 
 **Prerequisite:** P3-A; the `get_mut` work also depends on P2-B.
 
-**Progress:** conditional contracts for map/set `len` and `insert` connect
+**Verified locally on 2026-10-27:** conditional contracts for map/set `len` and `insert` connect
 the returned length, insertion state, previous map value, and set insertion
 boolean to the logical observations. Cross-crate clients cover generic keys,
 integer keys, replacement by equal custom keys with different snapshots, and
@@ -894,6 +894,22 @@ returned reference's initial value. Its conditional expiry pledge updates only
 that projected key, preserving other entries and cardinality; an absent lookup
 preserves the complete observation. Generic, custom-key, and non-`Copy` value
 clients exercise these contracts. Heterogeneous lookup remains deferred.
+
+The complete hash suite passed all 51 checks at `b15a36e4a`, including
+cross-crate generic clients, runtime checks, and negative cases with the
+intended diagnostics. The suite took 958.96 seconds in total; its longest
+individual check, `collection_remove_pass`, took 59.22 seconds. Run it with
+`./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite hash` after
+building. The focused runner enables overflow and panic checks, disables the
+verification cache, and sets a 90-second verifier timeout. The environment
+uses PCG `e54bf675468d44c5e3c0d0e2eca6b7e837e11270`, Rust
+`1.99.0-nightly (d453bdd8f 2026-08-14)`, Viper `v-2026-09-01-0834`, Z3
+`4.16.0`, and Java `21.0.2`. The full external-spec suite passed 97 checks
+and the existing iterator suite passed 61 checks at the same encoder revision;
+the later test-only `IterMut` additions were verified separately. The 36
+`prusti-specs` unit tests also passed. These results satisfy M3 within the
+explicit key-model and same-key lookup domain described above; they do not
+establish the deferred cases below.
 
 | Collection | Required operations and laws |
 |---|---|
@@ -971,9 +987,9 @@ must name the supported operations, element/key domain, and completed proof gate
 ## Dependency and support matrix
 
 Baseline inspection, P1-A through P1-D, and P2-A are complete locally, including **M1**
-for owned values with stable value snapshots. General outlives equivalence is
-conservatively unsupported. Phases 2 and 3 remain open; a hosted CI run is not
-claimed.
+for owned values with stable value snapshots. M2 and M3 also pass locally within
+their documented domains. General outlives equivalence is conservatively
+unsupported; a hosted CI run is not claimed.
 
 | Gate or capability | Depends on | Expected Prusti work | Baseline status / completion criterion |
 |---|---|---|---|
@@ -987,7 +1003,8 @@ claimed.
 | P2-C: shared and owned iterators | Sequence model, generic trait probes | Opt-in models, refinement, lifetimes, loop support | Passed locally: 58 iterator checks plus focused symbolic early-break checks cover owned and shared traversal, exact lengths, refinement, and loops. |
 | **M2: Vec/slice phase complete** | P2-A, P2-B, P2-C | Integration and cross-crate validation | Passed locally: component gates and the sequence, Vec, collection, borrow, external-spec, and iterator integration checks pass. |
 | P3-A: explicit key models | M2, logical Map/Set | Key-model interfaces and conditional contracts | Passed locally: 20 checks cover projections, explicitly trusted key laws, collisions, and conditional empty map/set observations. |
-| **M3: HashMap/HashSet phase complete** | P3-A, P3-B, P2-B expiry support | Map/set contracts and mutable lookup | Untested; key, cardinality, framing, and mutable-value cases pass. |
+| P3-B: core hash collection operations | P3-A, P2-B expiry support | Conditional map/set contracts and mutable value restoration | Passed locally within the modeled key domain, including generic, non-`Copy`, collision, and negative clients. |
+| **M3: HashMap/HashSet phase complete** | P3-A, P3-B, P2-B expiry support | Map/set contracts and mutable lookup | Passed locally: 51 hash checks cover the modeled core operations and mutable lookup with explicit key laws and same-type queries. |
 | `IterMut` | P2-B and iterator models | Yielded-reference tracking and owner restoration | In progress: test-only construction and direct advancement probes; restoring the source after yielded references expire remains open. |
 | Adapters, closures, callbacks, general `collect` | Iterator and higher-order contracts | Separate closure/callback and composition work | Deferred from all three gates. |
 | Reference-containing elements, interior mutability, nested collections | Snapshot and ownership extensions | Additional modeling and permission support | Deferred; no unrestricted nested-generic support claim. |

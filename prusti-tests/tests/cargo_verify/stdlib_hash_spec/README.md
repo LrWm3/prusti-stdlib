@@ -1,4 +1,4 @@
-# Key model probes (P3-A)
+# Hash collection model and contract probes (P3-A and P3-B)
 
 Run after building Prusti:
 

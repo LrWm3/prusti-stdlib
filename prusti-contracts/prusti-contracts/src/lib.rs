@@ -526,6 +526,17 @@ mod private_shared {
 mod private {
     pub use super::private_shared::*;
 
+    // Ghost block bodies are type-checked even though they are erased. This
+    // permits a later ghost block to use an earlier snapshot in ordinary Rust
+    // builds; evaluating the dereference at runtime remains invalid.
+    impl<T: ?Sized> core::ops::Deref for Ghost<T> {
+        type Target = T;
+
+        fn deref(&self) -> &T {
+            panic!("ghost snapshots cannot be evaluated at runtime")
+        }
+    }
+
     /// A macro for defining a closure with a specification.
     /// Note: this is a declarative macro defined in this crate
     /// because declarative macros can't be exported from

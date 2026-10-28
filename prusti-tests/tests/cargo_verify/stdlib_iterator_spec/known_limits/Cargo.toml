@@ -136,4 +136,8 @@ path = "im2_quantified_expiry_valid.rs"
 name = "im2_quantified_expiry_wrong"
 path = "im2_quantified_expiry_wrong.rs"
 
+[[bin]]
+name = "im2_prefix_ghost_quantified"
+path = "im2_prefix_ghost_quantified.rs"
+
 [workspace]

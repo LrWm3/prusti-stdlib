@@ -180,6 +180,13 @@ Their negative clients reject incorrect exit-count claims. The
 nonempty early-break path and rejects a wrong value. This does not yet
 establish the processed prefix or the restored owner's final contents.
 
+The `mut_native_prefix_ghost` controls maintain a growing ghost sequence and
+verify that its length matches the number of yielded elements. A separate
+`im2_prefix_ghost_quantified` probe also asks for every completed element to
+equal `7`; its `usize`-quantified loop invariant currently fails preservation.
+The hand-strengthened Viper proof below succeeds, so this Rust-level failure
+remains a separate proof/encoding limitation to resolve.
+
 The generated constructor package can already prove its initial value
 relation using the native `p_Slice` and `p_Param` predicates. The
 [constructor-wand runner](../../../../../scripts/test_stdlib_iterator_constructor_wand.py)

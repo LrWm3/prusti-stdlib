@@ -1045,6 +1045,11 @@ functional iterator test covers exhaustion, while a combined contract for both
 empty and nonempty tails remains a solver timeout, recorded under
 `stdlib_iterator_spec/known_limits`.
 
+The complete borrow and iterator suites subsequently passed 91 and 109 checks,
+respectively, using the `after_call` encoder before the later generic-lifetime
+fix and diagnostic changes. The generic non-`Copy` positive and wrong-value
+cases were verified separately with the generic-lifetime fix.
+
 This evidence does not yet give `core::slice::IterMut` an element-restoration
 contract: its raw-pointer representation does not carry the slice-backed
 iterator's encoded lifetime resources. In particular, any resource model must

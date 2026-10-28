@@ -1712,7 +1712,12 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                         self.rel1_mode = true;
                     }
                     Mode::BeforeExpiry => {
-                        assert!(!self.before_expiry_mode);
+                        if self.before_expiry_mode {
+                            return Err(self.unsupported_rvalue(
+                                "nested before_expiry expressions are not supported".to_string(),
+                                self.current_span(),
+                            ));
+                        }
                         self.before_expiry_mode = true;
                     }
                     Mode::AfterCall => {
@@ -1744,7 +1749,12 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                         self.rel1_mode = false;
                     }
                     Mode::BeforeExpiry => {
-                        assert!(self.before_expiry_mode);
+                        if !self.before_expiry_mode {
+                            return Err(self.unsupported_rvalue(
+                                "before_expiry with branching expressions is not supported".to_string(),
+                                self.current_span(),
+                            ));
+                        }
                         self.before_expiry_mode = false;
                     }
                     Mode::AfterCall => {

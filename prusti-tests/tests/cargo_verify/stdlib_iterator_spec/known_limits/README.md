@@ -85,23 +85,28 @@ contract in a single `next`. The implementation verifies on its own, but the
 two-call client timed out with the 90-second verifier limit on 2026-10-28.
 Run it with `--bin region_full_reassembly`. The separately stated pledges in
 `mut_region_full_pass` establish the corresponding combined behavior for a
-slice-backed iterator. Proving an arbitrary-length mutation loop and modeling
-the standard library's raw-pointer-backed `IterMut` remain open.
+slice-backed iterator. Restoring ownership after an arbitrary-length mutation
+loop now verifies in `mut_region_loop_pass`; proving the final values of its
+entire updated prefix and modeling the standard library's raw-pointer-backed
+`IterMut` remain open.
 
 `region_full_loop` attempts an arbitrary-length mutation loop using this
-contract and a length invariant. On 2026-10-28 it failed with an
-insufficient-permission obligation lacking a Viper source position, which
-Prusti reports as an internal error. This probe does not yet provide an
-invariant describing the updated prefix, so correcting the diagnostic alone
-would not establish the loop postcondition. Replacing that postcondition with
-`true` still produces the same unpositioned permission error. Run the original
-probe with `--bin region_full_loop`.
-The dumped Viper program identifies the missing permission as the predicate
-for the original mutable-reference argument. Its loop invariant preserves the
-iterator and tail permissions, but a later package expression still reads the
-argument's snapshot. Omitting the user-written loop invariant also produces the
-same unpositioned error. This points to a missing frame or saved snapshot in
-the loop's borrow-restoration encoding; it does not yet identify a sound fix.
+contract and a length invariant. Its original unpositioned permission failure
+exposed several encoder omissions: singleton loop wands were discarded at the
+invariant, the original reference's shallow value was lost, and lifetime
+projection labels were ignored. The encoder now preserves those wands and
+reference values, captures the latter on loop-entry edges, and selects the
+saved heap for each lifetime projection. When composing an expiry wand inside
+a package, it checks the wand's inputs before applying it so `old[lhs]` can
+read resources imported from the enclosing heap.
+
+The generic `mut_region_loop_pass` regression writes through each yield,
+destroys the iterator, then writes and reads the original slice again. The
+corresponding false-assertion regression is rejected. These checks establish
+resource restoration across an unbounded loop. The original `region_full_loop`
+probe still lacks an invariant describing the updated prefix, so its
+whole-slice value postcondition is not an acceptance test for this fix. Run
+that probe with `--bin region_full_loop`.
 
 Before the edge-replay fix, the wand package script in `take_mut_slice`
 converted the slot's representation a second time and consumed its permission;

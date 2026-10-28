@@ -13,6 +13,14 @@ also covers the shared address of zero-sized slice elements. Restoring the
 original slice after mutation requires heap-aware permissions and remains
 open. These probes do not expose a bundled `IterMut` contract.
 
+A separate untrusted iterator stores an explicit borrowed tail and implements
+`next` with `mem::replace` and `split_at_mut`. Its regressions restore multiple
+simultaneously yielded elements, including non-`Copy` values, and handle
+exhaustion. `mut_region_loop_pass` also verifies an unbounded mutation loop
+followed by reuse of the original slice; a false assertion after that loop is
+rejected. This proves ownership restoration, while a functional invariant for
+the entire updated prefix remains to be supplied.
+
 On 2026-10-27, the iterator suite passed 71 checks at encoder revision
 `98a6bcee2`, with overflow and panic checks enabled and the cache disabled.
 The separately added two-yield zero-sized negative case also produced its

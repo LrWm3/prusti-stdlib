@@ -1,0 +1,18 @@
+use prusti_contracts::*;
+struct Iter<'a> { tail: &'a mut [u32] }
+impl<'a> Iter<'a> {
+    // This deliberately weak contract allows either outcome, even though the
+    // body always returns None. It isolates lifetime-resource propagation.
+    #[trusted]
+    fn next(&mut self) -> Option<&'a mut u32> { None }
+}
+#[requires(values.len() == 2)]
+fn visit(values: &mut [u32]) {
+    let mut iterator = Iter { tail: values };
+    let first = iterator.next();
+    let second = iterator.next();
+    if let (Some(first), Some(second)) = (first, second) { *first = 7; *second = 8; }
+    drop(iterator);
+    prusti_assert!(values.len() == 2);
+}
+fn main() { let mut values = [1, 2]; visit(&mut values); }

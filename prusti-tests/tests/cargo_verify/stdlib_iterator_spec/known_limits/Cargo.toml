@@ -28,4 +28,8 @@ path = "mutable_ref_snapshot.rs"
 name = "expiry_ref_heap"
 path = "expiry_ref_heap.rs"
 
+[[bin]]
+name = "region_next"
+path = "region_next.rs"
+
 [workspace]

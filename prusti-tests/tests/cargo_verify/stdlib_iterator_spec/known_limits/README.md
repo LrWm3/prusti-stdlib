@@ -35,3 +35,14 @@ Reproduce with the command above, replacing `mutable_ref_snapshot` with
 `expiry_ref_heap`. A complete solution needs a lifetime resource for the
 iterator's remaining elements and a way to transfer and reassemble the
 individual element permissions as yields expire.
+
+The `region_next` probe replaces the raw-pointer-backed iterator with a
+struct containing an explicit `&mut [u32]`. Its trusted `next` has no
+functional guarantees and its body always returns `None`; the caller must
+still handle an unconstrained `Some`. With the first possible result live,
+the second call fails with an insufficient-permission error, currently also
+reported as an internal backtranslation error. This happens without any
+pledge. Adding an iterator lifetime predicate alone therefore will not allow
+successive yields: the call contract must retain a resource for the
+unconsumed tail while the yielded reference owns a separate element resource.
+The command above can also be run with `--bin region_next`.

@@ -175,3 +175,21 @@ impl<K: Eq + core::hash::Hash, S: core::hash::BuildHasher, A: Allocator> HashSet
         K: core::borrow::Borrow<Q>,
         Q: core::hash::Hash + Eq;
 }
+
+// This contract describes only the returned reference's initial value.
+// The collection's post-borrow update requires conditional expiry pledges.
+#[extern_spec]
+impl<K: Eq + core::hash::Hash, V, S: core::hash::BuildHasher, A: Allocator> HashMap<K, V, S, A> {
+    #[trusted]
+    #[refine_spec(where K: HashKeyModel + SameKey<Q>, Q: KeyProjection<Model = K::Model>, [
+        ensures(match &result {
+            Some(value) => old(map_contents(&*self)).contains(k.key_model())
+                && Ghost::new_ref(&**value) == Ghost::new_ref(&*old(map_contents(&*self))[k.key_model()]),
+            None => !old(map_contents(&*self)).contains(k.key_model()),
+        })
+    ])]
+    fn get_mut<Q: ?Sized>(&mut self, k: &Q) -> Option<&mut V>
+    where
+        K: core::borrow::Borrow<Q>,
+        Q: core::hash::Hash + Eq;
+}

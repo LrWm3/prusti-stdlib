@@ -886,7 +886,10 @@ sealed same-type capability proves the query type is the stored key type.
 The same capability supports conditional map/set removal, including old-value
 or boolean results and preservation of unrelated entries. Conditional clear
 and emptiness contracts complete the other basic operations listed below.
-Heterogeneous lookup and mutable values remain open; P3-B is not complete.
+For `get_mut`, a conditional postcondition establishes presence and the
+returned reference's initial value, but does not describe the owner after the
+borrow expires. Heterogeneous lookup and mutable-owner restoration remain
+open; P3-B is not complete.
 The [conditional-expiry reproducer](prusti-tests/tests/cargo_verify/stdlib_hash_spec/known_limits/conditional_expiry.rs)
 fails at parsing because `refine_spec` does not accept `after_expiry`. Supporting
 the `get_mut` pledge also requires selecting and applying the strengthened wand

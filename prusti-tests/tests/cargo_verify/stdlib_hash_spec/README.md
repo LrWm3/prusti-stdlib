@@ -53,8 +53,10 @@ retain their original borrowed-key signatures but currently require the sealed
 same-type capability. Negative clients check missing evidence, wrong lookup
 values and membership, and an unmodeled heterogeneous query. Removal,
 clearing, and emptiness are also modeled, with negative tests for old values,
-framing, cardinality, cleared contents, and missing evidence. Mutable values
-remain open.
+framing, cardinality, cleared contents, and missing evidence. A conditional
+`get_mut` postcondition describes the initial returned reference and absence;
+the owner update after expiry remains open and a negative client checks that
+the stronger fact is not inferred.
 The heterogeneous negative fixture deliberately provides `Borrow<u32>` for
 the custom key without claiming that the two hash implementations agree; it
 is not evidence that this borrowed form satisfies Rust's `Borrow` contract.

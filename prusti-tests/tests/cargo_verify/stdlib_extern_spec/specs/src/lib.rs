@@ -20,6 +20,19 @@ impl<'a> SameLifetimeModel for (&'a u8, &'a u8) {}
 pub trait LifetimeModel<'a> {}
 impl<'a> LifetimeModel<'a> for usize {}
 
+pub trait SlotModel {
+    type Slot;
+}
+impl SlotModel for usize {
+    type Slot = usize;
+}
+impl SlotModel for u8 {
+    type Slot = u8;
+}
+impl<'a> SlotModel for &'a u8 {
+    type Slot = &'a u8;
+}
+
 #[extern_spec]
 impl<T> target_api::ConditionalContainer<T> {
     #[trusted]
@@ -38,6 +51,10 @@ impl<T> target_api::ConditionalContainer<T> {
     #[trusted]
     #[refine_spec(where T: StaticModel, [ensures(result == 7)])]
     fn static_observe() -> usize;
+
+    #[trusted]
+    #[refine_spec(where T: SlotModel, U: SlotModel<Slot = T::Slot>, [ensures(result == 7)])]
+    fn projected<U>() -> usize;
 }
 
 #[trusted]

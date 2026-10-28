@@ -139,6 +139,11 @@ inference variables, other associated functions, external free functions and
 trait impl methods, and pure calls remain excluded; conditional expiry pledges are
 unsupported.
 
+When an associated-type equality becomes syntactically reflexive after call
+substitution, selection accepts it without normalizing or erasing regions.
+Cross-crate tests cover this case and reject unrelated types, different
+concrete projections, and independent lifetimes.
+
 These checks establish the P1-B external-contract foundation, not unrestricted
 collection or reference-containing generic support. Review trusted contracts
 against the pinned Rust implementation; passing clients alone cannot establish

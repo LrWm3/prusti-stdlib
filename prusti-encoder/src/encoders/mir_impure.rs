@@ -1677,6 +1677,22 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         {
                             return false;
                         }
+                        // A same-type bound can produce a projection equality
+                        // whose two sides are syntactically identical. This
+                        // is reflexive without normalizing or erasing regions;
+                        // rustc's predicate solver may not normalize the term.
+                        if let ty::ClauseKind::Projection(projection) =
+                            instantiated.kind().skip_binder()
+                            && let Some(rhs) = projection.term.as_type()
+                            && let ty::TyKind::Alias(_, alias) = rhs.kind()
+                            && let ty::AliasTyKind::Projection { def_id } = alias.kind
+                            && let ty::AliasTermKind::ProjectionTy { def_id: lhs_def_id } =
+                                projection.projection_term.kind
+                            && def_id == lhs_def_id
+                            && alias.args == projection.projection_term.args
+                        {
+                            return true;
+                        }
                         // A fresh solver does not know MIR's inference regions.
                         // Universally quantify each occurrence independently:
                         // proving this stronger goal is sufficient for the call.

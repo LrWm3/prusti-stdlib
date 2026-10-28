@@ -38,6 +38,10 @@ impl<T> ConditionalContainer<T> {
     pub fn static_observe() -> usize {
         7
     }
+
+    pub fn projected<U>() -> usize {
+        7
+    }
 }
 
 impl<T> Identity for Owned<T> {

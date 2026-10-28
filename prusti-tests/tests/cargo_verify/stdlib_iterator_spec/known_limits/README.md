@@ -73,5 +73,7 @@ check. Both ran on 2026-10-28 with Viper `v-2026-09-01-0834`, Z3 `4.16.0`,
 and Java `21.0.2`. The distinctness premise is required: the predicate alone
 does not assert ownership when locations are not distinct. These locations
 are ghost identities, not Rust pointer addresses, which may coincide for
-zero-sized elements. The experiment does not yet connect those identities
+zero-sized elements. A separate positive case permits distinct logical
+locations to share a physical address, and a negative assertion checks that
+this case is not contradictory. The experiment does not yet connect those identities
 to Rust slices, encode empty `next`, or establish a bundled `IterMut` model.

@@ -45,3 +45,11 @@ pledge. Adding an iterator lifetime predicate alone therefore will not allow
 successive yields: the call contract must retain a resource for the
 unconsumed tail while the yielded reference owns a separate element resource.
 The command above can also be run with `--bin region_next`.
+With `PRUSTI_DUMP_VIPER_PROGRAM=true`, the generated `next` contract puts the
+slice predicate and the possible returned-element predicate together on the
+wand's left side; it does not return a separately usable tail predicate in
+the immediate postcondition. The original slice resource is therefore still
+blocked at the second call. A solution must describe the changed tail and
+the yielded element as separate resources and preserve their relationship to
+the original slice through the wand; simply inhaling another slice predicate
+would duplicate permission.

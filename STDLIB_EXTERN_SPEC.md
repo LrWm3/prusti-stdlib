@@ -479,9 +479,10 @@ open.
 
 **Verified locally on 2026-10-27:** the focused iterator suite passes 20
 checks, including its separately verified `no_std` library and negative cases.
-Trusted free impure functions and directly called external trait methods can
-now provide type-conditional postconditions when rustc proves their bounds at
-the call site. The bundled sealed `ModeledIterator` capability observes the
+Trusted free impure functions, directly called external trait methods, and
+external inherent methods can provide type-conditional postconditions when
+rustc proves their bounds at the call site. The bundled sealed `ModeledIterator`
+capability observes the
 remaining sequence of a `Vec::IntoIter`. Trusted contracts connect
 `Vec::into_iter` to the original vector and specify the head and tail of
 `Iterator::next`, including an empty iterator that stays exhausted. A generic
@@ -524,8 +525,8 @@ region-free nested obligations, and requiring rustc's leak check to succeed.
 The always-sized reference case is also accepted without lifetime evidence.
 It conservatively rejects unproved region requirements, unresolved inference
 variables, refinements with conditional preconditions, associated functions
-other than directly called external trait methods, external free functions and
-impl methods, and pure calls. A
+other than directly called external trait or inherent methods, external free
+functions and trait impl methods, and pure calls. A
 [reproducer](prusti-tests/tests/cargo_verify/stdlib_borrow_spec/known_limits/)
 retains the conditional-precondition limitation. Conditional expiry pledges are
 also unsupported. Trait implementation refinements now preserve impl and method

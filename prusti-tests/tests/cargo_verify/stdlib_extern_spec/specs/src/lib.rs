@@ -20,6 +20,26 @@ impl<'a> SameLifetimeModel for (&'a u8, &'a u8) {}
 pub trait LifetimeModel<'a> {}
 impl<'a> LifetimeModel<'a> for usize {}
 
+#[extern_spec]
+impl<T> target_api::ConditionalContainer<T> {
+    #[trusted]
+    #[refine_spec(where T: ConditionalModel, [ensures(result.value == 0)])]
+    fn new() -> Self;
+
+    #[trusted]
+    #[ensures(self.value == value)]
+    #[refine_spec(where T: ConditionalModel, [ensures(result == old(self.value))])]
+    fn replace(&mut self, value: usize) -> usize;
+
+    #[trusted]
+    #[refine_spec(where T: ConditionalModel, [requires(input > 0), ensures(result == 7)])]
+    fn conditional(input: usize) -> usize;
+
+    #[trusted]
+    #[refine_spec(where T: StaticModel, [ensures(result == 7)])]
+    fn static_observe() -> usize;
+}
+
 #[trusted]
 #[refine_spec(where Value: ConditionalModel, [ensures(result == 7)])]
 pub fn conditional_observe<Value>(_value: &Value) -> usize {

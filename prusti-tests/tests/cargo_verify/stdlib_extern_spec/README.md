@@ -130,11 +130,13 @@ declarations requiring different early-bound parameter layouts or more complex
 outlives equivalences. They do not silently accept changed lifetime relationships.
 
 Conditional postcondition selection is currently limited to trusted free impure
-functions and directly called external trait methods with no conditional
+functions and directly called external trait or inherent methods with no conditional
+preconditions. The inherent-method probes cover generic constructors, mutable
+receiver state, missing bounds, hidden lifetime requirements, and conditional
 preconditions. Region-bearing bounds must hold for all independently quantified
 lifetimes, with no unproved region requirements or lifetime leaks. Unresolved
 inference variables, other associated functions, external free functions and
-impl methods, and pure calls remain excluded; conditional expiry pledges are
+trait impl methods, and pure calls remain excluded; conditional expiry pledges are
 unsupported.
 
 These checks establish the P1-B external-contract foundation, not unrestricted

@@ -10,6 +10,36 @@ pub trait Identity {
 
 pub struct Owned<T>(PhantomData<T>);
 
+pub struct ConditionalContainer<T> {
+    pub value: usize,
+    pub marker: PhantomData<T>,
+}
+
+impl<T> ConditionalContainer<T> {
+    pub fn new() -> Self {
+        Self {
+            value: 0,
+            marker: PhantomData,
+        }
+    }
+
+    pub fn replace(&mut self, value: usize) -> usize {
+        core::mem::replace(&mut self.value, value)
+    }
+
+    pub fn conditional(input: usize) -> usize {
+        if input > 0 {
+            7
+        } else {
+            0
+        }
+    }
+
+    pub fn static_observe() -> usize {
+        7
+    }
+}
+
 impl<T> Identity for Owned<T> {
     type Item = T;
 

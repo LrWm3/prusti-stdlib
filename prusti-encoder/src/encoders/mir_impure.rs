@@ -1597,7 +1597,8 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         (func_def_id, caller_substs, is_pure)
     }
 
-    /// Select trusted free-function or external trait-method postconditions
+    /// Select trusted free-function, external trait-method, or external
+    /// inherent-method postconditions
     /// only when rustc proves every bound in the caller's environment. A bound
     /// containing MIR regions must hold for all independent lifetimes, without
     /// any unproved region requirements.
@@ -1613,8 +1614,16 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             };
             let external_trait_method =
                 tcx.trait_of_assoc(callee).is_some() && graph.base_spec.extern_spec.is_some();
-            if (tcx.opt_associated_item(callee).is_some() && !external_trait_method)
-                || (graph.base_spec.extern_spec.is_some() && !external_trait_method)
+            let external_inherent_method = graph.base_spec.extern_spec.is_some()
+                && tcx
+                    .impl_of_assoc(callee)
+                    .is_some_and(|impl_id| !tcx.impl_is_of_trait(impl_id));
+            if (tcx.opt_associated_item(callee).is_some()
+                && !external_trait_method
+                && !external_inherent_method)
+                || (graph.base_spec.extern_spec.is_some()
+                    && !external_trait_method
+                    && !external_inherent_method)
                 || !graph.base_spec.trusted.extract_inherit().unwrap_or(false)
             {
                 return Vec::new();

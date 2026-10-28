@@ -1112,6 +1112,9 @@ Implement the Rust connection in these steps:
    source identity, the live native iterator, and a ghost sequence of completed
    element snapshots. Its meaning is `source_at_restoration = prefix ++
    tail_at_expiry`; the annotation itself must never read the borrowed source.
+   The syntax `body_restore_prefix!(&iterator, *owner, *prefix)` is recognized
+   by loop-spec analysis but currently reports an explicit unsupported-feature
+   error until the wand encoding is connected.
 2. At each loop head, identify the unique PCG restoration edge for that source
    and tail, and check the saved identity and metadata against the edge. Reject
    ambiguous, missing, or mismatched resources instead of guessing an edge or

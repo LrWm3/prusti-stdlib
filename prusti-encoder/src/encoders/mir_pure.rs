@@ -1731,6 +1731,13 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                 assert!(qvars.is_empty(), "`spec_block` closures take no arguments");
                 mk_bool(body.downcast_ty::<vir::Bool>())
             }
+            SpecBuiltin::LoopRestorePrefix => {
+                return Err(self.unsupported_rvalue(
+                    "loop_restore_prefix is only available in body_restore_prefix annotations"
+                        .to_string(),
+                    self.current_span(),
+                ));
+            }
             SpecBuiltin::MutIterTail => {
                 if !self.specification {
                     return Err(self.unsupported_rvalue(

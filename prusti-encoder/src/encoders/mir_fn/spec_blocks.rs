@@ -18,6 +18,7 @@ use crate::encoders::mir_fn::RustSignature;
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SpecBlockKind {
     LoopInvariant,
+    LoopRestoration,
     Assert,
     Assume,
     Refute,
@@ -352,6 +353,7 @@ pub struct LoopSpec {
     pub head_block: BasicBlock,
 
     pub invariants: Vec<(BasicBlock, Span)>,
+    pub restorations: Vec<(BasicBlock, Span)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -464,16 +466,22 @@ impl SpecBlocks {
         let mut loop_invariant_blocks: FxHashMap<LoopId, Vec<&SpecBlock>> = Default::default();
         for specified_blocks in base.specs_for.values() {
             for spec_block in specified_blocks {
-                let SpecBlockKind::LoopInvariant = spec_block.kind else {
+                if !matches!(
+                    spec_block.kind,
+                    SpecBlockKind::LoopInvariant | SpecBlockKind::LoopRestoration
+                ) {
                     continue;
-                };
+                }
 
                 // Body invariants must only be placed inside loops.
                 let Some(loop_id) = loop_analysis.innermost_loop(spec_block.block) else {
                     vir::with_vcx(|vcx| {
                         vcx.emit_early_error(PrustiError::incorrect(
-                            "`body_invariant!` annotations must be placed inside loop bodies"
-                                .to_string(),
+                            match spec_block.kind {
+                                SpecBlockKind::LoopRestoration =>
+                                    "`body_restore_prefix!` annotations must be placed inside loop bodies",
+                                _ => "`body_invariant!` annotations must be placed inside loop bodies",
+                            }.to_string(),
                             spec_block.span.into(),
                         ));
                     });
@@ -515,6 +523,7 @@ impl SpecBlocks {
                     head_block: original_head_block,
                     original_head_block,
                     invariants: Vec::new(),
+                    restorations: Vec::new(),
                 }
             })
             .map(|spec| (spec.loop_id, spec))
@@ -719,6 +728,16 @@ impl SpecBlocks {
         }
 
         // Otherwise, the body invariants for this loop are correct.
+        let mut invariants = Vec::new();
+        let mut restorations = Vec::new();
+        for spec_block in consecutive_invariants {
+            let item = (spec_block.block, spec_block.span);
+            match spec_block.kind {
+                SpecBlockKind::LoopInvariant => invariants.push(item),
+                SpecBlockKind::LoopRestoration => restorations.push(item),
+                _ => unreachable!("non-loop specification in loop analysis"),
+            }
+        }
         Ok(LoopSpec {
             loop_id,
             // The loop head (for our encoding and for querying the PCG) of the
@@ -730,10 +749,8 @@ impl SpecBlocks {
             // contain statements which mutate the state.
             head_block: base.spec_arms.switches[&first_invariant.attached_to],
             original_head_block,
-            invariants: consecutive_invariants
-                .into_iter()
-                .map(|spec_block| (spec_block.block, spec_block.span))
-                .collect(),
+            invariants,
+            restorations,
         })
     }
 }
@@ -826,6 +843,8 @@ impl<'enc, 'vir: 'enc> mir::visit::Visitor<'vir> for SpecVisitor<'enc, 'vir> {
 
             let kind = if has_prusti_attr(cl_attrs, "loop_body_invariant_spec") {
                 SpecBlockKind::LoopInvariant
+            } else if has_prusti_attr(cl_attrs, "loop_body_restoration_spec") {
+                SpecBlockKind::LoopRestoration
             } else if has_prusti_attr(cl_attrs, "prusti_assertion") {
                 SpecBlockKind::Assert
             } else if has_prusti_attr(cl_attrs, "prusti_assumption") {

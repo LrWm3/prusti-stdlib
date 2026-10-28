@@ -81,6 +81,22 @@ pub use prusti_contracts_proc_macros::invariant;
 /// A macro for writing a loop body invariant.
 pub use prusti_contracts_proc_macros::body_invariant;
 
+/// Declare a mutable iterator's prefix restoration summary in a loop.
+///
+/// This annotation is not yet supported by the verifier. It is reserved for
+/// a saved source identity, the live iterator, and a ghost prefix sequence.
+pub use prusti_contracts_proc_macros::body_restore_prefix;
+
+/// Internal marker emitted by `body_restore_prefix!`.
+#[doc(hidden)]
+pub fn loop_restore_prefix<T>(
+    _iterator: &core::slice::IterMut<'_, T>,
+    _owner: *const [T],
+    _prefix: Seq<T>,
+) -> bool {
+    panic!("loop_restore_prefix is a specification-only marker")
+}
+
 /// Observe the iterator of the enclosing `for` loop in a body invariant.
 ///
 /// This is a specification-only marker. `I` must be the concrete iterator

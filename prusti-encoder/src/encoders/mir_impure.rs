@@ -2403,6 +2403,12 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         // loop head by default
         let mut invariant = None;
         if let Some(loop_spec) = self.spec_blocks.loop_specs.get(&block) {
+            if let Some((_, span)) = loop_spec.restorations.first() {
+                return Err(self.unsupported_rvalue(
+                    "body_restore_prefix is not yet supported".to_string(),
+                    *span,
+                ));
+            }
             let loop_place_usages = self
                 .fpcs_analysis
                 .analysis()
@@ -2531,7 +2537,10 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
 
         if let Some(specs) = self.spec_blocks.specs_for.get(&block).cloned() {
             for spec in specs {
-                if matches!(spec.kind, SpecBlockKind::LoopInvariant) {
+                if matches!(
+                    spec.kind,
+                    SpecBlockKind::LoopInvariant | SpecBlockKind::LoopRestoration
+                ) {
                     continue;
                 }
                 let current_fpcs = self.current_fpcs.take().unwrap();
@@ -2560,7 +2569,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         // TODO: handle_error
                         self.stmt(self.vcx.mk_refute_stmt(spec_expr));
                     }
-                    SpecBlockKind::LoopInvariant => {
+                    SpecBlockKind::LoopInvariant | SpecBlockKind::LoopRestoration => {
                         // nothing to do: loop invariants are handled elsewhere
                     }
                 }

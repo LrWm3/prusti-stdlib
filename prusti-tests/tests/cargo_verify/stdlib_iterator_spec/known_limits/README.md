@@ -121,3 +121,14 @@ zero-sized elements. A separate positive case permits distinct logical
 locations to share a physical address, and a negative assertion checks that
 this case is not contradictory. The experiment does not yet connect those identities
 to Rust slices, encode empty `next`, or establish a bundled `IterMut` model.
+
+The integration boundary is the slice's whole-owner predicate and its
+`index` framing operations in `prusti-encoder/src/encoders/ty/kinds/arraylike.rs`.
+An iterator resource must be created from that ownership at `iter_mut`, split
+when `next` yields, and reassembled when the iterator and its yielded borrows
+expire. The current lifetime projection ignores raw pointers, so the pointer
+fields alone do not perform any of those transfers. Logical element identity
+must also stay separate from physical address observations: raw-pointer
+construction, raw-pointer equality, and the mutable-reference address helpers
+currently use Viper `Ref` identities directly. A change to only one of those
+paths could make zero-sized element comparisons inconsistent.

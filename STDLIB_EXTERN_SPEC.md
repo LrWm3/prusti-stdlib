@@ -880,8 +880,11 @@ other hash-collection operations are specified by this milestone.
 the returned length, insertion state, previous map value, and set insertion
 boolean to the logical observations. Cross-crate clients cover generic keys,
 integer keys, replacement by equal custom keys with different snapshots, and
-separate colliding keys. Lookup, removal, clearing, and mutable values remain
-open; P3-B is not complete.
+separate colliding keys. The original borrowed-key signatures for map
+`contains_key`/`get` and set `contains` have conditional contracts when a
+sealed same-type capability proves the query type is the stored key type.
+Heterogeneous lookup, removal, clearing, and mutable values remain open;
+P3-B is not complete.
 
 | Collection | Required operations and laws |
 |---|---|

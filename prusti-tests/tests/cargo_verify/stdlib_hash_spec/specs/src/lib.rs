@@ -125,3 +125,11 @@ impl prusti_contracts::hash_model::KeyProjection for Key {
 // Reviewed for this fixture: `PartialEq` compares id, the hash is constant,
 // and the fields cannot change while the key is stored.
 unsafe impl prusti_contracts::hash_model::HashKeyModel for Key {}
+
+// Deliberately not a modeled borrowed-key correspondence: the hash of this
+// projection is not assumed to match Key's constant hash.
+impl core::borrow::Borrow<u32> for Key {
+    fn borrow(&self) -> &u32 {
+        &self.id
+    }
+}

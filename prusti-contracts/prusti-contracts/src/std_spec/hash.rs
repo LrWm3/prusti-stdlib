@@ -5,7 +5,7 @@
 //! expose the stored representative of an equality class or the hash values.
 
 use crate::{
-    hash_model::{HashKeyModel, KeyProjection},
+    hash_model::{HashKeyModel, KeyProjection, SameKey},
     *,
 };
 use core::alloc::Allocator;
@@ -81,4 +81,41 @@ impl<K: Eq + core::hash::Hash, S: core::hash::BuildHasher, A: Allocator> HashSet
         ensures(result == !old(set_contents(&*self)).contains(value.key_model()))
     ])]
     fn insert(&mut self, value: K) -> bool;
+}
+
+#[extern_spec]
+impl<K: Eq + core::hash::Hash, V, S: core::hash::BuildHasher, A: Allocator> HashMap<K, V, S, A> {
+    #[trusted]
+    #[refine_spec(where K: HashKeyModel + SameKey<Q>, Q: KeyProjection<Model = K::Model>, [
+        ensures(result == map_contents(self).contains(k.key_model()))
+    ])]
+    fn contains_key<Q: ?Sized>(&self, k: &Q) -> bool
+    where
+        K: core::borrow::Borrow<Q>,
+        Q: core::hash::Hash + Eq;
+
+    #[trusted]
+    #[refine_spec(where K: HashKeyModel + SameKey<Q>, Q: KeyProjection<Model = K::Model>, [
+        ensures(match result {
+            Some(value) => map_contents(self).contains(k.key_model())
+                && *value === *map_contents(self)[k.key_model()],
+            None => !map_contents(self).contains(k.key_model()),
+        })
+    ])]
+    fn get<Q: ?Sized>(&self, k: &Q) -> Option<&V>
+    where
+        K: core::borrow::Borrow<Q>,
+        Q: core::hash::Hash + Eq;
+}
+
+#[extern_spec]
+impl<K: Eq + core::hash::Hash, S: core::hash::BuildHasher, A: Allocator> HashSet<K, S, A> {
+    #[trusted]
+    #[refine_spec(where K: HashKeyModel + SameKey<Q>, Q: KeyProjection<Model = K::Model>, [
+        ensures(result == set_contents(self).contains(value.key_model()))
+    ])]
+    fn contains<Q: ?Sized>(&self, value: &Q) -> bool
+    where
+        K: core::borrow::Borrow<Q>,
+        Q: core::hash::Hash + Eq;
 }

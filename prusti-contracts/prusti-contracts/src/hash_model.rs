@@ -29,6 +29,19 @@ pub trait KeyProjection: Eq + Hash {
 /// Hash collisions between unequal keys are permitted.
 pub unsafe trait HashKeyModel: KeyProjection {}
 
+mod sealed {
+    pub trait Same<T: ?Sized> {}
+    impl<T> Same<T> for T {}
+}
+
+/// Evidence that the borrowed lookup type is exactly the stored key type.
+///
+/// This trait is sealed and implemented only when both types are identical.
+/// It does not establish correspondence for heterogeneous borrowed keys.
+#[allow(private_bounds)]
+pub trait SameKey<T: ?Sized>: sealed::Same<T> {}
+impl<T> SameKey<T> for T {}
+
 #[cfg_attr(feature = "prusti", crate::refine_trait_spec)]
 impl KeyProjection for u32 {
     type Model = u32;

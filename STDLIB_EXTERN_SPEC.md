@@ -528,8 +528,11 @@ variables, refinements with conditional preconditions, associated functions
 other than directly called external trait or inherent methods, external free
 functions and trait impl methods, and pure calls. A
 [reproducer](prusti-tests/tests/cargo_verify/stdlib_borrow_spec/known_limits/)
-retains the conditional-precondition limitation. Conditional expiry pledges are
-also unsupported. Trait implementation refinements now preserve impl and method
+retains the conditional-precondition limitation. Conditional `after_expiry`
+pledges on trusted free functions and external inherent methods are selected
+only with proven bounds and no conditional preconditions. They require exactly
+one borrow wand; conditional trait-method pledges and `assert_on_expiry` remain
+unsupported. Trait implementation refinements now preserve impl and method
 lifetimes and const-generic parameters across generated specification functions;
 cross-crate tests check borrowed results and reject strengthened preconditions
 and unsupported generic claims. Generic calls to impure trait methods now use
@@ -886,14 +889,11 @@ sealed same-type capability proves the query type is the stored key type.
 The same capability supports conditional map/set removal, including old-value
 or boolean results and preservation of unrelated entries. Conditional clear
 and emptiness contracts complete the other basic operations listed below.
-For `get_mut`, a conditional postcondition establishes presence and the
-returned reference's initial value, but does not describe the owner after the
-borrow expires. Heterogeneous lookup and mutable-owner restoration remain
-open; P3-B is not complete.
-The [conditional-expiry reproducer](prusti-tests/tests/cargo_verify/stdlib_hash_spec/known_limits/conditional_expiry.rs)
-fails at parsing because `refine_spec` does not accept `after_expiry`. Supporting
-the `get_mut` pledge also requires selecting and applying the strengthened wand
-only when the caller's key-model evidence is proved.
+For `get_mut`, the conditional postcondition establishes presence and the
+returned reference's initial value. Its conditional expiry pledge updates only
+that projected key, preserving other entries and cardinality; an absent lookup
+preserves the complete observation. Generic, custom-key, and non-`Copy` value
+clients exercise these contracts. Heterogeneous lookup remains deferred.
 
 | Collection | Required operations and laws |
 |---|---|

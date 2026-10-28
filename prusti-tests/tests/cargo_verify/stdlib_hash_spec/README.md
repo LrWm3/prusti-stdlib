@@ -55,8 +55,10 @@ values and membership, and an unmodeled heterogeneous query. Removal,
 clearing, and emptiness are also modeled, with negative tests for old values,
 framing, cardinality, cleared contents, and missing evidence. A conditional
 `get_mut` postcondition describes the initial returned reference and absence;
-the owner update after expiry remains open and a negative client checks that
-the stronger fact is not inferred.
+its expiry pledge updates only the selected value and preserves the rest of
+the map. Generic and non-`Copy` clients exercise the update and absent path;
+negative clients reject wrong framing or cardinality and claims without key
+evidence.
 The heterogeneous negative fixture deliberately provides `Borrow<u32>` for
 the custom key without claiming that the two hash implementations agree; it
 is not evidence that this borrowed form satisfies Rust's `Borrow` contract.

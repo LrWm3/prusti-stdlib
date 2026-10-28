@@ -176,8 +176,8 @@ impl<K: Eq + core::hash::Hash, S: core::hash::BuildHasher, A: Allocator> HashSet
         Q: core::hash::Hash + Eq;
 }
 
-// This contract describes only the returned reference's initial value.
-// The collection's post-borrow update requires conditional expiry pledges.
+// The expiry pledge updates the selected value while preserving the other
+// entries. An absent lookup preserves the complete observation.
 #[extern_spec]
 impl<K: Eq + core::hash::Hash, V, S: core::hash::BuildHasher, A: Allocator> HashMap<K, V, S, A> {
     #[trusted]
@@ -186,6 +186,11 @@ impl<K: Eq + core::hash::Hash, V, S: core::hash::BuildHasher, A: Allocator> Hash
             Some(value) => old(map_contents(&*self)).contains(k.key_model())
                 && Ghost::new_ref(&**value) == Ghost::new_ref(&*old(map_contents(&*self))[k.key_model()]),
             None => !old(map_contents(&*self)).contains(k.key_model()),
+        }),
+        after_expiry(match result {
+            Some(value) => map_contents(self) == old(map_contents(&*self)).insert(k.key_model(), &*map_contents(self)[k.key_model()])
+                && Ghost::new_ref(&*map_contents(self)[k.key_model()]) == before_expiry(Ghost::new_ref(&*value)),
+            None => map_contents(self) == old(map_contents(&*self)),
         })
     ])]
     fn get_mut<Q: ?Sized>(&mut self, k: &Q) -> Option<&mut V>

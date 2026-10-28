@@ -160,13 +160,20 @@ impl<'tcx> GParams<'tcx> {
             },
         };
         // A fresh inference context cannot interpret the caller's region
-        // variables. Keep them when there is no alias to normalize: erasing
-        // them here can make a call-site lifetime projection disappear.
+        // variables. Keep them when the type has nothing to normalize:
+        // erasing them here can make a call-site lifetime projection disappear.
         let arg: ty::GenericArg<'tcx> = ty.into();
-        if !arg.walk().any(|arg| {
+        let has_inferred_region = arg
+            .walk()
+            .any(|arg| arg.as_region().is_some_and(|r| r.is_var()));
+        let needs_normalization = arg.walk().any(|arg| {
             arg.as_type()
                 .is_some_and(|inner| matches!(inner.kind(), ty::TyKind::Alias(..)))
-        }) {
+                || arg.as_const().is_some_and(|c| {
+                    !matches!(c.kind(), ty::ConstKind::Value(_) | ty::ConstKind::Param(_))
+                })
+        });
+        if has_inferred_region && !needs_normalization {
             return Some(ty);
         }
         vir::with_vcx(|vcx| {

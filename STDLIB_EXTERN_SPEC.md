@@ -1138,9 +1138,9 @@ Implement the Rust connection in these steps:
    macro reaches it after yielding an element and is rejected until the current
    yield can be included in the restoration wand.
 4. Complete the remaining Rust acceptance cases: conditional updates and
-   ordinary `for` loops and Vec views, and multiple yields. Conditional
-   updates with a `continue` backedge now verify; wrong-value and `false`
-   controls are rejected. Keep wrong-prefix, wrong-suffix, `false`, borrowed
+   ordinary `for` loops and Vec views. Conditional updates with a `continue`
+   backedge and two simultaneous yields per iteration now verify; wrong-value
+   and `false` controls are rejected. Keep wrong-prefix, wrong-suffix, `false`, borrowed
    owner, mismatched identity, and mismatched length checks alongside them.
 
 Add explicit-loop clients first, followed by ordinary mutable-slice `for`

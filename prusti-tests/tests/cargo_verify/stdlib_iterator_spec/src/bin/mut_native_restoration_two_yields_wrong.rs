@@ -1,0 +1,39 @@
+use prusti_contracts::*;
+
+#[requires(!values.is_empty())]
+fn visit(values: &mut [u32]) {
+    let len = values.len();
+    let owner = ghost! { (&*values) as *const [u32] };
+    let mut completed = ghost! { Seq::<u32>::new() };
+    let mut position = 0usize;
+    let mut it = values.iter_mut();
+    loop {
+        body_restore_prefix!(&it, *owner, *completed);
+        body_invariant!(position <= len);
+        body_invariant!((*completed).len() == Int::from(position));
+        body_invariant!(forall(|i: Int| Int::from(0) <= i && i < Int::from(position) ==> *(*completed)[i] == 7));
+        body_invariant!(mut_slice_len(&*mut_iter_tail(&it)) == len - position);
+        match it.next() {
+            Some(first) => {
+                let second_yield = it.next();
+                *first = 7;
+                completed = ghost! { (*completed).append(Seq::single(7u32)) };
+                position += 1;
+                match second_yield {
+                    Some(second) => {
+                        *second = 7;
+                        completed = ghost! { (*completed).append(Seq::single(7u32)) };
+                        position += 1;
+                    }
+                    None => break,
+                }
+            }
+            None => break,
+        }
+    }
+    drop(it);
+    prusti_assert!(position == len);
+    prusti_assert!(values[0] == 8); // expected-error: assertion might not hold
+}
+
+fn main() {}

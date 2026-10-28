@@ -1,6 +1,6 @@
 use crate::{
-    generate_for_ensures, generate_for_pure_refinements, generate_for_requires,
-    parse_type_cond_spec, untyped, GeneratedResult, NestedSpec,
+    generate_for_after_expiry, generate_for_ensures, generate_for_pure_refinements,
+    generate_for_requires, parse_type_cond_spec, untyped, GeneratedResult, NestedSpec,
 };
 use proc_macro2::TokenStream;
 use syn::{parse_quote_spanned, spanned::Spanned};
@@ -23,6 +23,10 @@ pub fn generate(attr: TokenStream, item: &untyped::AnyFnItem) -> GeneratedResult
             NestedSpec::Requires(tokens) => {
                 let span = tokens.span();
                 generate_for_requires(tokens, span, item)?
+            }
+            NestedSpec::AfterExpiry(tokens) => {
+                let span = tokens.span();
+                generate_for_after_expiry(tokens, span, item)?
             }
             NestedSpec::Pure => generate_for_pure_refinements(item)?,
         };

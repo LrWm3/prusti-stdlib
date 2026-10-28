@@ -485,6 +485,15 @@ impl PrustiTokenStream {
                         .pop_closure_args()
                         .ok_or_else(|| error(span, "expected closure arguments"))?;
                     let nested_closure_specs = self.pop_group_of_nested_specs(span)?;
+                    if nested_closure_specs
+                        .iter()
+                        .any(|s| matches!(s, NestedSpec::AfterExpiry(_)))
+                    {
+                        return err(
+                            span,
+                            "conditional expiry is not supported in closure specifications",
+                        );
+                    }
                     lhs = translate_spec_ent(
                         span,
                         once,
@@ -596,6 +605,7 @@ impl PrustiTokenStream {
             match spec_type.to_string().as_ref() {
                 "requires" => Ok(NestedSpec::Requires(self.pop_parenthesized_group()?)),
                 "ensures" => Ok(NestedSpec::Ensures(self.pop_parenthesized_group()?)),
+                "after_expiry" => Ok(NestedSpec::AfterExpiry(self.pop_parenthesized_group()?)),
                 "pure" => Ok(NestedSpec::Pure),
                 other => err(
                     self.source_span,
@@ -772,6 +782,7 @@ fn with_type_cond_spec_example(mut err: syn::Error) -> syn::Error {
 pub enum NestedSpec<T> {
     Requires(T),
     Ensures(T),
+    AfterExpiry(T),
     Pure,
 }
 
@@ -780,6 +791,7 @@ impl NestedSpec<PrustiTokenStream> {
         Ok(match self {
             NestedSpec::Requires(stream) => NestedSpec::Requires(stream.parse()?),
             NestedSpec::Ensures(stream) => NestedSpec::Ensures(stream.parse()?),
+            NestedSpec::AfterExpiry(stream) => NestedSpec::AfterExpiry(stream.parse()?),
             NestedSpec::Pure => NestedSpec::Pure,
         })
     }
@@ -1405,6 +1417,14 @@ mod tests {
             }
             assert_matches!(&constraint.specs[2], NestedSpec::Pure);
             assert_eq!(constraint.specs.len(), 3);
+        }
+
+        #[test]
+        fn conditional_expiry_is_parsed() {
+            let constraint = parse_type_cond_spec(quote! {
+                where T: A, [after_expiry(true)]
+            }).unwrap();
+            assert_matches!(&constraint.specs[0], NestedSpec::AfterExpiry(_));
         }
 
         #[test]

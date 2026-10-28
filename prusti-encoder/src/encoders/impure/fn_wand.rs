@@ -45,9 +45,9 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
         let args = PledgeExpr::pledge_args(result, args);
 
         for wand_data in self.wands.viper_wands() {
-            let Some(wand) = self
-                .wands
-                .mk_wand(&wand_data, args, None, None, self.vcx, self.deps)
+            let Some(wand) =
+                self.wands
+                    .mk_wand(&wand_data, args, None, None, &[], self.vcx, self.deps)
             else {
                 continue;
             };
@@ -260,7 +260,7 @@ impl<'vir> WandEncOutput<'vir> {
 
         // TODO: wands for late-bound regions
         self.viper_wands().into_iter().filter_map(move |wand_data| {
-            let wand = self.mk_wand(&wand_data, args, None, None, vcx, deps)?;
+            let wand = self.mk_wand(&wand_data, args, None, None, &[], vcx, deps)?;
             Some(vcx.mk_let_expr(
                 wand_result,
                 local_defs[mir::RETURN_PLACE].impure_snap,
@@ -275,6 +275,7 @@ impl<'vir> WandEncOutput<'vir> {
         label_pre: &'vir str,
         label_post: &'vir str,
         call_ctx: GArgs<'vir>,
+        extra_pledges: &[PledgeExpr<'vir>],
         visitor: &mut ImpureEncVisitor<'vir, '_, E>,
     ) -> Vec<vir::Wand<'vir>> {
         let result = visitor
@@ -293,6 +294,7 @@ impl<'vir> WandEncOutput<'vir> {
                 args,
                 Some(label_pre),
                 Some(call_ctx),
+                extra_pledges,
                 visitor.vcx,
                 visitor.deps,
             ) else {
@@ -309,6 +311,7 @@ impl<'vir> WandEncOutput<'vir> {
         pledge_args: PledgeArgs<'vir>,
         pledge_old_label: Option<&'vir str>,
         call_ctx: WandCallContext<'vir>,
+        extra_pledges: &[PledgeExpr<'vir>],
         vcx: &'vir vir::VirCtxt<'vir>,
         deps: &mut TaskEncoderDependencies<'vir, E>,
     ) -> Option<vir::Wand<'vir>> {
@@ -353,6 +356,13 @@ impl<'vir> WandEncOutput<'vir> {
                     .iter()
                     .map(|pledge| pledge_expr(&pledge.expiry_postcondition)),
             )
+            // Conditional pledges are encoded in the caller's generic
+            // context, so they use the caller's snapshots directly rather
+            // than the cast and substitution used for the base pledge.
+            .chain(extra_pledges.iter().map(|pledge| match pledge_old_label {
+                Some(label) => pledge.expr_at_label(pledge_args, label),
+                None => pledge.expr(pledge_args),
+            }))
             .collect::<Vec<_>>();
         if rhs.is_empty() {
             // We skip emitting the wand when there is nothing on the RHS, i.e.,

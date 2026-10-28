@@ -121,6 +121,31 @@ pub fn conditional_identity<Value>(value: Value) -> Value {
     value
 }
 
+#[trusted]
+#[after_expiry(*owner <= before_expiry(*result))]
+#[refine_spec(where Marker: ConditionalModel, [
+    after_expiry(*owner == before_expiry(*result))
+])]
+pub fn conditional_borrow<Marker>(owner: &mut usize, _marker: Marker) -> &mut usize {
+    owner
+}
+
+#[trusted]
+#[refine_spec(where Marker: ConditionalModel, [
+    requires(input > 0),
+    after_expiry(*owner == before_expiry(*result))
+])]
+pub fn conditional_borrow_with_pre<Marker>(owner: &mut usize, _marker: Marker, input: usize) -> &mut usize {
+    let _ = input;
+    owner
+}
+
+#[trusted]
+#[refine_spec(where Marker: ConditionalModel, [after_expiry(result == 5)])]
+pub fn conditional_expiry_without_borrow<Marker>(_marker: Marker) -> usize {
+    5
+}
+
 /// A test-only observation, with no connection to `Iterator::next` by itself.
 pub trait IteratorObservation: Iterator {
     #[pure]

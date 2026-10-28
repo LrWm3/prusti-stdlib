@@ -352,7 +352,7 @@ impl<T> SpecGraph<T> {
 /// - The postconditions of any constrained spec always contain the postconditions of the base spec
 /// - The [ProcedureSpecificationKind] for the base spec and constrained specs is always the same
 /// - The `trusted` flag for the base spec and constrained specs is always the same
-/// - The [Pledge]s for the base spec and constrained specs are always the same
+/// - The [Pledge]s of any constrained spec include those of the base spec
 ///
 /// Note: Unlike postconditions, the preconditions are not copied amongst the base spec
 /// and constrained specs.
@@ -476,12 +476,21 @@ impl SpecGraph<ProcedureSpecification> {
         }
     }
 
-    /// Attaches the `pledge` to the base spec and all constrained specs.
-    pub fn add_pledge(&mut self, pledge: Pledge) {
-        self.base_spec.pledges.push(pledge);
-        self.specs_with_constraints
-            .values_mut()
-            .for_each(|s| s.pledges.push(pledge));
+    /// Attach an unconditional pledge to all specs, and a conditional pledge
+    /// only to the specification carrying its bounds.
+    pub fn add_pledge<'tcx>(&mut self, pledge: Pledge, env: &Environment<'tcx>) {
+        match self.get_constraint(pledge.rhs.expect_local(), env) {
+            None => {
+                self.base_spec.pledges.push(pledge);
+                self.specs_with_constraints
+                    .values_mut()
+                    .for_each(|s| s.pledges.push(pledge));
+            }
+            Some(constraint) => self
+                .get_constrained_spec_mut(constraint)
+                .pledges
+                .push(pledge),
+        }
     }
 
     /// Sets the trusted flag for the base spec and all constrained specs.

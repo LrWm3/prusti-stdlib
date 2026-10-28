@@ -136,8 +136,12 @@ receiver state, missing bounds, hidden lifetime requirements, and conditional
 preconditions. Region-bearing bounds must hold for all independently quantified
 lifetimes, with no unproved region requirements or lifetime leaks. Unresolved
 inference variables, other associated functions, external free functions and
-trait impl methods, and pure calls remain excluded; conditional expiry pledges are
-unsupported.
+trait impl methods, and pure calls remain excluded. Conditional `after_expiry`
+pledges are selected for trusted free functions and external inherent methods
+under the same bounds checks, provided there are no conditional preconditions
+and exactly one borrow wand. The original wand is consumed before assuming its
+strengthened trusted version. Conditional trait-method pledges and conditional
+`assert_on_expiry` remain unsupported.
 
 When an associated-type equality becomes syntactically reflexive after call
 substitution, selection accepts it without normalizing or erasing regions.

@@ -48,7 +48,7 @@ use crate::encoders::{
     impure::WandOldOuter,
     mir_fn::{CallTaskDescription, RustSignature, SpecBlockKind, SpecBlocks},
     mir_shared::{EncodeResult, PureRvalueEnc, RustcIntrinsic},
-    pure::spec::MirSpecEncMode,
+    pure::spec::{MirSpecEncMode, PledgeExpr},
     ty::{
         RustFieldAddress, RustTyDecomposition, RustTySpecial,
         generics::{GArgs, GParams},
@@ -915,8 +915,9 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                                 }))
                                 .collect::<EncodeResult<'vir, Vec<_>, E>>()?;
                         let (label_pre, label_post) = self.call_labels[&call.location().block];
-                        let wands =
-                            wands.call_wands(&wand_args, label_pre, label_post, call_ctx, self);
+                        let extra = self.conditional_pledge_exprs(callee, caller_substs)?;
+                        let wands = wands
+                            .call_wands(&wand_args, label_pre, label_post, call_ctx, &extra, self);
                         for wand in wands {
                             if let Some(footprint) = &mut footprint {
                                 footprint.parts.push(self.vcx.mk_wand_expr(wand));
@@ -1597,15 +1598,16 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         (func_def_id, caller_substs, is_pure)
     }
 
-    /// Select trusted free-function, external trait-method, or external
-    /// inherent-method postconditions
-    /// only when rustc proves every bound in the caller's environment. A bound
+    /// Select trusted conditional postconditions or expiry pledges only when
+    /// rustc proves their bounds in the caller's environment. Expiry selection
+    /// is restricted to free functions and external inherent methods. A bound
     /// containing MIR regions must hold for all independent lifetimes, without
     /// any unproved region requirements.
-    fn conditional_posts_for_call(
+    fn conditional_specs_for_call(
         &self,
         callee: DefId,
         args: ty::GenericArgsRef<'vir>,
+        select_pledges: bool,
     ) -> Vec<DefId> {
         let tcx = self.vcx.tcx();
         encoders::spec::with_type_spec(|specs| {
@@ -1618,6 +1620,9 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 && tcx
                     .impl_of_assoc(callee)
                     .is_some_and(|impl_id| !tcx.impl_is_of_trait(impl_id));
+            if select_pledges && external_trait_method {
+                return Vec::new();
+            }
             if (tcx.opt_associated_item(callee).is_some()
                 && !external_trait_method
                 && !external_inherent_method)
@@ -1628,16 +1633,25 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             {
                 return Vec::new();
             }
-            let base_posts: Vec<_> = graph
-                .base_spec
-                .posts
-                .extract_with_selective_replacement_iter()
-                .copied()
-                .collect();
+            let base_specs: Vec<_> = if select_pledges {
+                graph
+                    .base_spec
+                    .pledges
+                    .extract_with_selective_replacement_iter()
+                    .map(|pledge| pledge.rhs)
+                    .collect()
+            } else {
+                graph
+                    .base_spec
+                    .posts
+                    .extract_with_selective_replacement_iter()
+                    .copied()
+                    .collect()
+            };
             let mut result = Vec::new();
             for conditional in graph.specs_with_constraints.values() {
                 // A conditional precondition can make the refined contract
-                // applicable on a different domain; do not assume its posts.
+                // applicable on a different domain; do not assume its effects.
                 if conditional
                     .pres
                     .extract_with_selective_replacement_iter()
@@ -1646,8 +1660,22 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 {
                     continue;
                 }
-                for post in conditional.posts.extract_with_selective_replacement_iter() {
-                    if base_posts.contains(post) {
+                let selected: Vec<_> = if select_pledges {
+                    conditional
+                        .pledges
+                        .extract_with_selective_replacement_iter()
+                        .filter(|pledge| pledge.lhs.is_none())
+                        .map(|pledge| pledge.rhs)
+                        .collect()
+                } else {
+                    conditional
+                        .posts
+                        .extract_with_selective_replacement_iter()
+                        .copied()
+                        .collect()
+                };
+                for post in &selected {
+                    if base_specs.contains(post) {
                         continue;
                     }
                     // A refinement can make a lifetime early-bound even if it
@@ -1745,6 +1773,28 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             }
             result
         })
+    }
+
+    fn conditional_pledge_exprs(
+        &mut self,
+        callee: DefId,
+        args: ty::GenericArgsRef<'vir>,
+    ) -> EncodeResult<'vir, Vec<PledgeExpr<'vir>>, E> {
+        let ids = self.conditional_specs_for_call(callee, args, true);
+        let mut result = Vec::new();
+        for id in ids {
+            let spec = self.deps.require_dep::<MirPureEnc>(MirPureEncTask {
+                encoding_depth: 0,
+                parent_def_id: id,
+                gargs: self.gargs(args),
+                kind: PureKind::Spec {
+                    context: self.def_id,
+                    mode: MirSpecEncMode::Impure,
+                },
+            })?;
+            result.push(PledgeExpr::new(id, spec.expr.downcast_ty::<vir::Bool>()));
+        }
+        Ok(result)
     }
 
     fn new_tmp<T: CompType>(&mut self, ty: vir::Type<'vir, T>) -> vir::Expr<'vir, T> {
@@ -2841,7 +2891,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
 
                         let label_pre = self.new_label("pre");
                         let conditional_posts =
-                            self.conditional_posts_for_call(func_def_id, caller_substs);
+                            self.conditional_specs_for_call(func_def_id, caller_substs, false);
                         let conditional_args = if conditional_posts.is_empty() {
                             Vec::new()
                         } else {
@@ -2866,6 +2916,49 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         let label_post = self.new_label("post");
                         self.call_labels
                             .insert(location.block, (label_pre, label_post));
+                        let extra = self.conditional_pledge_exprs(func_def_id, caller_substs)?;
+                        if !extra.is_empty() {
+                            let (callee, call_ctx) =
+                                self.gargs(caller_substs).resolve_method(func_def_id);
+                            let wands = self.deps.require_dep::<WandEnc>(WandEncTask {
+                                data: pcg::borrow_pcg::FunctionData::new(callee),
+                            })?;
+                            let (_, dest_snap, _, _) =
+                                self.encode_place_with_snap((*destination).into())?;
+                            let wand_args = std::iter::once(Ok(dest_snap))
+                                .chain(
+                                    args.iter()
+                                        .map(|arg| self.encode_operand_snap_immediate(&arg.node)),
+                                )
+                                .collect::<EncodeResult<'vir, Vec<_>, E>>()?;
+                            let original = wands.call_wands(
+                                &wand_args,
+                                label_pre,
+                                label_post,
+                                call_ctx,
+                                &[],
+                                self,
+                            );
+                            let stronger = wands.call_wands(
+                                &wand_args, label_pre, label_post, call_ctx, &extra, self,
+                            );
+                            if original.len() != 1 || stronger.len() != 1 {
+                                vcx.emit_early_error(PrustiError::unsupported(
+                                    "conditional expiry requires exactly one borrow wand",
+                                    span.into(),
+                                ));
+                            } else {
+                                // The callee is trusted under the selected bounds.
+                                // Replace its original wand instead of duplicating
+                                // the permissions carried by both contracts.
+                                for wand in original {
+                                    self.stmt(vcx.mk_exhale_stmt(vcx.mk_wand_expr(wand)));
+                                }
+                                for wand in stronger {
+                                    self.stmt(vcx.mk_inhale_stmt(vcx.mk_wand_expr(wand)));
+                                }
+                            }
+                        }
                         if !conditional_posts.is_empty() {
                             let result = self.encode_place_with_snap((*destination).into())?.1;
                             let mut spec_args = FxHashMap::default();

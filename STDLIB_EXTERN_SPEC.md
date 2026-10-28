@@ -1108,7 +1108,9 @@ now emits the sequence relation on the selected loop wand. Rust clients prove
 full traversal and early break for symbolic lengths; a generic unchanged-value
 client uses element snapshots without a `Copy` bound. Rust loops also prove
 quantified prefix values across append with either `usize` or `Int` indices.
-The remaining IM2 cases and IM3–IM5 are still open.
+An untrusted library function also exports the full-traversal contract to a
+separate client; wrong-value and consistency clients are rejected. The
+remaining IM2 cases and IM3–IM5 are still open.
 
 Implement the Rust connection in these steps:
 
@@ -1133,7 +1135,7 @@ Implement the Rust connection in these steps:
    their existing behavior.
 4. Complete the remaining Rust acceptance cases: conditional updates and
    `continue`, ordinary `for` loops and Vec views, multiple yields, and
-   cross-crate contracts. Keep wrong-prefix, wrong-suffix, `false`, borrowed
+   cross-crate early-break contracts. Keep wrong-prefix, wrong-suffix, `false`, borrowed
    owner, mismatched identity, and mismatched length checks alongside them.
 
 Add explicit-loop clients first, followed by ordinary mutable-slice `for`

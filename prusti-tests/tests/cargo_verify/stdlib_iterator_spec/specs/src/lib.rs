@@ -18,6 +18,32 @@ pub fn set_first_native(values: &mut [u32]) {
     }
 }
 
+/// Set every element through the native mutable iterator and export its value contract.
+#[ensures(forall(|i: usize| i < values.len() ==> values[i] == 7))]
+pub fn set_all_native(values: &mut [u32]) {
+    let len = values.len();
+    let owner = ghost! { (&*values) as *const [u32] };
+    let mut completed = ghost! { Seq::<u32>::new() };
+    let mut position = 0usize;
+    let mut iterator = values.iter_mut();
+    loop {
+        body_restore_prefix!(&iterator, *owner, *completed);
+        body_invariant!(position <= len);
+        body_invariant!(forall(|i: Int| Int::from(0) <= i && i < Int::from(position) ==> *(*completed)[i] == 7));
+        body_invariant!((*completed).len() == Int::from(position));
+        body_invariant!(mut_slice_len(&*mut_iter_tail(&iterator)) == len - position);
+        match iterator.next() {
+            Some(value) => {
+                *value = 7;
+                completed = ghost! { (*completed).append(Seq::single(7u32)) };
+                position += 1;
+            }
+            None => break,
+        }
+    }
+    drop(iterator);
+}
+
 #[pure]
 #[ensures(result == prusti_contracts::alloc_spec::vec::vec_contents(value))]
 pub fn view<T>(value: &Vec<T>) -> Seq<T> {

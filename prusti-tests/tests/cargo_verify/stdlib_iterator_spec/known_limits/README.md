@@ -11,13 +11,27 @@ Ordinary Rust compilation succeeds. Verification reports an unsupported
 mutable-reference dereference in pure code. This restriction is intentional:
 a mutable reference's pure snapshot does not constrain its referent value, so
 reading that value without the appropriate heap state would be unsound. The
-probe illustrates a remaining obstacle to linking references yielded by
-`IterMut` back to the source slice after they expire.
+probe illustrates why reference values cannot be recovered directly from a
+pure mutable-reference snapshot. The test-only iterator fixture now uses
+address-only observations to relate yielded references to the source without
+performing that dereference.
 
 This is a snapshot and borrowing limitation, affecting the optional `IterMut`
 owner-restoration milestone. A possible next step is an identity-only model
 for yielded references combined with a heap-aware expiry rule that transfers
-each final value back to its original slice position. Such a model must also
+each final value back to its original slice position. The identity-only part
+is now prototyped; the expiry rule remains open. Such a model must also
 account for multiple simultaneously live yielded references and exhaustion;
 removing the pure dereference restriction alone would not establish those
 properties and would be unsound.
+
+The `expiry_ref_heap` probe attempts a single-element version of that expiry
+rule using `before_expiry` to read a saved reference. On the pinned toolchain,
+verification reaches a Viper insufficient-permission error which is currently
+reported as an internal backtranslation error. The iterator's lifetime
+projection has no encoded predicate for its raw-pointer-backed elements, so
+the saved reference's address alone does not provide permission to read it.
+Reproduce with the command above, replacing `mutable_ref_snapshot` with
+`expiry_ref_heap`. A complete solution needs a lifetime resource for the
+iterator's remaining elements and a way to transfer and reassemble the
+individual element permissions as yields expire.

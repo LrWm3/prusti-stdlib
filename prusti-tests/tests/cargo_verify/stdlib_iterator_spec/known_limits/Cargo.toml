@@ -24,4 +24,8 @@ path = "exact_length_mut_ref.rs"
 name = "mutable_ref_snapshot"
 path = "mutable_ref_snapshot.rs"
 
+[[bin]]
+name = "expiry_ref_heap"
+path = "expiry_ref_heap.rs"
+
 [workspace]

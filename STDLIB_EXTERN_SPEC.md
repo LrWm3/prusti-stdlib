@@ -1184,6 +1184,16 @@ phase for a resource-free nested shared lifetime; see the
 [resource ledger](prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/README.md#im0-native-loop-values-and-references-inside-elements).
 This is a narrow preliminary result, not the IM3 exit gate.
 
+Before extending shared-reference iterator coverage, match each removed PCG
+call edge to the specific function-shape wand it discharges. The current
+`call_wands` path applies every wand for a call, even when an edge represents a
+different lifetime projection. Preserve path conditions and repeated calls in
+loops, and retain expiry pledges on resource-free wands; absence of an indirect
+predicate must not by itself be treated as proof that a generic value has no
+borrows. Reject shapes that cannot be matched precisely. Check two live shared
+yields, repeated referents, separately expiring projections, conditional calls,
+pledge-only cases, and false assertions before claiming this gap closed.
+
 Keep reference identity and referent value separate. `Seq<&mut U>` and the
 iterator identity observations continue to describe reference snapshots;
 reading `U` requires the corresponding heap permission. Shared references may

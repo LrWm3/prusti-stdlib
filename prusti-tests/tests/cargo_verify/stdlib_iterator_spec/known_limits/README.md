@@ -58,6 +58,13 @@ but a later phase attempts to apply the same wand again for the nested shared
 lifetime. The runtime examples include both repeated and distinct shared
 referents; they are not evidence that the verifier handles the two-yield case.
 
+As a diagnostic experiment on the generated Viper for that repro, deleting
+only the later constructor-wand application makes Silicon verify the two-yield
+program. Adding `assert false` on the same reachable path is rejected. This
+was a manual edit of the generated proof, not an encoder fix: it does not show
+that dropping other resource-free projection edges is valid, especially when
+an expiry pledge has no resource-bearing wand or generic types add borrows.
+
 The scalar loop's generated invariant retains the iterator tail permission,
 the source reference's shallow snapshot, and a wand from the tail resource to
 the original slice resource. The constructor's inner expiry wand includes a

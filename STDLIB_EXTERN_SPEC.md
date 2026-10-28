@@ -1013,3 +1013,12 @@ unsupported; a hosted CI run is not claimed.
 | Adapters, closures, callbacks, general `collect` | Iterator and higher-order contracts | Separate closure/callback and composition work | Deferred from all three gates. |
 | Reference-containing elements, interior mutability, nested collections | Snapshot and ownership extensions | Additional modeling and permission support | Deferred; no unrestricted nested-generic support claim. |
 | Entry APIs, hash-collection iteration, heterogeneous lookup | M3 and additional models | API-specific state, representative, and borrowed-key contracts | Deferred from M3. |
+
+On 2026-10-28, the lifetime-preservation change at `e9dd7929c` passed the
+complete borrow suite: 80 checks in 1420.13 seconds, including generic
+non-`Copy` values, two distinct inferred lifetimes, and a negative owner-value
+case. The longest check was `inclusive_missing_pass` at 61.47 seconds. The
+runner configuration and toolchain remain those recorded for P3-B. A later
+follow-up narrows the change to types with inferred regions and no aliases or
+unevaluated constants; its new-lifetime positive case was also checked
+separately.

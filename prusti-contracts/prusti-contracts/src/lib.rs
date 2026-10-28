@@ -30,6 +30,7 @@ extern crate std;
 use core::marker::{PhantomData, Tuple};
 
 pub mod iter_model;
+pub mod hash_model;
 
 // modules have a `_spec` suffix to avoid name conflicts with their crates.
 #[cfg(all(feature = "prusti", feature = "core"))]

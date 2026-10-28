@@ -111,3 +111,17 @@ impl Guarded for Identity {
         input
     }
 }
+
+#[refine_trait_spec]
+impl prusti_contracts::hash_model::KeyProjection for Key {
+    type Model = u32;
+
+    #[pure]
+    fn key_model(&self) -> u32 {
+        self.id
+    }
+}
+
+// Reviewed for this fixture: `PartialEq` compares id, the hash is constant,
+// and the fields cannot change while the key is stored.
+unsafe impl prusti_contracts::hash_model::HashKeyModel for Key {}

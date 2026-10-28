@@ -853,17 +853,24 @@ to satisfy the stronger modeled contract.
 snapshots from unequal colliding keys, and clients without the required evidence
 cannot use the stronger guarantees.
 
-**Progress:** the [key-model fixture](prusti-tests/tests/cargo_verify/stdlib_hash_spec/README.md)
-verifies a generic associated projection, logical-map insertion, integer keys,
-and a custom key whose equality ignores a field. It proves the custom equality
-laws and distinguishes equal keys with different snapshots from unequal keys
-with the same hash observation. The custom `Hash` implementation is explicitly
-trusted and reviewed as writing the same byte for every key. The projection
-interface only specifies its own comparison; a negative test confirms that an
-arbitrary implementation does not thereby acquire a Rust `Eq` relationship.
-No stronger `HashMap` or `HashSet` contract is exposed yet: the generic bridge
-to Rust equality and hashing, storage stability, and collection observations
-remain open. P3-A is not complete.
+**Verified locally:** the [key-model fixture](prusti-tests/tests/cargo_verify/stdlib_hash_spec/README.md)
+passes 20 checks. It verifies generic projections, logical-map insertion,
+integer keys, and a custom key whose equality ignores a field. The fixture
+proves the custom equality laws and distinguishes equal keys with different
+snapshots from unequal keys with the same hash observation. The custom `Hash`
+implementation is explicitly trusted and reviewed as writing the same byte
+for every key.
+
+The bundled `KeyProjection` describes a key's logical identity without
+asserting any Rust equality or hash laws. The separate unsafe `HashKeyModel`
+opt-in explicitly assumes equality/projection agreement, equality laws,
+equal-key hash compatibility, and stability while stored; the verifier does
+not prove those assumptions merely from an implementation. The bundled `u32`
+and fixture custom-key implementations are reviewed. Trusted map and set
+observations use projected keys and do not expose stored representatives.
+Conditional `HashMap::new` and `HashSet::new` contracts establish empty models;
+negative clients without the key-law evidence cannot infer those facts. No
+other hash-collection operations are specified by this milestone.
 
 ### P3-B: Core map/set operations and mutable map values
 
@@ -960,7 +967,7 @@ claimed.
 | P2-B: mutable collection views | P2-A, two-state snapshots | Pledges, expiry, generic reference framing | Verified locally: 74 checks cover slice and Vec views, lookup, indexing, splits, reborrowing, inclusive range state, and negative framing cases. |
 | P2-C: shared and owned iterators | Sequence model, generic trait probes | Opt-in models, refinement, lifetimes, loop support | Passed locally: 58 iterator checks plus focused symbolic early-break checks cover owned and shared traversal, exact lengths, refinement, and loops. |
 | **M2: Vec/slice phase complete** | P2-A, P2-B, P2-C | Integration and cross-crate validation | Passed locally: component gates and the sequence, Vec, collection, borrow, external-spec, and iterator integration checks pass. |
-| P3-A: explicit key models | M2, logical Map/Set | Key-model interfaces and conditional contracts | In progress: generic projection and collision probes pass; equality/hash evidence and collection observations remain open. |
+| P3-A: explicit key models | M2, logical Map/Set | Key-model interfaces and conditional contracts | Passed locally: 20 checks cover projections, explicitly trusted key laws, collisions, and conditional empty map/set observations. |
 | **M3: HashMap/HashSet phase complete** | P3-A, P3-B, P2-B expiry support | Map/set contracts and mutable lookup | Untested; key, cardinality, framing, and mutable-value cases pass. |
 | `IterMut` | P2-B and iterator models | Yielded-reference tracking and owner restoration | Deferred from M2; investigate after mutable access works. |
 | Adapters, closures, callbacks, general `collect` | Iterator and higher-order contracts | Separate closure/callback and composition work | Deferred from all three gates. |

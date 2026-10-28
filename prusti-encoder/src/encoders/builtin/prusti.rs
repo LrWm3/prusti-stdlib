@@ -175,10 +175,13 @@ impl PrustiBuiltin {
                 .opt_associated_item(def_id)
                 .and_then(|item| item.trait_item_def_id())
                 .unwrap_or(def_id);
-            if item == "remaining"
+            if matches!(item, "remaining" | "key_model")
                 && tcx.trait_of_assoc(trait_item).is_some_and(|trait_id| {
                     tcx.crate_name(trait_id.krate).as_str() == "prusti_contracts"
-                        && tcx.item_name(trait_id).as_str() == "ModeledIterator"
+                        && matches!(
+                            (item, tcx.item_name(trait_id).as_str()),
+                            ("remaining", "ModeledIterator") | ("key_model", "KeyProjection")
+                        )
                 })
             {
                 return None;
@@ -221,7 +224,8 @@ impl PrustiBuiltin {
             Some(match self_ty_name {
                 None => match item {
                     // These helpers are encoded as ordinary pure functions.
-                    "vec_contents" | "scalar_index_model" | "range_index_model" => return None,
+                    "vec_contents" | "scalar_index_model" | "range_index_model"
+                    | "map_contents" | "set_contents" => return None,
                     // TODO: how to handle this function?
                     "prusti_terminates_trusted" => return None,
                     "forall" => Self::Spec(SpecBuiltin::Forall),

@@ -28,7 +28,17 @@ The guarded pure-method probes verify a concrete implementation and reject
 assuming its result for every implementation satisfying the trait's precondition.
 
 Crucially, `Projection` alone only constrains its own `equivalent` method. It
-does not yet prove that every implementation agrees with Rust `Eq` or satisfies
+does not prove that every implementation agrees with Rust `Eq` or satisfies
 hash compatibility and storage stability. The negative bridge test checks that
-the verifier does not infer that relationship. These probes do not introduce
-stronger `HashMap` or `HashSet` contracts and do not complete P3-A.
+the verifier does not infer that relationship.
+
+The bundled `KeyProjection` and `HashKeyModel` separate a logical projection
+from an explicit trusted opt-in to the key laws. The integer implementation
+and this fixture's custom key are reviewed implementations; the custom key's
+lawful constant hash remains a trusted assumption. The fixture also verifies
+the concrete equality/projection relationship. The bundled proof-only map and
+set observations describe projected keys, not stored key representatives.
+Conditional constructor contracts establish empty observations when key-law
+evidence is present. Clients with just a projection cannot infer those
+guarantees, and incorrect nonempty claims are rejected. These constructor
+contracts do not yet model insertion, lookup, removal, or mutable values.

@@ -3,6 +3,7 @@ use pcg::{
     PcgOutput,
     action::{BorrowPcgAction, PcgAction, PcgActions},
     borrow_pcg::{
+        ArgIdxOrResult, FunctionShapeNode,
         action::BorrowPcgActionKind,
         borrow_pcg_edge::{BlockedNode, BorrowPcgEdge},
         borrow_pcg_expansion::BorrowPcgExpansion,
@@ -12,7 +13,7 @@ use pcg::{
             kind::BorrowPcgEdgeKind,
         },
         edge_data::EdgeData,
-        region_projection::{PcgLifetimeProjectionBaseLike, PlaceOrConst},
+        region_projection::{LifetimeProjection, PcgLifetimeProjectionBaseLike, PlaceOrConst},
         state::BorrowsState,
         unblock_graph::{BorrowPcgUnblockAction, UnblockGraph},
         validity_conditions::{BranchChoices, ValidityConditions},
@@ -24,8 +25,7 @@ use pcg::{
     results::{PcgBasicBlock, PcgLocation},
     utils::{
         CompilerCtxt, HasPlace, Place, PrefixRelation, SnapshotLocation, display::DisplayWithCtxt,
-        maybe_old::MaybeLabelledPlace,
-        maybe_remote::MaybeRemotePlace,
+        maybe_old::MaybeLabelledPlace, maybe_remote::MaybeRemotePlace,
     },
 };
 use prusti_interface::PrustiError;
@@ -747,7 +747,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         edge: &BorrowPcgEdge<'vir>,
         edge_action: EdgeAction,
         edge_to_loop: bool,
-        to_skip: &mut Vec<(mir::BasicBlock, ValidityConditions)>,
+        to_skip: &mut Vec<(mir::BasicBlock, usize, ValidityConditions)>,
         mut footprint: Option<&mut Footprint<'_, 'vir>>,
     ) -> EncodeResult<'vir, (), E> {
         let cond_conjuncts = self.edge_condition(edge);
@@ -797,7 +797,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         edge: &BorrowPcgEdge<'vir>,
         edge_action: EdgeAction,
         edge_to_loop: bool,
-        to_skip: &mut Vec<(mir::BasicBlock, ValidityConditions)>,
+        to_skip: &mut Vec<(mir::BasicBlock, usize, ValidityConditions)>,
         mut footprint: Option<&mut Footprint<'_, 'vir>>,
     ) -> EncodeResult<'vir, (), E> {
         // In a package script, current places are read in the state before the
@@ -914,15 +914,14 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     return Ok(());
                 }
                 let call = call_edge.metadata();
-                // Multiple lifetime-projection edges can refer to the same
-                // call wand. Apply it once for the same path condition; a
-                // differently guarded edge may still be needed on another path.
-                let key = (call.location().block, edge.conditions().clone());
-                if to_skip.contains(&key) {
-                    return Ok(());
-                }
-                to_skip.push(key);
-                for wand in self.encode_function_call_wands(coupled)? {
+                // Deduplicate obligations, not entire calls: one call can
+                // produce several wands that expire independently.
+                for (id, wand) in self.encode_function_call_wands(coupled)? {
+                    let key = (call.location().block, id, edge.conditions().clone());
+                    if to_skip.contains(&key) {
+                        continue;
+                    }
+                    to_skip.push(key);
                     if let Some(footprint) = &mut footprint {
                         footprint.parts.push(self.vcx.mk_wand_expr(wand));
                         // Import the resources before applying the wand. In a
@@ -967,13 +966,13 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         Ok(())
     }
 
-    /// Reconstruct the wands created by an impure function call, including
-    /// its expiry pledges and call-time snapshots. As at application, this
-    /// currently handles all wands for the call together.
+    /// Reconstruct only the obligations represented by this call edge, with
+    /// their expiry pledges and call-time snapshots. The same selection is
+    /// used for application and retention across a loop boundary.
     pub(crate) fn encode_function_call_wands(
         &mut self,
         edge: &PcgCoupledEdgeKind<'vir>,
-    ) -> EncodeResult<'vir, Vec<vir::Wand<'vir>>, E> {
+    ) -> EncodeResult<'vir, Vec<(usize, vir::Wand<'vir>)>, E> {
         let PcgCoupledEdgeKind(FunctionCallOrLoop::FunctionCall(call_edge)) = edge else {
             unreachable!("expected a function-call edge")
         };
@@ -1005,6 +1004,93 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 data: pcg::borrow_pcg::FunctionData::new(callee),
             })?
         };
+        if wands.viper_wands().is_empty() {
+            return Ok(Vec::new());
+        }
+        // Labels record heap versions; the argument/result position is
+        // recovered from the original MIR call. Refuse ambiguous aliases or
+        // rewritten places instead of assuming that projection indices match.
+        let shape_node = |projection: LifetimeProjection<'vir>,
+                          output: bool|
+         -> Result<FunctionShapeNode, String> {
+            let mut bases = Vec::new();
+            for (index, arg) in args.iter().enumerate() {
+                let matches = match (projection.base(), &arg.node) {
+                    (
+                        PlaceOrConst::Place(place),
+                        mir::Operand::Move(arg) | mir::Operand::Copy(arg),
+                    ) => place
+                        .as_local_place()
+                        .is_some_and(|place| place.place() == Place::from(*arg)),
+                    (PlaceOrConst::Const(value), mir::Operand::Constant(arg)) => {
+                        value == arg.const_
+                    }
+                    _ => false,
+                };
+                if matches {
+                    bases.push(ArgIdxOrResult::Argument(index.into()));
+                }
+            }
+            if output
+                && let PlaceOrConst::Place(place) = projection.base()
+                && place
+                    .as_local_place()
+                    .is_some_and(|place| place.place() == Place::from(*destination))
+            {
+                bases.push(ArgIdxOrResult::Result);
+            }
+            match bases.as_slice() {
+                [base] => Ok(LifetimeProjection::from_index(
+                    *base,
+                    projection.region_idx(),
+                )),
+                _ => Err(
+                    "cannot uniquely associate a call edge with its argument/result projections"
+                        .to_string(),
+                ),
+            }
+        };
+        let inputs = edge
+            .inputs(self.pcg_ctxt())
+            .into_iter()
+            .map(|node| {
+                let PcgNode::LifetimeProjection(projection) = *node else {
+                    unreachable!()
+                };
+                shape_node(projection, false)
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| self.unsupported_rvalue(error, self.current_span()))?;
+        let outputs = edge
+            .outputs()
+            .into_iter()
+            .map(|node| {
+                let PcgNode::LifetimeProjection(projection) = *node else {
+                    unreachable!()
+                };
+                shape_node(projection.into(), true)
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| self.unsupported_rvalue(error, self.current_span()))?;
+        let argument_tys = args
+            .iter()
+            .map(|arg| arg.node.ty(self.body, self.vcx.tcx()))
+            .collect::<Vec<_>>();
+        let result_ty = destination.ty(self.body, self.vcx.tcx()).ty;
+        let ids = wands
+            .call_wand_ids(
+                &argument_tys,
+                result_ty,
+                &inputs,
+                &outputs,
+                call_ctx,
+                self.vcx,
+                self.deps,
+            )
+            .map_err(|error| self.unsupported_rvalue(error, self.current_span()))?;
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
         let (_, dest_snap, _, _) = self.encode_place_with_snap((*destination).into())?;
         let wand_args = std::iter::once(Ok(dest_snap))
             .chain(
@@ -1019,7 +1105,15 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             ));
         };
         let extra = self.conditional_pledge_exprs(callee, caller_substs)?;
-        Ok(wands.call_wands(&wand_args, label_pre, label_post, call_ctx, &extra, self))
+        Ok(wands.selected_call_wands(
+            &wand_args,
+            label_pre,
+            label_post,
+            call_ctx,
+            &extra,
+            Some(&ids),
+            self,
+        ))
     }
 
     fn pcs_unblock_actions(
@@ -1196,7 +1290,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         pcg: &Pcg<'_, 'vir>,
         action: &BorrowPcgAction<'vir>,
         edge_to_loop: bool,
-        to_skip: &mut Vec<(mir::BasicBlock, ValidityConditions)>,
+        to_skip: &mut Vec<(mir::BasicBlock, usize, ValidityConditions)>,
     ) -> EncodeResult<'vir, (), E> {
         match action.kind() {
             //Restore(RestoreCapability<'tcx>),
@@ -2386,7 +2480,8 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
     ) -> EncodeResult<'vir, LoopRestorationFrame<'vir>, E> {
         if self.restoration_has_prior_next(loop_id, original_head, annotation_head) {
             return Err(self.unsupported_rvalue(
-                "body_restore_prefix requires the annotation before iterator advancement".to_string(),
+                "body_restore_prefix requires the annotation before iterator advancement"
+                    .to_string(),
                 span,
             ));
         }

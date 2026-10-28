@@ -215,7 +215,7 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         // A function-call wand can contain expiry pledges in addition to its
         // resource predicates. Rebuilding it as a resource-only loop wand
         // would request a different wand and lose the value relation.
-        let mut retained_calls = FxHashSet::default();
+        let mut retained_wands = FxHashSet::default();
         for edge in edges {
             if let PcgCoupledEdgeKind(FunctionCallOrLoop::FunctionCall(call)) = &edge
                 && !self
@@ -224,9 +224,10 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     .loop_analysis()
                     .in_loop(call.metadata().location().block, loop_id)
             {
-                if retained_calls.insert(call.metadata().location().block) {
-                    let wands = self.encode_function_call_wands(&edge)?;
-                    inv.extend(wands.into_iter().map(|wand| self.vcx.mk_wand_expr(wand)));
+                for (id, wand) in self.encode_function_call_wands(&edge)? {
+                    if retained_wands.insert((call.metadata().location().block, id)) {
+                        inv.push(self.vcx.mk_wand_expr(wand));
+                    }
                 }
                 continue;
             }

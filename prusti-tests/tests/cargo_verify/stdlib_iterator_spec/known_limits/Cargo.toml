@@ -145,7 +145,3 @@ name = "im2_prefix_ghost_quantified_int"
 path = "im2_prefix_ghost_quantified_int.rs"
 
 [workspace]
-
-[[bin]]
-name = "im3_shared_ref_two_yields"
-path = "im3_shared_ref_two_yields.rs"

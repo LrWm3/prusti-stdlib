@@ -383,6 +383,32 @@ impl<'vir> WandEncOutput<'vir> {
         extra_pledges: &[PledgeExpr<'vir>],
         visitor: &mut ImpureEncVisitor<'vir, '_, E>,
     ) -> Vec<vir::Wand<'vir>> {
+        self.selected_call_wands(
+            arguments,
+            label_pre,
+            label_post,
+            call_ctx,
+            extra_pledges,
+            None,
+            visitor,
+        )
+        .into_iter()
+        .map(|(_, wand)| wand)
+        .collect()
+    }
+
+    /// The index identifies an obligation in this function's retained wand
+    /// list, before substitution or omission of empty instantiated wands.
+    pub(crate) fn selected_call_wands<E: TaskEncoder>(
+        &self,
+        arguments: &[vir::ExprSnap<'vir>],
+        label_pre: &'vir str,
+        label_post: &'vir str,
+        call_ctx: GArgs<'vir>,
+        extra_pledges: &[PledgeExpr<'vir>],
+        selected: Option<&[usize]>,
+        visitor: &mut ImpureEncVisitor<'vir, '_, E>,
+    ) -> Vec<(usize, vir::Wand<'vir>)> {
         let result = visitor
             .vcx
             .mk_local_labelled_old_expr(arguments[mir::RETURN_PLACE.as_usize()], label_post);
@@ -393,9 +419,12 @@ impl<'vir> WandEncOutput<'vir> {
         });
         let args = PledgeExpr::pledge_args(result, args);
         let mut wands = Vec::new();
-        for wand_data in self.viper_wands() {
+        for (id, wand_data) in self.wands.iter().enumerate() {
+            if selected.is_some_and(|ids| !ids.contains(&id)) {
+                continue;
+            }
             let Some(wand) = self.mk_wand(
-                &wand_data,
+                wand_data,
                 args,
                 Some(label_pre),
                 Some(label_post),
@@ -407,9 +436,131 @@ impl<'vir> WandEncOutput<'vir> {
             ) else {
                 continue;
             };
-            wands.push(wand);
+            wands.push((id, wand));
         }
         wands
+    }
+
+    /// Match an edge to the obligations actually emitted in the callee's
+    /// contract. Resource-free shape edges need not have a corresponding wand.
+    /// This does not classify opaque values as borrow-free: unknown mappings
+    /// of an obligation's anchors are rejected, including pledge-only wands.
+    pub(crate) fn call_wand_ids<E: TaskEncoder>(
+        &self,
+        argument_tys: &[ty::Ty<'vir>],
+        result_ty: ty::Ty<'vir>,
+        inputs: &[FunctionShapeNode],
+        outputs: &[FunctionShapeNode],
+        call_ctx: GArgs<'vir>,
+        vcx: &'vir vir::VirCtxt<'vir>,
+        deps: &mut TaskEncoderDependencies<'vir, E>,
+    ) -> Result<Vec<usize>, String> {
+        if self.wands.is_empty() {
+            return Ok(Vec::new());
+        }
+        let map = self
+            .function_data
+            .call_projection_map(argument_tys, result_ty, vcx.tcx())
+            .map_err(|err| format!("cannot map function-call wand projections: {err:?}"))?;
+        let call_sig = self.fn_sig(vcx, Some(call_ctx));
+        let instantiated = self
+            .function_data
+            .call_projection_map(call_sig.inputs(), call_sig.output(), vcx.tcx())
+            .map_err(|err| format!("cannot map instantiated wand projections: {err:?}"))?;
+        // The current predicate builder consumes a single generalized index
+        // in the instantiated type. Check that it still denotes the signature
+        // projection. Substitution can shift or merge indices; selecting a
+        // correctly mapped edge must not mask a differently encoded resource.
+        for node in self.wands.iter().flat_map(|wand| {
+            wand.rhs
+                .iter()
+                .copied()
+                .map(FunctionShapeNode::from)
+                .chain(wand.lhs.iter().copied())
+        }) {
+            if self
+                .predicates_for_function_shape_node(vcx, deps, node, None)
+                .is_none()
+                && self
+                    .predicates_for_function_shape_node(vcx, deps, node, Some(call_ctx))
+                    .is_none()
+            {
+                continue;
+            }
+            let generalized: IndexVec<_, GeneralizedLifetime<'vir>> =
+                vcx.tcx().extract_regions(node.ty(call_sig));
+            let regions: IndexVec<_, PcgRegion<'vir>> =
+                vcx.tcx().extract_regions(node.ty(call_sig));
+            let precise = match (
+                instantiated.call_nodes(node),
+                generalized.get(node.region_idx()),
+            ) {
+                (Some([mapped]), Some(GeneralizedLifetime::Region(region))) => {
+                    regions.get(mapped.region_idx()) == Some(region)
+                }
+                _ => false,
+            };
+            if !precise {
+                return Err(format!(
+                    "function-call resource projection {node} changes under substitution"
+                ));
+            }
+        }
+        let mut selected = Vec::new();
+        // Substitution can expose resources behind a generic parameter. Keep
+        // both definition-site and instantiated resource anchors; an empty
+        // definition-site predicate alone does not justify ignoring an edge.
+        let mut has_resources = |node| {
+            self.predicates_for_function_shape_node(vcx, deps, node, None)
+                .is_some()
+                || self
+                    .predicates_for_function_shape_node(vcx, deps, node, Some(call_ctx))
+                    .is_some()
+        };
+        for (id, wand) in self.wands.iter().enumerate() {
+            let mut sources = wand
+                .rhs
+                .iter()
+                .copied()
+                .map(Into::into)
+                .filter(|node| has_resources(*node))
+                .collect::<Vec<FunctionShapeNode<Generalized>>>();
+            let pledge_only = sources.is_empty();
+            if pledge_only {
+                sources.extend(wand.rhs.iter().copied().map(FunctionShapeNode::from));
+            }
+            let mapped = |nodes: &[FunctionShapeNode<Generalized>]| -> Result<Vec<FunctionShapeNode>, String> {
+                nodes.iter().try_fold(Vec::new(), |mut all, node| {
+                    let targets = map.call_nodes(*node).ok_or_else(|| format!(
+                        "cannot map function-call wand projection {node} through substitution"))?;
+                    all.extend_from_slice(targets);
+                    Ok(all)
+                })
+            };
+            let sources = mapped(&sources)?;
+            if sources.is_empty() {
+                return Err("function-call wand has no identifiable source projections".to_string());
+            }
+            if !sources.iter().any(|node| inputs.contains(node)) {
+                continue;
+            }
+            let targets = wand
+                .lhs
+                .iter()
+                .copied()
+                .filter(|node| pledge_only || has_resources(*node))
+                .collect::<Vec<_>>();
+            let targets = mapped(&targets)?;
+            if !sources.iter().all(|node| inputs.contains(node))
+                || !targets.iter().all(|node| outputs.contains(node))
+            {
+                return Err(
+                    "function-call edge covers only part of a restoration obligation".to_string(),
+                );
+            }
+            selected.push(id);
+        }
+        Ok(selected)
     }
 
     fn mk_wand<E: TaskEncoder>(

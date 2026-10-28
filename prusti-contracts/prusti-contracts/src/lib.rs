@@ -81,6 +81,20 @@ pub fn for_iterator<I>() -> I {
     panic!("for_iterator is a specification-only marker")
 }
 
+/// Compare the addresses held by two mutable references without reading their
+/// referents. This observation does not grant permission to either referent.
+#[pure]
+pub fn mut_ref_same_address<T>(left: &&mut T, right: &&mut T) -> bool {
+    core::ptr::eq(&**left, &**right)
+}
+
+/// Compare the address held by a mutable reference with a shared reference's
+/// address without reading the mutable referent.
+#[pure]
+pub fn mut_ref_shared_same_address<T>(left: &&mut T, right: &T) -> bool {
+    core::ptr::eq(&**left, right)
+}
+
 /// Traverse an `IntoIterator` while giving its iterator a name for specifications.
 ///
 /// `prusti_for!(iter, for item in values => { ... })` expands to a `match` and

@@ -4,11 +4,14 @@ The fixture also probes `slice::IterMut` separately from the bundled iterator
 model. A trusted, test-only observation describes the unyielded element
 snapshots. Trusted external contracts connect construction to the original
 slice and describe forward advancement, the returned reference's initial
-value, and exhaustion. A cross-crate client checks two mutable yields and the
-remaining lengths; negative clients reject an incorrect yielded value and a
-claim that the original slice is restored after mutation. The latter requires
-tracking yielded references and remains open. These probes do not expose a
-bundled `IterMut` contract.
+value, and exhaustion. A separate reference sequence and address-only
+observations connect each yield to its original position without reading the
+referent from a mutable-reference snapshot. Cross-crate clients check two
+simultaneously live mutable yields and their identities; negative clients
+reject an incorrect identity, value, and owner restoration. A runtime check
+also covers the shared address of zero-sized slice elements. Restoring the
+original slice after mutation requires heap-aware permissions and remains
+open. These probes do not expose a bundled `IterMut` contract.
 
 This fixture checks the bundled contracts for `Vec::into_iter` and
 `Iterator::next` on `Vec::IntoIter`. The sealed `ModeledIterator` capability

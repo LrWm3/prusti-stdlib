@@ -135,6 +135,8 @@ pub enum PrustiBuiltin {
     SnapEq,
     SnapNe,
     SnapClone,
+    MutRefSameAddress,
+    MutRefSharedSameAddress,
     Seq(SeqOp),
     /// An operation on `Set` (`multiset: false`) or `Multiset` (`true`).
     AnySet {
@@ -234,6 +236,8 @@ impl PrustiBuiltin {
                     "for_iterator" => Self::Spec(SpecBuiltin::ForIterator),
                     "ghost_call" => Self::Ghost(GhostOp::Call),
                     "ghost_erased" => Self::Ghost(GhostOp::Erased),
+                    "mut_ref_same_address" => Self::MutRefSameAddress,
+                    "mut_ref_shared_same_address" => Self::MutRefSharedSameAddress,
                     "old_start" => Self::Spec(SpecBuiltin::ModeStart(Mode::Old)),
                     "old_end" => Self::Spec(SpecBuiltin::ModeEnd(Mode::Old)),
                     "rel_start" => Self::Spec(SpecBuiltin::ModeStart(Mode::Rel(rel_index()))),
@@ -545,6 +549,19 @@ impl PrustiBuiltinEnc {
                 ctxt.native_cmp(bin_op, lhs, rhs).upcast_ty()
             }
             PrustiBuiltin::SnapClone => ctxt.deref_operand(0)?,
+            PrustiBuiltin::MutRefSameAddress | PrustiBuiltin::MutRefSharedSameAddress => {
+                let left = ctxt.deref_operand::<vir::CSnap>(0)?;
+                let left = ctxt.e_input_deref(0)?.expect_mutref().deref_access(left);
+                let right = if builtin == PrustiBuiltin::MutRefSameAddress {
+                    let right = ctxt.deref_operand::<vir::CSnap>(1)?;
+                    ctxt.e_input_deref(1)?.expect_mutref().deref_access(right)
+                } else {
+                    ctxt.e_input_immref(1)?
+                        .addr_access(ctxt.operands[1].downcast_ty())
+                };
+                ctxt.native_cmp(vir::BinOpKind::CmpEq, left, right)
+                    .upcast_ty()
+            }
             PrustiBuiltin::Seq(op) => ctxt.encode_seq(op)?,
             PrustiBuiltin::AnySet { multiset, op } => ctxt.encode_any_set(multiset, op)?,
             PrustiBuiltin::Map(op) => ctxt.encode_map(op)?,

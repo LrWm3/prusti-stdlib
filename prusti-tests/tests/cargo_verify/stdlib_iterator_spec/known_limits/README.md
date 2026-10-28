@@ -76,8 +76,9 @@ prove the final values of two simultaneously live yields. The untrusted `next` c
 applies to an arbitrary nonempty tail; incorrect values and a false assertion
 are rejected. Generic two-yield tests also restore non-`Copy` elements in both
 use orders and reject an incorrect value. `mut_region_full_pass` uses a single
-untrusted `next` contract with separately stated yielding and exhaustion
-pledges, and proves two mutations followed by an exhausted call.
+generic `next` contract with separately stated yielding and exhaustion
+pledges, and proves two mutations followed by an exhausted call. Its generic
+counterpart checks a non-`Copy` element type.
 
 `region_full_reassembly` combines that expiry pledge with the `Some`/`None`
 contract in a single `next`. The implementation verifies on its own, but the

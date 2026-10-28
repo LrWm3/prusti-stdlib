@@ -1042,8 +1042,9 @@ Negative cases reject
 incorrect restored values. The `after_call` pledge expression captures the
 post-call tail separately from its state at expiry; mutable-slice observations
 require permission and respect the requested heap state. A further untrusted
-contract separates the expiry cases and covers both empty and nonempty tails;
-its client proves two mutations and a subsequent exhausted call. An earlier
+generic contract separates the expiry cases and covers both empty and nonempty
+tails; clients prove two mutations and a subsequent exhausted call for both
+integer and non-`Copy` elements. An earlier
 combined contract remains a solver timeout, recorded under
 `stdlib_iterator_spec/known_limits`.
 

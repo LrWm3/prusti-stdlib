@@ -1,13 +1,13 @@
 use prusti_contracts::*;
 
-pub struct Iter<'a> { pub tail: Option<&'a mut [u32]> }
+pub struct Iter<'a, T> { pub tail: Option<&'a mut [T]> }
 
 #[pure]
-pub fn remaining(it: &Iter) -> usize {
+pub fn remaining<T>(it: &Iter<T>) -> usize {
     match &it.tail { Some(slice) => mut_slice_len(slice), None => 0 }
 }
 
-impl<'a> Iter<'a> {
+impl<'a, T> Iter<'a, T> {
     #[ensures(match &result {
         Some(_) => old(remaining(&*self)) > 0 && remaining(&*self) + 1 == old(remaining(&*self)),
         None => old(remaining(&*self)) == 0 && remaining(&*self) == 0,
@@ -24,7 +24,7 @@ impl<'a> Iter<'a> {
         (Some(slice), Some(tail), None) => mut_slice_contents(slice) == before_expiry(mut_slice_contents(tail)),
         _ => true,
     })]
-    pub fn next(&mut self) -> Option<&'a mut u32> {
+    pub fn next(&mut self) -> Option<&'a mut T> {
         let slice = match core::mem::replace(&mut self.tail, None) {
             Some(slice) => slice,
             None => return None,

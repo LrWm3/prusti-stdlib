@@ -1293,6 +1293,36 @@ through the existing wand snapshot-binding mechanism. Re-encoding
 still emits no inner referent resource; saved programs are in
 `target/stdlib-conditional-inner-baseline-logs` (encoding only, not verification).
 
+The executable [element-resource model](prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/element_resources.vpr)
+now validates indexed resource wrappers. A direct quantifier over referent
+addresses failed Viper's injectivity check; adding pointer inequalities would
+exclude valid zero-sized cases. Instead, `element(index, reference)` owns the
+referent resource, and the index distinguishes predicate instances. The model
+does not assert physical address distinctness. Its empty-resource case permits
+the same reference at two indices. Shared aliases use a set of referent
+identities, so repeated sequence occurrences do not multiply permissions.
+
+The model verifies two simultaneous yields, resource/value restoration with a
+symbolic remaining tail, reference replacement, and a symbolic loop that
+renumbers wrappers for a slice view. Replacement transfers the previous
+referent out while transferring the replacement in. Eight negative controls
+reject false/stale/wrong-target claims, access to the borrowed owner, duplicated
+mutable resources, writes with shared permission, and a false claim after
+constructing empty resources. Run
+`./x.py exec python3 scripts/test_stdlib_element_resources.py`; individual logs
+are in `target/stdlib-im3-resources-logs`. The final model verified in 43.43s;
+the duplicate-resource control verified its expected diagnostic in 8.59s after
+correcting the harness's expected variable name. These are model results, not
+yet evidence that Rust's translation carries the resources correctly.
+
+The representation follows Viper's documented
+[quantified-permission injectivity requirement](https://viper.ethz.ch/tutorial/quantified-permissions-injectivity.html)
+and [wand restoration mechanism](https://viper.ethz.ch/tutorial/magic-wands.html).
+The next encoder step uses indexed wrappers around the existing indirect
+predicate applications, with explicit finite bounds and guarded extraction at
+PCG lifetime-projection expansions. Wrapper bodies retain the original
+resources; opening a wrapper does not assume a new referent permission.
+
 Preserve the relationship between the short container/iterator borrow and
 each inner borrow. Outlives constraints must not collapse distinct lifetimes
 into equality. Reuse the existing heap labels and guarded enum-field handling;

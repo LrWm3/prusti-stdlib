@@ -1,0 +1,155 @@
+// Each element resource has its own logical index. Predicate injectivity
+// follows from that index, without asserting distinct physical addresses.
+field value: Int
+
+predicate element(index: Int, r: Ref) { acc(r.value) }
+
+predicate referents(xs: Seq[Ref], offset: Int) {
+  forall i: Int :: { xs[i] } 0 <= i && i < |xs| ==> element(offset + i, xs[i])
+}
+
+function read(index: Int, r: Ref): Int
+  requires element(index, r)
+{ unfolding element(index, r) in r.value }
+
+function at(xs: Seq[Ref], offset: Int, i: Int): Int
+  requires referents(xs, offset) && 0 <= i && i < |xs|
+{ unfolding referents(xs, offset) in read(offset + i, xs[i]) }
+
+method next(xs: Seq[Ref], offset: Int) returns (head: Ref, tail: Seq[Ref])
+  requires referents(xs, offset) && |xs| > 0
+  ensures head == xs[0] && tail == xs[1..]
+  ensures element(offset, head) && referents(tail, offset + 1)
+  ensures read(offset, head) == old(at(xs, offset, 0))
+  ensures forall i: Int :: { tail[i] }
+    0 <= i && i < |tail| ==> at(tail, offset + 1, i) == old(at(xs, offset, i + 1))
+  ensures (element(offset, head) && referents(tail, offset + 1)) --*
+    (referents(xs, offset) && (forall i: Int :: { xs[i] }
+      0 <= i && i < |xs| ==> at(xs, offset, i) ==
+        (i == 0 ? old[lhs](read(offset, head)) : old[lhs](at(tail, offset + 1, i - 1)))))
+{
+  unfold referents(xs, offset)
+  head := xs[0]
+  tail := xs[1..]
+  fold referents(tail, offset + 1)
+  package (element(offset, head) && referents(tail, offset + 1)) --*
+    (referents(xs, offset) && (forall i: Int :: { xs[i] }
+      0 <= i && i < |xs| ==> at(xs, offset, i) ==
+        (i == 0 ? old[lhs](read(offset, head)) : old[lhs](at(tail, offset + 1, i - 1))))) {
+    unfold referents(tail, offset + 1)
+    fold referents(xs, offset)
+  }
+}
+
+method two_yields(xs: Seq[Ref], reverse: Bool)
+  requires referents(xs, 0) && |xs| >= 2
+  ensures referents(xs, 0)
+  ensures at(xs, 0, 0) == 7 && at(xs, 0, 1) == 8
+{
+  var first: Ref
+  var second: Ref
+  var tail: Seq[Ref]
+  var rest: Seq[Ref]
+  first, tail := next(xs, 0)
+  second, rest := next(tail, 1)
+  unfold element(0, first)
+  unfold element(1, second)
+  if (reverse) { second.value := 8; first.value := 7 }
+  else { first.value := 7; second.value := 8 }
+  fold element(1, second)
+  fold element(0, first)
+  apply (element(1, second) && referents(rest, 2)) --*
+    (referents(tail, 1) && (forall i: Int :: { tail[i] }
+      0 <= i && i < |tail| ==> at(tail, 1, i) ==
+        (i == 0 ? old[lhs](read(1, second)) : old[lhs](at(rest, 2, i - 1)))))
+  apply (element(0, first) && referents(tail, 1)) --*
+    (referents(xs, 0) && (forall i: Int :: { xs[i] }
+      0 <= i && i < |xs| ==> at(xs, 0, i) ==
+        (i == 0 ? old[lhs](read(0, first)) : old[lhs](at(tail, 1, i - 1)))))
+}
+
+// Replacing a reference transfers the old referent out and the new one in.
+method replace(xs: Seq[Ref], index: Int, replacement: Ref)
+  returns (ys: Seq[Ref], previous: Ref)
+  requires referents(xs, 0) && 0 <= index && index < |xs|
+  requires acc(replacement.value)
+  ensures ys == xs[index := replacement] && previous == xs[index]
+  ensures referents(ys, 0) && acc(previous.value)
+  ensures previous.value == old(at(xs, 0, index))
+  ensures at(ys, 0, index) == old(replacement.value)
+  ensures forall j: Int :: { ys[j] }
+    0 <= j && j < |ys| && j != index ==> at(ys, 0, j) == old(at(xs, 0, j))
+{
+  unfold referents(xs, 0)
+  previous := xs[index]
+  unfold element(index, previous)
+  fold element(index, replacement)
+  ys := xs[index := replacement]
+  fold referents(ys, 0)
+}
+
+// Shared referents are quantified by identity, not sequence occurrence.
+method shared_aliases(xs: Seq[Ref], targets: Set[Ref], i: Int, j: Int)
+  requires 0 <= i && i < |xs| && 0 <= j && j < |xs|
+  requires forall k: Int :: { xs[k] } 0 <= k && k < |xs| ==> xs[k] in targets
+  requires forall r: Ref :: { r.value } r in targets ==> acc(r.value, 1/2)
+  requires xs[i] == xs[j]
+  ensures forall r: Ref :: { r.value } r in targets ==> acc(r.value, 1/2)
+  ensures xs[i].value == xs[j].value
+{}
+
+// Slice views may renumber their logical positions. Moving the wrappers does
+// not create, destroy, or change the underlying referent resources.
+method reindex(xs: Seq[Ref], from: Int, to: Int)
+  requires referents(xs, from)
+  ensures referents(xs, to)
+  ensures forall j: Int :: { xs[j] }
+    0 <= j && j < |xs| ==> at(xs, to, j) == old(at(xs, from, j))
+{
+  unfold referents(xs, from)
+  var i: Int := 0
+  while (i < |xs|)
+    invariant 0 <= i && i <= |xs|
+    invariant forall j: Int :: { xs[j] }
+      0 <= j && j < i ==> element(to + j, xs[j])
+    invariant forall j: Int :: { xs[j] }
+      i <= j && j < |xs| ==> element(from + j, xs[j])
+    invariant forall j: Int :: { xs[j] }
+      0 <= j && j < i ==> read(to + j, xs[j]) == old(at(xs, from, j))
+    invariant forall j: Int :: { xs[j] }
+      i <= j && j < |xs| ==> read(from + j, xs[j]) == old(at(xs, from, j))
+  {
+    unfold element(from + i, xs[i])
+    fold element(to + i, xs[i])
+    i := i + 1
+  }
+  fold referents(xs, to)
+}
+
+// Empty resources may use the same pointer for different logical elements.
+predicate empty_element(index: Int, r: Ref) { true }
+method zero_sized_alias(r: Ref)
+{
+  fold empty_element(0, r)
+  fold empty_element(1, r)
+  assert forall i: Int :: 0 <= i && i < 2 ==> empty_element(i, r)
+}
+
+method witness()
+{
+  var a: Ref := new(value)
+  var b: Ref := new(value)
+  var c: Ref := new(value)
+  a.value := 1; b.value := 2; c.value := 3
+  fold element(0, a); fold element(1, b)
+  var xs: Seq[Ref] := Seq(a, b)
+  fold referents(xs, 0)
+  two_yields(xs, true)
+  var ys: Seq[Ref]
+  var previous: Ref
+  ys, previous := replace(xs, 0, c)
+  assert previous == a && previous.value == 7
+  assert at(ys, 0, 0) == 3 && at(ys, 0, 1) == 8
+  reindex(ys, 0, 11)
+  assert at(ys, 11, 0) == 3 && at(ys, 11, 1) == 8
+}

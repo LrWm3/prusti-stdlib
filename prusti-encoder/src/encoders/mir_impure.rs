@@ -650,7 +650,8 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
 
         let index = expansion
             .and_then(|expansion| expansion.guide())
-            .and_then(|guide| self.expansion_index(guide));
+            .and_then(|guide| self.expansion_index(guide))
+            .map(|index| self.vcx.maybe_apply_label(index, label));
 
         let (stmts, frame) = match fold_or_unfold {
             FoldOrUnfold::Unfold => (

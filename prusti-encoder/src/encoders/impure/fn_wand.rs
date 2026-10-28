@@ -10,14 +10,20 @@ use crate::encoders::{
         },
     },
 };
-use pcg::borrow_pcg::{
-    FunctionData, FunctionShape, FunctionShapeInput, FunctionShapeNode, FunctionShapeOutput,
-    MakeFunctionShapeError, borrow_pcg_edge::BorrowPcgEdge, region_projection::Generalized,
-    state::BorrowsState,
+use pcg::{
+    borrow_pcg::{
+        FunctionData, FunctionShape, FunctionShapeInput, FunctionShapeNode, FunctionShapeOutput,
+        GeneralizedLifetime, MakeFunctionShapeError,
+        borrow_pcg_edge::{BlockedNode, BorrowPcgEdge},
+        region_projection::{ExtractRegionsCtxt, Generalized, LifetimeProjection, PcgRegion},
+        state::BorrowsState,
+    },
+    utils::place::remote::RemotePlace,
 };
 use prusti_interface::PrustiError;
 use prusti_rustc_interface::{
     data_structures::fx::{FxHashMap, FxHashSet},
+    index::{Idx, IndexVec},
     middle::{mir, ty},
     span::def_id::DefId,
 };
@@ -75,10 +81,33 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
                         None,
                         |i| args[i],
                     );
-                    (
-                        mir::Place::from(g.mir_local()),
-                        resources.into_iter().collect(),
-                    )
+                    let local = g.mir_local();
+                    let node: FunctionShapeNode<Generalized> = (*g).into();
+                    let generalized: IndexVec<_, GeneralizedLifetime<'vir>> = self
+                        .vcx
+                        .tcx()
+                        .extract_regions(node.ty(self.wands.fn_sig(self.vcx, None)));
+                    let actual: IndexVec<_, PcgRegion<'vir>> = self
+                        .pcg_ctxt()
+                        .extract_regions(self.body.local_decls[local].ty);
+                    // Explicit signature regions and MIR regions have the
+                    // same traversal order. Opaque types can hide regions,
+                    // so retain the previous place-based lookup when the
+                    // two lists do not have a direct correspondence.
+                    let root: BlockedNode<'vir> = if generalized.len() == actual.len()
+                        && generalized
+                            .iter()
+                            .all(|r| matches!(r, GeneralizedLifetime::Region(_)))
+                    {
+                        LifetimeProjection::from_index(
+                            RemotePlace::new(local),
+                            g.region_idx().index().into(),
+                        )
+                        .into()
+                    } else {
+                        mir::Place::from(local).into()
+                    };
+                    (root, resources.into_iter().collect())
                 })
                 .collect();
             let mut package_script =

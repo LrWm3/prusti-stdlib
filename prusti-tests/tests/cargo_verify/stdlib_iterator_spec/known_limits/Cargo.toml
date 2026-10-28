@@ -48,4 +48,72 @@ path = "region_full_reassembly.rs"
 name = "region_full_loop"
 path = "region_full_loop.rs"
 
+[[bin]]
+name = "im0_native_loop_scalar"
+path = "im0_native_loop_scalar.rs"
+
+[[bin]]
+name = "im0_native_loop_token"
+path = "im0_native_loop_token.rs"
+
+[[bin]]
+name = "im0_native_unrolled"
+path = "im0_native_unrolled.rs"
+
+[[bin]]
+name = "im0_native_unrolled_token"
+path = "im0_native_unrolled_token.rs"
+
+[[bin]]
+name = "im0_shared_ref_index"
+path = "im0_shared_ref_index.rs"
+
+[[bin]]
+name = "im0_shared_ref_false"
+path = "im0_shared_ref_false.rs"
+
+[[bin]]
+name = "im0_shared_ref_next"
+path = "im0_shared_ref_next.rs"
+
+[[bin]]
+name = "im0_mut_ref_index"
+path = "im0_mut_ref_index.rs"
+
+[[bin]]
+name = "im0_mut_ref_index_write"
+path = "im0_mut_ref_index_write.rs"
+
+[[bin]]
+name = "im0_mut_ref_local"
+path = "im0_mut_ref_local.rs"
+
+[[bin]]
+name = "im0_mut_ref_next"
+path = "im0_mut_ref_next.rs"
+
+[[bin]]
+name = "im0_mut_ref_next_write"
+path = "im0_mut_ref_next_write.rs"
+
+[[bin]]
+name = "im0_holder_next"
+path = "im0_holder_next.rs"
+
+[[bin]]
+name = "im0_holder_next_write"
+path = "im0_holder_next_write.rs"
+
+[[bin]]
+name = "im0_holder_index_write"
+path = "im0_holder_index_write.rs"
+
+[[bin]]
+name = "im0_optional_next"
+path = "im0_optional_next.rs"
+
+[[bin]]
+name = "im0_optional_index_write"
+path = "im0_optional_index_write.rs"
+
 [workspace]

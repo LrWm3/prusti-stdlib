@@ -948,8 +948,9 @@ collection models. Do not promise deterministic iteration order.
 
 ## Mutable-iterator follow-up plan
 
-**Status: planned on 2026-10-28; implementation has not started.** Start from
-Prusti `22ea24a6b` and PCG `a4eb802`. The completed native gate supplies
+**Status:** IM0 reproducers and the resource inventory are complete; IM1's
+standalone restoration model is under validation. Work began from Prusti
+`22ea24a6b` and PCG `a4eb802`. The completed native gate supplies
 construction, forward advancement, lengths, simultaneous yields, early
 iterator destruction, and ownership restoration. It does not establish the
 two extensions below. Keep that support claim unchanged until their gates pass.
@@ -961,8 +962,8 @@ The final gate combines both extensions.
 
 | Step | Deliverable | Depends on | Exit gate |
 |---|---|---|---|
-| IM0 | Minimal reproducers and resource/state inventory | Native core gate | Each gap is classified with a reproducible result and intended positive/negative checks. |
-| IM1 | Proven loop restoration summary | IM0 | The summary composes for arbitrary prefix length and supports exhaustion and early exit in a small proof model. |
+| IM0 | Minimal reproducers and resource/state inventory | Native core gate | Complete: [17 probes and the resource ledger](prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/README.md#im0-native-loop-values-and-references-inside-elements) record the observed failures and controls. |
+| IM1 | Proven loop restoration summary | IM0 | In progress: the standalone summary proves arbitrary-length full and partial traversal; its negative and consistency checks are being validated. |
 | IM2 | Functional native iterator loops | IM1 | Rust clients prove whole-slice updates and exact early-break prefix/suffix behavior for symbolic lengths. |
 | IM3 | Concrete reference-containing slice elements | IM0; implemented after IM2 | Reads, writes, framing, and expiry work for shared references, mutable references, and reference-bearing structs/enums. |
 | IM4 | Generic and cross-crate reference resources | IM3 | Generic definitions retain the same referent permissions under substitution and through Vec/slice views. |

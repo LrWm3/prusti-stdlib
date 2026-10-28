@@ -11,6 +11,72 @@ cannot read referent values without permission. A functional invariant for an
 arbitrary updated prefix and reference-containing generic elements remain
 outside the established examples.
 
+## IM0: native loop values and references inside elements
+
+The `im0_*` binaries reproduce the two follow-up gaps from
+[the plan](../../../../../STDLIB_EXTERN_SPEC.md#mutable-iterator-follow-up-plan).
+They are valid Rust programs. Except for `im0_shared_ref_false`, they describe
+correct behavior that should eventually verify; a failure or internal error
+is evidence of a limitation, not a successful negative test.
+
+On 2026-10-28, Prusti `22ea24a6b` with PCG `a4eb802`, Rust
+`nightly-2026-08-15`, Viper `v-2026-09-01-0834`, Z3 `4.16.0`, and Java
+`21.0.2` produced these results with fresh targets, the cache disabled,
+overflow and panic checks enabled, a 180-second verifier timeout, and one
+parallel verifier per process:
+
+| Probe | Observed result | Meaning |
+|---|---|---|
+| `im0_native_unrolled`, `im0_native_unrolled_token` | Verify | Two native `next` calls update both scalar or non-`Copy` elements and establish the final postcondition. |
+| `im0_native_loop_scalar`, `im0_native_loop_token` | Postcondition might not hold | The symbolic loop restores ownership, but a length invariant alone does not establish that every scalar or non-`Copy` element was updated. |
+| `im0_shared_ref_index` | Verifies | Shared references in a slice can be read in this concrete example. |
+| `im0_shared_ref_false` | Assertion might not hold | The shared-reference example does not prove an arbitrary false assertion. |
+| `im0_mut_ref_index`, `im0_mut_ref_next`, `im0_holder_next` | Unsupported mutable-reference dereference in pure code | The assertion reads a referent through a mutable reference obtained from a slice snapshot; its correct heap-dependent interpretation is not encoded. |
+| `im0_mut_ref_index_write`, `im0_mut_ref_local`, `im0_mut_ref_next_write`, `im0_holder_index_write`, `im0_holder_next_write`, `im0_optional_index_write`, `im0_optional_next` | Internal error reporting `call.precondition:insufficient.permission` | Valid writes or reborrows need a referent permission absent from the generated program. The error also lacks an appropriate source-level backtranslation. |
+| `im0_shared_ref_next` | Internal error reporting `apply.failed:wand.not.found` | Reading a shared-reference element through a mutable iterator reaches a separate wand-application failure; its root cause remains to be isolated. |
+
+The reference failures are independent of the loop proof: the write-only
+index case contains no iterator and no referent-value assertion. Its generated
+method requires the outer reference predicate and the slice predicate, but not
+the predicate for the `u32` behind the element reference. Index unfolding
+exposes the reference slot; `make_concrete_UInt_u32` then requires the missing
+referent predicate. An `Option<&mut u32>` yielded by the iterator reaches the
+same kind of missing permission. A direct nested dereference in a specification
+fails earlier during pure encoding, so it cannot on its own diagnose whether
+the executable write has sufficient permission. Write-only indexing and
+iterator variants for mutable references, holders, and optional references
+all reach the missing-permission error. The shared-reference iterator case
+instead reaches the separate missing-wand error above.
+
+The scalar loop's generated invariant retains the iterator tail permission,
+the source reference's shallow snapshot, and a wand from the tail resource to
+the original slice resource. The constructor's inner expiry wand includes a
+content equality using `old[lhs]`; packaging the outer loop wand keeps only
+the resource predicate. The unrolled case applies the individual expiry wands
+without that loop abstraction. This identifies where the value relationship
+is lost, but does not imply that a length-only invariant should prove the
+desired final values.
+
+After building Prusti, reproduce a case and save its Viper program with:
+
+```sh
+case_name=im0_native_loop_scalar
+im0_target=$(mktemp -d)
+RUSTUP_TOOLCHAIN=nightly-2026-08-15 CARGO_TARGET_DIR="$im0_target" \
+  PRUSTI_ENABLE_CACHE=false PRUSTI_NO_VERIFY_DEPS=true \
+  PRUSTI_CHECK_OVERFLOWS=true PRUSTI_CHECK_PANICS=true \
+  PRUSTI_DUMP_VIPER_PROGRAM=true PRUSTI_LOG_DIR="$PWD/target/im0-$case_name" \
+  PRUSTI_EXTRA_VERIFIER_ARGS='--timeout=180 --numberOfParallelVerifiers 1' \
+  ./x.py exec target/debug/cargo-prusti \
+  --manifest-path prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/Cargo.toml \
+  --bin "$case_name"
+```
+
+Choose another `im0_*` binary for the corresponding probe. Keep each target
+fresh, set `JAVA_HOME` to the recorded Java installation, and inspect the
+diagnostic and dumped `viper_program/program-check.vpr` rather than treating
+the exit code alone as proof of a particular failure.
+
 The `mutable_ref_snapshot` probe attempts to model the remaining mutable
 references and relate each reference to the corresponding source element:
 

@@ -33,7 +33,7 @@ parallel verifier per process:
 | `im0_shared_ref_false` | Assertion might not hold | The shared-reference example does not prove an arbitrary false assertion. |
 | `im0_mut_ref_index`, `im0_mut_ref_next`, `im0_holder_next` | Unsupported mutable-reference dereference in pure code | The assertion reads a referent through a mutable reference obtained from a slice snapshot; its correct heap-dependent interpretation is not encoded. |
 | `im0_mut_ref_index_write`, `im0_mut_ref_local`, `im0_mut_ref_next_write`, `im0_holder_index_write`, `im0_holder_next_write`, `im0_optional_index_write`, `im0_optional_next` | Internal error reporting `call.precondition:insufficient.permission` | Valid writes or reborrows need a referent permission absent from the generated program. The error also lacks an appropriate source-level backtranslation. |
-| `im0_shared_ref_next` | Internal error reporting `apply.failed:wand.not.found` | Reading a shared-reference element through a mutable iterator reaches a separate wand-application failure; its root cause remains to be isolated. |
+| `im0_shared_ref_next` | Verifies after call-wand selection fix | Shared-reference single- and two-yield regressions now live in the main iterator suite. |
 
 The reference failures are independent of the loop proof: the write-only
 index case contains no iterator and no referent-value assertion. Its generated
@@ -45,25 +45,37 @@ same kind of missing permission. A direct nested dereference in a specification
 fails earlier during pure encoding, so it cannot on its own diagnose whether
 the executable write has sufficient permission. Write-only indexing and
 iterator variants for mutable references, holders, and optional references
-all reach the missing-permission error. The shared-reference iterator case
-instead reaches the separate missing-wand error above.
+all reach the missing-permission error. Shared-reference iteration required a
+separate fix to select the correct call wand, described below.
 
-The single-yield shared-reference case now verifies after call-wand removals
-are deduplicated within each PCG phase; its incorrect-value and `false`
-counterparts are rejected in the main iterator suite. This does not complete
-shared-reference support. `im3_shared_ref_two_yields` holds two yields and
-then reads the restored slice. It still reports `apply.failed:wand.not.found`:
-the constructor's resource-bearing lifetime projection applies its wand,
-but a later phase attempts to apply the same wand again for the nested shared
-lifetime. The runtime examples include both repeated and distinct shared
-referents; they are not evidence that the verifier handles the two-yield case.
+The single-yield and two-yield shared-reference cases now verify in the main
+suite, including reads of the restored slice. Their incorrect-value and
+`false` counterparts are rejected. The two-yield regression is
+`mut_native_shared_ref_two_yields_pass`; its runtime examples use both repeated
+and distinct referents, and its verified function does not require distinct
+referents. The former `im3_shared_ref_two_yields` repro was promoted there.
 
-As a diagnostic experiment on the generated Viper for that repro, deleting
-only the later constructor-wand application makes Silicon verify the two-yield
-program. Adding `assert false` on the same reachable path is rejected. This
-was a manual edit of the generated proof, not an encoder fix: it does not show
-that dropping other resource-free projection edges is valid, especially when
-an expiry pledge has no resource-bearing wand or generic types add borrows.
+The encoder now associates each emitted restoration obligation with its PCG
+edge through a checked signature-to-call projection map. The constructor's
+resource-free nested shared lifetime no longer reapplies the outer lifetime's
+wand. The same selection retains individual wands across loop boundaries;
+phase-local deduplication includes the obligation ID and path condition.
+Unknown substitutions and partial edge coverage are rejected. This fixes the
+diagnosed duplicate application without claiming support for arbitrary nested
+mutable references or reference-containing collection resources.
+
+Two additional call-wand loop repros remain here. `im3_branch_call_loop` makes
+a branch-selected borrow each iteration and alternates the branch. Its call
+expiry can refer to an unreached heap label after loop havoc
+(`apply.failed:labelled.state.not.reached`). `im3_retained_branch` chooses a
+borrow before the loop and keeps it live across the loop boundary. Conditional
+retention currently reports `not.wellformed:labelled.state.not.reached`: an
+unconditional invariant reads the other branch's call snapshot. Guarding that
+invariant alone exposed a further missing-permission issue in the trial, so
+retention and reference framing both need work. Clearing all untaken branch
+flags was tested and removed: it lost the historical loop-entry condition
+needed to return the owner's permission. These are separate from the fixed
+shared-reference two-yield duplicate application.
 
 The scalar loop's generated invariant retains the iterator tail permission,
 the source reference's shallow snapshot, and a wand from the tail resource to

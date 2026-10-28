@@ -1177,28 +1177,68 @@ ownership-only loops continue to work with their current annotations.
 
 ### IM3: Track referent permissions inside concrete elements
 
-The shared-reference single-yield repro now verifies, with incorrect-value and
-`false` controls, after duplicate call-wand applications in one PCG phase were
-removed. A two-yield repro still applies the constructor wand again in a later
-phase for a resource-free nested shared lifetime; see the
+The shared-reference single- and two-yield repros now verify, with incorrect-value
+and `false` controls, including reads of the restored owner. The two-yield
+function permits repeated referents; see the
 [resource ledger](prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/README.md#im0-native-loop-values-and-references-inside-elements).
 This is a narrow preliminary result, not the IM3 exit gate.
 
-Before extending shared-reference iterator coverage, match each removed PCG
-call edge to the specific function-shape wand it discharges. The current
-`call_wands` path applies every wand for a call, even when an edge represents a
-different lifetime projection. Preserve path conditions and repeated calls in
-loops, and retain expiry pledges on resource-free wands; absence of an indirect
-predicate must not by itself be treated as proof that a generic value has no
-borrows. Reject shapes that cannot be matched precisely. Check two live shared
-yields, repeated referents, separately expiring projections, conditional calls,
-pledge-only cases, and false assertions before claiming this gap closed.
-PCG's `create_edges_for_shape` maps call-shape argument/result projections to
-labelled operand places, while `WandEnc` stores generalized signature-shape
-projections. The edge does not retain the original shape-node identity; expose
-or reconstruct that correspondence through normalization and generic
-substitution, and reject ambiguous matches rather than equating indices by
-position.
+Call-wand selection now uses a checked correspondence from generalized
+signature projections to concrete call projections. It preserves multiple
+signature origins when lifetimes collapse, and multiple concrete incarnations
+when a signature projection expands. Unknown mappings remain distinct from
+known empty mappings. Labelled edge places are matched back to the original
+MIR arguments/result only when that match is unique. This is a partial
+structural map, not unrestricted normalization support.
+
+Each retained wand has an ID within its callee's obligations. Application and
+loop-invariant retention select the same IDs, and phase-local deduplication
+also preserves the call location and path condition. Resource anchors include
+both definition-site and instantiated predicates; pledge-only wands retain
+their shape anchors. Unknown correspondence or partial coverage is rejected,
+rather than treating an opaque generic value as borrow-free. The diagnosed
+nested shared lifetime has no corresponding emitted obligation and therefore
+does not reapply the constructor's outer wand.
+
+The call-side predicate builder still encodes a single generalized projection
+index. Selection checks that this denotes the same signature resource after
+substitution; shifted, merged, or expanded resource indices that the builder
+cannot represent are rejected explicitly. `call_wand_shifted_projection`
+covers a lifetime-free generic argument preceding a mutable reference.
+Extending the mapping alone does not establish generic resource support.
+
+Validation on 2026-10-28: the full build passed; PCG passed four projection-map
+tests and eight existing function-shape tests. Focused borrow and iterator
+runs passed 18 and 19 checks respectively, including both specification
+libraries, runtime clients, and expected diagnostics. Results are in
+`target/stdlib-call-projection-verified-{borrow,iterator}-logs/results.json`.
+The iterator library was also re-encoded after the final projection-consistency
+rejection check (two additional checks), which does not change emitted wands.
+The shared pledge-only fixture's Viper contains both `apply true --*` branches.
+The two loop limitations below were reproduced separately with the final
+build in `target/stdlib-call-projection-known-logs`.
+
+Regression coverage includes two live shared yields, repeated referents,
+independent mutable borrows expiring in either order, shared pledge-only wands,
+and incorrect-value/false controls. General conditional calls in loops remain
+an open gate: `im3_branch_call_loop` exposes an unreached call-label error when
+the loop havocs branch flags, and `im3_retained_branch` covers a conditional
+borrow that stays live across a loop. These repros live in `known_limits`, not
+the passing suite. Clearing all alternative branch flags is not a valid fix:
+some conditions must remember earlier iterations to restore the owner's
+permissions on loop exit. A trial of that change was removed.
+
+Next, distinguish the current call's execution from historical loop path
+conditions and preserve conditional call wands at loop boundaries. The current
+loop-invariant collection does not preserve edge guards. Keep the two repros,
+both branch choices, alternating choices over repeated iterations, and false
+controls in that gate. Recheck whole-prefix traversal, early exits, generic
+elements, and Vec views before changing shared control-flow bookkeeping.
+
+Further reference shapes can still require mappings that the structural
+correspondence cannot establish. Extend it from explicit evidence through
+normalization, never by equating projection indices by position. General
+reference-containing resource support remains the next implementation step.
 
 Keep reference identity and referent value separate. `Seq<&mut U>` and the
 iterator identity observations continue to describe reference snapshots;

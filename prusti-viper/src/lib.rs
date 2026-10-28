@@ -784,6 +784,28 @@ impl<'vir, 'v, T: CompType> ToViper<'vir, 'v> for vir::LocalDeclData<'vir, T> {
     }
 }
 
+// Locals introduced in conditional PCG repacks belong to the enclosing
+// method or package. A package is a separate assignment scope in Viper.
+fn collect_declarations<'vir, 'v>(
+    statements: &[vir::Stmt<'vir>],
+    ctx: &ToViperContext<'vir, 'v>,
+    declarations: &mut Vec<viper::Declaration<'v>>,
+) {
+    for statement in statements {
+        match statement.kind {
+            vir::StmtKindGenData::LocalDecl(decl, _) => {
+                declarations.push(decl.to_viper_no_pos(ctx).into())
+            }
+            vir::StmtKindGenData::If(_, yes, no) => {
+                collect_declarations(yes, ctx, declarations);
+                collect_declarations(no, ctx, declarations);
+            }
+            // Nested packages collect their own declarations.
+            _ => {}
+        }
+    }
+}
+
 impl<'vir, 'v> ToViper<'vir, 'v> for vir::Method<'vir> {
     type Output = viper::Method<'v>;
     fn to_viper(&self, ctx: &ToViperContext<'vir, 'v>, _pos: Position) -> Self::Output {
@@ -820,11 +842,13 @@ impl<'vir, 'v> ToViper<'vir, 'v> for vir::Method<'vir> {
                     Vec::with_capacity(1 + body.blocks.len());
                 body.blocks.iter().for_each(|b| {
                     declarations.push(ctx.ast.label(&b.label.label.name(), &[]).into());
-                    b.stmts.iter().for_each(|s| {
-                        if let vir::StmtKindGenData::LocalDecl(decl, _) = s.kind {
-                            declarations.push(decl.to_viper_no_pos(ctx).into());
+                    collect_declarations(b.stmts, ctx, &mut declarations);
+                    if let vir::TerminatorStmtGenData::GotoIf(branch) = b.terminator {
+                        for target in branch.targets {
+                            collect_declarations(target.statements, ctx, &mut declarations);
                         }
-                    });
+                        collect_declarations(branch.otherwise_statements, ctx, &mut declarations);
+                    }
                     b.to_viper_extend_no_pos(&mut result, ctx);
                 });
                 ctx.ast.seqn(&result, &declarations)
@@ -1024,17 +1048,21 @@ impl<'vir, 'v> ToViper<'vir, 'v> for vir::Stmt<'vir> {
                 ctx.ast.comment(&format!("var {}", decl.name))
             }
             vir::StmtKindGenData::MethodCall(v) => v.to_viper_with_span(ctx, self.span),
-            vir::StmtKindGenData::Package(wand, stmts) => ctx.ast.package(
-                wand.to_viper_no_pos(ctx),
-                ctx.ast.seqn(
-                    &stmts
-                        .iter()
-                        .map(|v| v.to_viper_no_pos(ctx))
-                        .collect::<Vec<_>>(),
-                    &[],
-                ),
-                ctx.span_to_pos(self.span),
-            ),
+            vir::StmtKindGenData::Package(wand, stmts) => {
+                let mut declarations = Vec::new();
+                collect_declarations(stmts, ctx, &mut declarations);
+                ctx.ast.package(
+                    wand.to_viper_no_pos(ctx),
+                    ctx.ast.seqn(
+                        &stmts
+                            .iter()
+                            .map(|v| v.to_viper_no_pos(ctx))
+                            .collect::<Vec<_>>(),
+                        &declarations,
+                    ),
+                    ctx.span_to_pos(self.span),
+                )
+            }
             vir::StmtKindGenData::Apply(wand) => ctx
                 .ast
                 .apply(wand.to_viper_no_pos(ctx), ctx.span_to_pos(self.span)),

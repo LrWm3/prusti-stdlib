@@ -953,6 +953,10 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     Some(expansion),
                     label,
                 )?;
+                if edge_action.is_remove() && label.is_none() {
+                    let resources = self.close_current_array_element(expansion)?;
+                    self.stmts(resources);
+                }
                 if let Some(footprint) = footprint
                     && let Some(frame) = frame
                 {

@@ -246,6 +246,84 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         Ok(())
     }
 
+    /// Reassemble the current element's referent resources when its physical
+    /// slot is folded. Historical lifetime expansions may remain live across
+    /// this boundary, but the current collection must be whole at loop heads.
+    pub(crate) fn close_current_array_element(
+        &mut self,
+        expansion: &BorrowPcgExpansion<'vir>,
+    ) -> EncodeResult<'vir, Vec<vir::Stmt<'vir>>, E> {
+        let PcgNode::Place(MaybeLabelledPlace::Current(owner)) = expansion.base() else {
+            return Ok(Vec::new());
+        };
+        let owner_ty = owner.ty(self.pcg_ctxt()).ty;
+        if !matches!(owner_ty.kind(), ty::Array(..) | ty::Slice(..)) {
+            return Ok(Vec::new());
+        }
+        let Some(index) = expansion
+            .guide()
+            .and_then(|guide| self.expansion_index(guide))
+        else {
+            return Ok(Vec::new());
+        };
+        let nodes = expansion.expansion();
+        let [PcgNode::Place(MaybeLabelledPlace::Current(element))] = nodes.as_slice() else {
+            return Ok(Vec::new());
+        };
+        let owner_task = RustTyDecomposition::from_ty(owner_ty, self.def_id);
+        let child_task = RustTyDecomposition::from_ty(element.ty(self.pcg_ctxt()).ty, self.def_id);
+        let regions: prusti_rustc_interface::index::IndexVec<
+            _,
+            pcg::borrow_pcg::region_projection::PcgRegion<'vir>,
+        > = self.pcg_ctxt().extract_regions(owner_ty);
+        let mut result = Vec::new();
+        for (region_index, region) in regions.iter_enumerated() {
+            let indirect =
+                self.deps
+                    .require_dep::<IndirectPredicatesEnc>(LifetimeProjection::from_index(
+                        owner_task,
+                        region_index,
+                    ))?;
+            let Some(array) = indirect.array else {
+                continue;
+            };
+            let Some(child_projection) = LifetimeProjection::new(
+                child_task,
+                *region,
+                None,
+                crate::encoders::ty::indirect::PrustiPcgCtxt,
+            ) else {
+                continue;
+            };
+            let child = self
+                .deps
+                .require_dep::<IndirectPredicatesEnc>(child_projection)?;
+            let snapshot = self.indexed_element_snapshot(owner, *element, index)?;
+            let indexed = self.vcx.alloc(array.indexed);
+            let resources = child
+                .predicate_applications
+                .iter()
+                .map(|expr| {
+                    expr.reify(
+                        self.vcx,
+                        ExprInput {
+                            indexed: Some((indexed, index, true)),
+                            ..ExprInput::current(snapshot)
+                        },
+                    )
+                })
+                .collect::<Vec<_>>();
+            result.extend(
+                indexed
+                    .operations(self.vcx.mk_conj(&resources), index, true)
+                    .map_err(|reason| {
+                        self.unsupported_rvalue(reason.to_string(), self.current_span())
+                    })?,
+            );
+        }
+        Ok(result)
+    }
+
     /// Moving a reference-bearing value into an indexed slot also transfers
     /// its referent resources, even when the slot is never read afterwards.
     pub(crate) fn repack_array_assignment(

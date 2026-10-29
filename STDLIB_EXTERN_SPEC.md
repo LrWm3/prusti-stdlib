@@ -1344,11 +1344,24 @@ compilation. Ten focused borrow regression checks also passed. Logs are in
 `target/stdlib-im3-paths-full-iterator-logs` and
 `target/stdlib-im3-paths-regression-borrow-logs`.
 
+Current-element resources are now closed when the physical array/slice slot
+is folded. Historical lifetime expansions may stay live across a loop, but
+the current collection must be reassembled at its head and exit. The operation
+reads the current element identity and uses checked folds, preserving the
+separate historical restoration path for reference replacement.
+`mut_element_loop_pass` verifies symbolic traversal, each immediate updated
+read, and unchanged slot identities, with empty/nonempty runtime cases. Its
+wrong-value and false-after-traversal controls fail at their intended assertions.
+The full concrete run passed the 34 earlier checks plus the new positive
+verification/runtime checks; a focused five-check rerun passed after correcting
+the two new negative annotations to the verifier's exact diagnostic text.
+Logs are in `target/stdlib-im3-loop-full-iterator-logs` and
+`target/stdlib-im3-loop-controls-iterator-logs`.
+
 This still does not close IM3: native mutable-reference yields and the
-untrusted explicit-tail control require generic resource transport. A
-symbolic indexed loop also exposed a missing current-element close at physical
-slice folding. Adding that checked close to its generated Viper verifies,
-but the Rust encoder integration and loop controls remain outstanding.
+untrusted explicit-tail control require generic resource transport. The indexed
+loop establishes permission restoration and shallow identities; whole-prefix
+referent value observations and proofs remain part of IM5.
 
 The executable [element-resource model](prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/element_resources.vpr)
 now validates indexed resource wrappers. A direct quantifier over referent

@@ -229,7 +229,11 @@ impl TaskEncoder for ResourceCollectionEnc {
             let typed = |lo| {
                 vcx.mk_forall_expr(
                     variables,
-                    &[],
+                    // The canonical lookup is present whenever either side
+                    // observes an element. Inferred constructor/cast triggers
+                    // may disappear while the solver normalizes snapshots,
+                    // hiding the recursively established suffix typing fact.
+                    vcx.alloc_slice(&[vcx.mk_trigger(&[raw_element(j).as_dyn()])]),
                     vir::expr! { ([range(lo)]) ==> ([normalization(j)]) },
                 )
             };

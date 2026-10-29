@@ -1859,6 +1859,16 @@ the new normalization. The scalar `false` control still rejects only its
 intended assertion. Temporary expansion, conversion proof stability, native
 resource frames, and the remaining IM gates are still open.
 
+The conversion helper's pure type-preservation quantifiers now trigger on the
+canonical sequence lookup. Inferred constructor/cast triggers were unstable
+under snapshot normalization. The isolated failing scalar unpack helper now
+verifies in 30.43 seconds; the same old program without the explicit trigger
+failed after 3m08s. Native Rust full-traversal, false, and wrong-value loop cases
+all pass their expected checks (five checks including Rust and runtime,
+`target/stdlib-im4-trigger92-iterator-spec-logs`, 600-second program limit,
+30-second assertions with time bounds). No helper contract or resource
+assumption changes in this checkpoint.
+
 The first step is a prerequisite for the others: adding an abstract predicate
 only to call-site contracts would not establish that a generic implementation
 actually preserves it.

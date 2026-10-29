@@ -4,10 +4,45 @@ use async_std::{
     process::{ChildStderr, ChildStdin, ChildStdout},
 };
 
-fn are_parens_balanced(line: &str) -> bool {
-    let openning_parens = line.chars().filter(|c| *c == '(').count();
-    let closing_parens = line.chars().filter(|c| *c == ')').count();
-    openning_parens == closing_parens
+// SMT-LIB replies can be multiline strings as well as S-expressions. Delimiters
+// inside quoted values or comments do not end a command or response.
+fn are_parens_balanced(input: &str) -> bool {
+    let mut depth = 0_i64;
+    let mut in_string = false;
+    let mut in_symbol = false;
+    let mut in_comment = false;
+    let mut chars = input.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if in_comment {
+            if ch == '\n' {
+                in_comment = false;
+            }
+        } else if in_string {
+            if ch == '"' {
+                if chars.peek() == Some(&'"') {
+                    chars.next();
+                } else {
+                    in_string = false;
+                }
+            }
+        } else if in_symbol {
+            if ch == '|' {
+                in_symbol = false;
+            } else if ch == '\\' {
+                chars.next();
+            }
+        } else {
+            match ch {
+                ';' => in_comment = true,
+                '"' => in_string = true,
+                '|' => in_symbol = true,
+                '(' => depth += 1,
+                ')' => depth -= 1,
+                _ => (),
+            }
+        }
+    }
+    depth == 0 && !in_string && !in_symbol
 }
 
 async fn read_command(command: &mut String) -> Result<bool, std::io::Error> {
@@ -102,4 +137,25 @@ pub(crate) async fn pass_error(
     }
     context.write_to_log("err", "stderr finished\n").await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::are_parens_balanced;
+    #[test]
+    fn complete_responses_respect_smt_quoted_values() {
+        assert!(!are_parens_balanced(
+            "\"snapshot -> ($Snap.combine $Snap.unit $Snap.unit)\n"
+        ));
+        assert!(are_parens_balanced(
+            "\"snapshot -> ($Snap.combine $Snap.unit $Snap.unit)\nnext value\"\n"
+        ));
+        assert!(are_parens_balanced(
+            "(assert (= |a(b| \"x)\")) ; ( ignored\n"
+        ));
+        assert!(are_parens_balanced("(echo \"embedded \"\" quote\")"));
+        assert!(are_parens_balanced("(echo \"literal-backslash\\\")"));
+        assert!(!are_parens_balanced("(declare-const |escaped\\| Int)"));
+        assert!(!are_parens_balanced("(assert (= |unfinished ("));
+    }
 }

@@ -153,6 +153,7 @@ fn main() {
                 method!("setVerifier"),
                 method!("verification"),
                 method!("getVerificationResult"),
+                method!("errors"),
                 method!("setState"),
                 method!("verifier"),
                 method!("config"),

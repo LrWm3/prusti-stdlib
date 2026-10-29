@@ -53,6 +53,43 @@ fn type_error() {
     });
 }
 
+#[test]
+fn frontend_consistency_error() {
+    setup();
+    let context = VIPER.attach_current_thread();
+    let ast = context.new_ast_factory();
+    // This passes the initial AST checks. The frontend rejects a recursive
+    // postcondition without a well-foundedness proof before Silicon runs.
+    let function = ast.function(
+        "recursive_postcondition",
+        &[],
+        ast.bool_type(),
+        &[],
+        &[ast.func_app(
+            "recursive_postcondition",
+            &[],
+            ast.bool_type(),
+            ast.no_position(),
+        )],
+        ast.no_position(),
+        Some(ast.true_lit()),
+    );
+    let program = ast.program(&[], &[], &[function], &[], &[], &[]);
+    let mut verifier = context.new_verifier_with_default_smt_and_extra_args(
+        VerificationBackend::Silicon,
+        vec!["--disableTerminationPlugin".into()],
+    );
+    match verifier.verify(program, None) {
+        VerificationResultKind::ConsistencyErrors(errors) => {
+            assert!(
+                errors.iter().any(|error| error.message.contains("self-reference")),
+                "{errors:?}"
+            );
+        }
+        other => panic!("frontend error was not reported: {other:?}"),
+    }
+}
+
 fn test_consistency_error_for_method_body<F>(body_constructor: F)
 where
     for<'v> F: FnOnce(&AstFactory<'v>) -> Stmt<'v>,

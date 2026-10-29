@@ -1139,6 +1139,48 @@ mod tests {
     }
 
     #[test]
+    fn duplicate_method_requires_silver_transitive_check() {
+        use ferrum_silver::ast::{
+            pretty::pretty_printer::{pretty_node, PrintError},
+            utility::{consistency::check_transitively, nodes::Node},
+        };
+        let method = Method::new(MethodData {
+            name: "duplicate".into(),
+            formal_args: vec![],
+            formal_returns: vec![],
+            pres: vec![],
+            posts: vec![],
+            body: None,
+            meta: Metadata::default(),
+        });
+        let program = Program::new(
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![method.clone(), method],
+            vec![],
+            Metadata::default(),
+        );
+        let backend = ferrum_silicon::utils::consistency::check(&program, &|_| {
+            unreachable!("no unsupported permission")
+        })
+        .unwrap();
+        assert!(backend.is_empty());
+        let silver = check_transitively(&program, &pretty_node, &|_: &[Node]| -> Result<
+            String,
+            PrintError,
+        > {
+            Err(PrintError::Unsupported("sequence"))
+        })
+        .unwrap();
+        assert!(
+            !silver.is_empty(),
+            "Silver must reject duplicate declarations"
+        );
+    }
+
+    #[test]
     #[ignore = "requires real Z3; set FERRUM_TEST_Z3"]
     fn native_error_preserves_identifier_positions() {
         let z3 = std::env::var_os("FERRUM_TEST_Z3").expect("set FERRUM_TEST_Z3");

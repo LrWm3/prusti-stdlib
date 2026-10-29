@@ -15,6 +15,21 @@ use std::{
 };
 use viper::{VerificationError, VerificationResultKind};
 
+/// Source polling reporter queues before forwarding to the optional CSV reporter.
+pub(crate) struct DebugReporter {
+    pub progress: std::sync::Arc<dyn Reporter>,
+    pub csv: std::sync::Arc<dyn Reporter>,
+}
+impl Reporter for DebugReporter {
+    fn name(&self) -> &str {
+        "polling_reporter"
+    }
+    fn report(&self, message: Message) -> Result<(), ReportError> {
+        self.progress.report(message.clone())?;
+        self.csv.report(message)
+    }
+}
+
 pub(crate) struct NativeReporter {
     pub procedures: HashSet<String>,
     pub sender: mpsc::Sender<ServerMessage>,

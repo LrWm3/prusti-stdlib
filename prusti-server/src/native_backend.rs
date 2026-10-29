@@ -8,6 +8,54 @@ use prusti_ferrum::silver::{
 use std::sync::Arc;
 use viper::{ConsistencyError, VerificationError, VerificationResultKind};
 
+fn source_consistency(program: &Program) -> Result<Vec<ConsistencyError>, String> {
+    use prusti_ferrum::silver::ast::{
+        expression::{Exp, ExpKind},
+        pretty::pretty_printer::{expression_to_string, pretty_node, show_type, PrintError},
+        utility::{consistency::check_transitively, nodes::Node},
+    };
+    let render = |node: &Node| -> Result<String, PrintError> {
+        match node {
+            Node::Exp(exp) => expression_to_string(exp),
+            Node::Type(typ) => show_type(typ),
+            Node::LocalVar(var) => {
+                expression_to_string(&Exp::new(ExpKind::LocalVar(var.clone()), var.meta.clone()))
+            }
+            Node::LocalDecl(decl) => Ok(format!("{}: {}", decl.name, show_type(&decl.typ)?)),
+            Node::UnnamedLocalDecl(decl) => show_type(&decl.typ),
+            Node::FieldAccess(access) => expression_to_string(&Exp::new(
+                ExpKind::FieldAccess(access.clone()),
+                access.meta.clone(),
+            )),
+            Node::PredicateAccess(access) => expression_to_string(&Exp::new(
+                ExpKind::PredicateAccess(access.clone()),
+                access.meta.clone(),
+            )),
+            Node::PredicateAccessPredicate(access) => expression_to_string(&Exp::new(
+                ExpKind::PredicateAccessPredicate(access.clone()),
+                access.meta.clone(),
+            )),
+            _ => pretty_node(node),
+        }
+    };
+    let render_seq = |_: &[Node]| -> Result<String, PrintError> {
+        Err(PrintError::Unsupported("consistency sequence rendering"))
+    };
+    let errors = check_transitively(program, &render, &render_seq)
+        .map_err(|e| format!("native consistency check: {e:?}"))?;
+    errors
+        .into_iter()
+        .map(|error| {
+            Ok(ConsistencyError {
+                pos_id: prusti_ferrum::position_id(&error.position),
+                message: error
+                    .readable_message()
+                    .map_err(|e| format!("consistency diagnostic: {e:?}"))?,
+            })
+        })
+        .collect()
+}
+
 pub(crate) fn verify(
     program: Program,
     config: ViperBackendConfig,
@@ -37,14 +85,26 @@ fn verify_internal(
         sender: std::sync::mpsc::Sender<crate::ServerMessage>,
         allow_reporting: bool,
     ) -> Result<VerificationResultKind, String> {
-        if !config.verify_mode.is_verify() {
-            return Err("Ferrum currently supports verify mode only".into());
-        }
-        if prusti_utils::config::dump_viper_program() || prusti_utils::config::dump_debug_info() {
-            return Err("Ferrum reporting or debug output mode is not yet implemented".into());
+        if !config.verify_mode.is_verify() && !config.verify_mode.is_consistency_check() {
+            return Err("Ferrum requires verify or consistency-check mode".into());
         }
         let mut args = config.verifier_args;
         args.extend(["--z3Exe".into(), prusti_utils::config::smt_solver_path()]);
+        let debug_dir = if prusti_utils::config::dump_debug_info() {
+            let path = prusti_utils::config::log_dir()
+                .join("viper_tmp")
+                .join(prusti_utils::report::log::to_legal_file_name("program"));
+            std::fs::create_dir_all(&path).map_err(|e| format!("debug directory: {e}"))?;
+            let path_string = path.to_str().ok_or("debug directory is not UTF-8")?;
+            args.extend([
+                "--tempDirectory".into(),
+                path_string.into(),
+                "--printMethodCFGs".into(),
+            ]);
+            Some(path)
+        } else {
+            None
+        };
         let report = allow_reporting.then(|| {
             Arc::new(crate::native_reporter::NativeReporter {
                 procedures: procedures.into_iter().collect(),
@@ -52,18 +112,30 @@ fn verify_internal(
                 errors: std::sync::Mutex::new(Default::default()),
             })
         });
-        let reporter: Arc<dyn prusti_ferrum::silver::reporter::reporter::Reporter> =
-            if let Some(report) = &report {
-                Arc::new(
-                    prusti_ferrum::silver::reporter::reporter::PluginAwareReporter {
-                        name: "prusti".into(),
-                        target: report.clone(),
-                        mapper: std::sync::RwLock::new(None),
-                    },
+        let progress: Arc<dyn prusti_ferrum::silver::reporter::reporter::Reporter> = match &report {
+            Some(report) => report.clone(),
+            None => Arc::new(NoopReporter),
+        };
+        let target: Arc<dyn prusti_ferrum::silver::reporter::reporter::Reporter> =
+            if let Some(path) = debug_dir {
+                let csv = prusti_ferrum::silver::reporter::reporter::CsvReporter::open(
+                    path.join("report.csv"),
                 )
+                .map_err(|e| format!("CSV reporter: {e}"))?;
+                Arc::new(crate::native_reporter::DebugReporter {
+                    progress,
+                    csv: Arc::new(csv),
+                })
             } else {
-                Arc::new(NoopReporter)
+                progress
             };
+        let reporter: Arc<dyn prusti_ferrum::silver::reporter::reporter::Reporter> = Arc::new(
+            prusti_ferrum::silver::reporter::reporter::PluginAwareReporter {
+                name: "polling_reporter".into(),
+                target,
+                mapper: std::sync::RwLock::new(None),
+            },
+        );
         let warnings = Arc::new(std::sync::Mutex::new(Vec::new()));
         let mut frontend = match prusti_ferrum::native_frontend_with_warning_sink(
             &args,
@@ -80,6 +152,30 @@ fn verify_internal(
                 return Err(format!("native frontend: {error}"));
             }
         };
+        let checked = source_consistency(&program);
+        if config.verify_mode.is_consistency_check()
+            || !matches!(&checked, Ok(errors) if errors.is_empty())
+        {
+            let outcome = checked.map(|errors| {
+                if errors.is_empty() {
+                    VerificationResultKind::Success
+                } else {
+                    VerificationResultKind::ConsistencyErrors(errors)
+                }
+            });
+            for warning in frontend.take_warnings() {
+                log::warn!("Ferrum: {warning}");
+            }
+            let stop = frontend.stop().map_err(|e| format!("shutdown: {e}"));
+            for warning in frontend.take_warnings() {
+                log::warn!("Ferrum: {warning}");
+            }
+            return match (outcome, stop) {
+                (Ok(result), Ok(())) => Ok(result),
+                (Err(error), Ok(())) | (Ok(_), Err(error)) => Err(error),
+                (Err(error), Err(cleanup)) => Err(format!("{error}; {cleanup}")),
+            };
+        }
         let result = frontend
             .verify(&program)
             .map_err(|e| format!("verification: {e}"));
@@ -184,6 +280,119 @@ mod tests {
         program::{Method, MethodData, Program},
         statement::{Stmt, StmtKind},
     };
+    #[test]
+    #[ignore = "requires real Z3, PRUSTI_DUMP_DEBUG_INFO=true and a temporary PRUSTI_LOG_DIR"]
+    fn configured_debug_output_writes_report_and_cfg() {
+        assert!(prusti_utils::config::dump_debug_info());
+        std::env::var_os("Z3_EXE").expect("set Z3_EXE");
+        std::env::var_os("PRUSTI_LOG_DIR").expect("set a temporary PRUSTI_LOG_DIR");
+        std::thread::Builder::new()
+            .stack_size(128 * 1024 * 1024)
+            .spawn(|| {
+                let m = Method::new(MethodData {
+                    name: "debug_fixture".into(),
+                    formal_args: vec![],
+                    formal_returns: vec![],
+                    pres: vec![],
+                    posts: vec![],
+                    body: Some(Stmt::new(
+                        StmtKind::Assert(Exp::new(ExpKind::TrueLit, Metadata::default())),
+                        Metadata::default(),
+                    )),
+                    meta: Metadata::default(),
+                });
+                let program = Program::new(
+                    vec![],
+                    vec![],
+                    vec![],
+                    vec![],
+                    vec![m],
+                    vec![],
+                    Metadata::default(),
+                );
+                let config = ViperBackendConfig::new(
+                    viper::VerificationBackend::Ferrum,
+                    prusti_utils::config::VerifyMode::Verify,
+                );
+                let (sender, _receiver) = std::sync::mpsc::channel();
+                let result = verify(program, config, Default::default(), sender);
+                assert!(
+                    matches!(result, VerificationResultKind::Success),
+                    "{result:?}"
+                );
+                let dir = prusti_utils::config::log_dir().join("viper_tmp/program");
+                assert!(dir.join("debug_fixture.dot").is_file());
+                let report = std::fs::read_to_string(dir.join("report.csv")).unwrap();
+                assert!(
+                    report.contains("EntitySuccessMessage,debug_fixture"),
+                    "{report}"
+                );
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    #[test]
+    #[ignore = "requires real Z3; set Z3_EXE"]
+    fn consistency_mode_checks_without_solving_assertions() {
+        std::env::var_os("Z3_EXE").expect("set Z3_EXE");
+        std::thread::Builder::new()
+            .stack_size(128 * 1024 * 1024)
+            .spawn(|| {
+                let method = |name: &str| {
+                    Method::new(MethodData {
+                        name: name.into(),
+                        formal_args: vec![],
+                        formal_returns: vec![],
+                        pres: vec![],
+                        posts: vec![],
+                        body: Some(Stmt::new(
+                            StmtKind::Assert(Exp::new(ExpKind::FalseLit, Metadata::default())),
+                            Metadata::default(),
+                        )),
+                        meta: Metadata::default(),
+                    })
+                };
+                let program = |methods| {
+                    Program::new(
+                        vec![],
+                        vec![],
+                        vec![],
+                        vec![],
+                        methods,
+                        vec![],
+                        Metadata::default(),
+                    )
+                };
+                let config = ViperBackendConfig::new(
+                    viper::VerificationBackend::Ferrum,
+                    prusti_utils::config::VerifyMode::ConsistencyCheck,
+                );
+                let (sender, _receiver) = std::sync::mpsc::channel();
+                let good = verify(
+                    program(vec![method("m")]),
+                    config.clone(),
+                    Default::default(),
+                    sender.clone(),
+                );
+                assert!(matches!(good, VerificationResultKind::Success), "{good:?}");
+                let bad = verify(
+                    program(vec![method("m"), method("m")]),
+                    config,
+                    Default::default(),
+                    sender,
+                );
+                assert!(
+                    matches!(bad, VerificationResultKind::ConsistencyErrors(e) if !e.is_empty()),
+                    "duplicate names not rejected"
+                );
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
     #[test]
     #[ignore = "requires real Z3 and PRUSTI_REPORT_VIPER_MESSAGES=true"]
     fn configured_reporter_emits_and_deduplicates_selected_method() {

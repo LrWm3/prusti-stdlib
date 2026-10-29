@@ -140,6 +140,12 @@ impl VerificationRequest {
     pub(crate) fn send(&self, mtx_tx_verreq: &sync::Mutex<mpsc::Sender<ServerRequest>>) {
         let request = self.build_request();
 
+        #[cfg(feature = "ferrum")]
+        if self.backend_config.verify_mode.is_encode_only() {
+            if let ServerVerificationRequest::FerrumRequest(Err(error), ..) = &request {
+                panic!("{error}");
+            }
+        }
         if !self.backend_config.verify_mode.is_encode_only() {
             mtx_tx_verreq
                 .lock()
@@ -157,6 +163,23 @@ impl VerificationRequest {
                     let program = vir::with_vcx(|vcx| {
                         prusti_ferrum::program_to_silver(vcx.get_program(self.program))
                             .map_err(|e| format!("VIR conversion: {e:?}"))
+                    })
+                    .and_then(|program| {
+                        if config::dump_viper_program() {
+                            let rendered =
+                                prusti_ferrum::silver::ast::pretty::pretty_printer::pretty_node(
+                                    &prusti_ferrum::silver::ast::utility::nodes::Node::Program(
+                                        program.clone(),
+                                    ),
+                                )
+                                .map_err(|e| format!("Viper program printing: {e:?}"))?;
+                            let namespace = "viper_program";
+                            let filename =
+                                format!("{}.vpr", self.program.get_name_with_check_mode());
+                            log::info!("Dumping Viper program to '{namespace}/{filename}'");
+                            prusti_utils::report::log::report(namespace, filename, rendered);
+                        }
+                        Ok(program)
                     });
                     ServerVerificationRequest::FerrumRequest(
                         program,

@@ -306,12 +306,8 @@ impl ViperBackendConfig {
 
                 verifier_args.push(prover_args);
 
-                // The JVM backend configures its logging framework here. Ferrum
-                // has no corresponding active logger configuration; preserve any
-                // user-supplied log option rather than silently removing it.
-                if backend == VerificationBackend::Silicon {
-                    verifier_args.extend(vec!["--logLevel".to_string(), "ERROR".to_string()]);
-                }
+                // Keep backend informational output quiet for both implementations.
+                verifier_args.extend(vec!["--logLevel".to_string(), "ERROR".to_string()]);
 
                 if let Some(check_timeout) = config::check_timeout() {
                     verifier_args.push("--checkTimeout".to_string());

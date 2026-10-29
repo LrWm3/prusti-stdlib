@@ -35,3 +35,11 @@ The raw local fixture, binary/hash, command, dump and outcome records are in
 smoke ran four independent service starts and eight requests with caching off;
 all completed and emitted the opt-in phase events. It ran on a loaded host and
 does not establish a speedup or a detailed solver-time split.
+
+The adapter now pins Ferrum `dfbb28053422681cf39d3af8213a8753d076dd06` and passes
+`--logLevel ERROR` to both native Ferrum and JVM Silicon. Ferrum now defaults to
+INFO and supports explicit INFO/ERROR; reporter events and verification failures
+remain independent of that filter. This update carries owned strict-operator
+returns, runtime guard fallback and typed callback/cleanup error fixes. The
+iterator results above remain the recorded earlier checkpoint; this pin change
+does not claim a fresh full iterator matrix or measured verification speedup.

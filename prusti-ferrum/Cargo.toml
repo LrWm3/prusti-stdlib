@@ -6,9 +6,9 @@ license = "MPL-2.0"
 
 [dependencies]
 vir = { path = "../vir" }
-ferrum-silver = { git = "https://github.com/LrWm3/ferrum.git", rev = "59423415dfd7e97d143183ea417bec5180f2f153" }
-ferrum-silicon = { git = "https://github.com/LrWm3/ferrum.git", rev = "59423415dfd7e97d143183ea417bec5180f2f153" }
-ferrum = { git = "https://github.com/LrWm3/ferrum.git", rev = "59423415dfd7e97d143183ea417bec5180f2f153" }
+ferrum-silver = { git = "https://github.com/LrWm3/ferrum.git", rev = "dfbb28053422681cf39d3af8213a8753d076dd06" }
+ferrum-silicon = { git = "https://github.com/LrWm3/ferrum.git", rev = "dfbb28053422681cf39d3af8213a8753d076dd06" }
+ferrum = { git = "https://github.com/LrWm3/ferrum.git", rev = "dfbb28053422681cf39d3af8213a8753d076dd06" }
 num-bigint = "=0.4.6"
 prusti-backend-types = { path = "../prusti-backend-types" }
 rustc-hash = "1.1"

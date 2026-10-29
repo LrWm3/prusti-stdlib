@@ -880,12 +880,10 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             let mut let_bind = WandOldOuter::LetBind(Vec::new());
             let (wand, _) = self.coupled_wand(&edge, &mut let_bind)?;
             let wand = self.with_restoration_wand(wand, &edge, &mut let_bind, false, false)?;
-            // The empty resource wand is a tautology and does not need a
-            // packaged wand instance at the loop boundary.
+            // A wand that restores no resources or expiry facts is a
+            // tautology. Its antecedent can mention a label inside the loop,
+            // which is not available on the loop's first entry.
             if matches!(
-                wand.lhs.kind,
-                &vir::ExprKindData::Const(&vir::ConstData::Bool(true))
-            ) && matches!(
                 wand.rhs.kind,
                 &vir::ExprKindData::Const(&vir::ConstData::Bool(true))
             ) {

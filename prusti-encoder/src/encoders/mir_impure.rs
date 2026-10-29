@@ -978,6 +978,14 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     }
                     to_skip.push(key);
                     self.stmts(before);
+                    if matches!(
+                        wand.rhs.kind,
+                        vir::ExprKindData::Const(vir::ConstData::Bool(true))
+                    ) {
+                        self.stmt(self.vcx.mk_exhale_stmt(wand.lhs));
+                        self.stmts(after);
+                        continue;
+                    }
                     if let Some(footprint) = &mut footprint {
                         footprint.parts.push(self.vcx.mk_wand_expr(wand));
                         // Import the resources before applying the wand. In a

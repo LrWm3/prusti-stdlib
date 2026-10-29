@@ -27,6 +27,17 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         let (wand, rhs) = self.coupled_wand(edge, &mut old_outer)?;
         let wand =
             self.with_restoration_wand(wand, edge, &mut old_outer, !package, footprint.is_some())?;
+        // P --* true needs no stored obligation. Applying it only consumes P;
+        // packaging it establishes no resource or functional fact.
+        if matches!(
+            wand.rhs.kind,
+            vir::ExprKindData::Const(vir::ConstData::Bool(true))
+        ) {
+            if !package {
+                self.stmt(self.vcx.mk_exhale_stmt(wand.lhs));
+            }
+            return Ok(());
+        }
         if !package {
             if let Some(footprint) = footprint {
                 footprint.parts.push(self.vcx.mk_wand_expr(wand));

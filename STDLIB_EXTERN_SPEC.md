@@ -1773,6 +1773,18 @@ The core-only crate, existing mutable trait positive, and both wrong replace
 postconditions pass (seven checks,
 `target/stdlib-im4-refinement77-extern-spec-logs`).
 
+The full iterator library regression gate now passes. Resource-only
+obligations of the form `P --* true` are omitted at loop boundaries, where P
+could mention a label unavailable on the first entry; applying such an
+obligation still checks and consumes P. Packaging it needs no stored wand.
+The independent build-78 run excludes the experimental collection-state
+changes and verifies the full library in 5m11s
+(`/tmp/prusti-im4-library78-full.log`). All four selected loop false/wrong
+controls produce exactly their intended diagnostics (five checks including
+Rust checking, `target/stdlib-im4-loop78-default-iterator-spec-logs`). This
+closes those regression failures, not the remaining native reference-element
+value and combined prefix-loop gates.
+
 The first step is a prerequisite for the others: adding an abstract predicate
 only to call-site contracts would not establish that a generic implementation
 actually preserves it.

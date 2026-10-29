@@ -27,7 +27,9 @@ are available through the existing Prusti options. Counterexamples use raw
 converter data, and selected method results share error deduplication with the
 final result. Viper program dumps, consistency-check-only mode and CSV/CFG debug
 output use the existing Prusti options. This is an integration in progress; broader
-compatibility and performance measurements remain outstanding.
+compatibility and performance measurements remain outstanding. The existing SMT
+wrapper options are supported; analyzer cleanup errors retain the primary result
+and are reported as backend errors.
 
 The current Rust encoder has a pre-existing panic-path issue: its `Never`
 postcondition makes a subsequent `exhale false` unreachable. Both the exact

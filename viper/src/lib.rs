@@ -22,7 +22,6 @@ mod cache;
 // used by prusti-server
 pub mod java_exception;
 pub mod silicon_counterexample;
-#[cfg(feature = "jvm")]
 pub mod smt_manager;
 mod verification_backend;
 #[cfg(feature = "jvm")]

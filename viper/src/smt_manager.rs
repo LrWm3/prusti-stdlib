@@ -107,9 +107,16 @@ impl SmtManager {
     }
 
     pub fn stop_and_check(&mut self) {
+        self.try_stop_and_check().unwrap();
+    }
+
+    /// Finish the manager and report listener, analyzer and filesystem errors.
+    pub fn try_stop_and_check(&mut self) -> Result<(), String> {
         if let Some(connection) = self.connection.take() {
-            connection.termination_shot.send(()).unwrap();
-            let trace_files = connection.smt_listener.join().unwrap();
+            let sent = connection.termination_shot.send(());
+            let joined = connection.smt_listener.join();
+            let trace_files = joined.map_err(|_| "SMT manager listener panicked".to_string())?;
+            sent.map_err(|_| "SMT manager listener already stopped".to_string())?;
             for trace_file in trace_files {
                 let trace_file = PathBuf::from(trace_file);
                 // Since Silicon kills the SMT solver, there is no guarantee
@@ -131,12 +138,15 @@ impl SmtManager {
                     pop_scopes_by_one: false,
                     trace_quantifier_triggers: None,
                 };
-                smt_log_analyzer::analyze(&trace_file, settings).unwrap();
+                smt_log_analyzer::analyze(&trace_file, settings)
+                    .map_err(|e| format!("analyze {}: {e}", trace_file.display()))?;
                 if !self.preserve_trace_files {
-                    std::fs::remove_file(trace_file).unwrap();
+                    std::fs::remove_file(&trace_file)
+                        .map_err(|e| format!("remove {}: {e}", trace_file.display()))?;
                 }
             }
         }
+        Ok(())
     }
 }
 

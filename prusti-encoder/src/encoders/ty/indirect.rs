@@ -254,7 +254,15 @@ impl TaskEncoder for IndirectPredicatesEnc {
                                     let bounds = vir::expr! { (([zero]) <= (index)) && ((index) < (extent)) };
                                     quantify_resources(vcx,
                                         vcx.alloc_slice(&[index_decl.as_dyn()]),
-                                        vcx.alloc_slice(&[vcx.mk_trigger(&[snap.as_dyn()])]),
+                                        // Executable indexing observes the native array
+                                        // lookup; specifications can instead observe the
+                                        // canonical sequence. Either must instantiate the
+                                        // resource, even when `to_seq` occurs only beneath
+                                        // this quantifier and has no ground application.
+                                        vcx.alloc_slice(&[
+                                            vcx.mk_trigger(&[vcx.mk_seq_index_expr(elements, index)]),
+                                            vcx.mk_trigger(&[array.index_generic(input.snap.downcast_ty(), index).as_dyn()]),
+                                        ]),
                                         bounds, resources,
                                     ).kind
                                 }),

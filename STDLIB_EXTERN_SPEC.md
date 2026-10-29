@@ -1973,6 +1973,23 @@ the generated conversion helpers. Earlier equivalent runs still fail inside
 those helpers, and the two-reference positive remains unresolved. This single
 successful run does not yet establish a reliable native acceptance gate.
 
+The indexed reference-array regression is repaired as a separate checkpoint.
+Its quantified permissions now match both the native array lookup used by
+executable indexing and the canonical sequence lookup used by specifications.
+A sequence mentioned only beneath a quantifier did not provide the ground
+term needed to activate the previous lookup bridge. Replaying the failed SMT
+query reports `incomplete quantifiers`, not a timeout. The change adds no
+permission or value assumptions. Fixed-length reads/updates, reference
+replacement, and a new const-generic arbitrary-index update/framing pair all
+pass: 11 checks in `target/stdlib-im4-array115-iterator-spec-logs` (build 115,
+600-second program / 30-second assertion time bounds, fresh targets).
+
+Explicit lookup triggers in the generated conversion helpers also let the
+native holder pass on build 114 (156.73s). They do not yet close the native
+reference gate: the two-yield reference caller still reports helper permission
+and aggregate-state failures. The helper-trigger change remains experimental
+pending that gate, and native contracts remain outside the accepted suite.
+
 The first step is a prerequisite for the others: adding an abstract predicate
 only to call-site contracts would not establish that a generic implementation
 actually preserves it.

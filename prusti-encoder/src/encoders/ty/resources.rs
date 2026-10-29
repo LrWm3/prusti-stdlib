@@ -561,17 +561,21 @@ fn emit_sequence_state<'vir>(
                 recursive,
             ),
         );
-        program.add_function(vcx.mk_function(
-            sequence_state_function(),
-            (sequence, ty, start),
-            vcx.alloc_slice(&[vir::expr! { ((zero) <= (i)) && ((i) <= (length)) }, pre]),
-            vcx.alloc_slice(&[vcx.mk_eq_expr(
-                vcx.mk_collection_len_expr(vcx.mk_result(vcx.mk_ty_seq(state_type()))),
-                vcx.mk_bin_op_expr(vir::BinOpKind::Sub, length, i)
-                    .downcast_ty::<vir::Int>(),
-            )]),
-            None,
-            Some(body),
-        ));
+        program.add_function(
+            vcx.opaque_function(
+                vcx.mk_function(
+                    sequence_state_function(),
+                    (sequence, ty, start),
+                    vcx.alloc_slice(&[vir::expr! { ((zero) <= (i)) && ((i) <= (length)) }, pre]),
+                    vcx.alloc_slice(&[vcx.mk_eq_expr(
+                        vcx.mk_collection_len_expr(vcx.mk_result(vcx.mk_ty_seq(state_type()))),
+                        vcx.mk_bin_op_expr(vir::BinOpKind::Sub, length, i)
+                            .downcast_ty::<vir::Int>(),
+                    )]),
+                    None,
+                    Some(body),
+                ),
+            ),
+        );
     });
 }

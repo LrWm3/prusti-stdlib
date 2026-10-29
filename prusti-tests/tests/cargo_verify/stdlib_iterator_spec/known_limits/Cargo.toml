@@ -146,6 +146,3 @@ path = "im2_prefix_ghost_quantified_int.rs"
 
 [workspace]
 
-[[bin]]
-name = "im4_array_symbolic_frame"
-path = "im4_array_symbolic_frame.rs"

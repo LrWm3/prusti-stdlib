@@ -274,19 +274,17 @@ impl TaskEncoder for ResourceCollectionEnc {
             let extent = vcx
                 .mk_bin_op_expr(vir::BinOpKind::Sub, length, i)
                 .downcast_ty::<vir::Int>();
-            let offset = vcx
-                .mk_bin_op_expr(vir::BinOpKind::Sub, j, i)
+            let result_element = vcx.mk_seq_index_expr(result, j).downcast_ty::<vir::CSnap>();
+            let absolute_index = vcx
+                .mk_bin_op_expr(vir::BinOpKind::Add, j, i)
                 .downcast_ty::<vir::Int>();
-            let result_element = vcx
-                .mk_seq_index_expr(result, offset)
-                .downcast_ty::<vir::CSnap>();
-            let observed = state(false, j);
+            let observed = state(false, absolute_index);
             let elements = vcx.mk_forall_expr(
                 variables,
-                vcx.alloc_slice(&[vcx.mk_trigger(&[observed.as_dyn()])]),
-                vir::expr! { ([range(i)]) ==> ((result_element) == (observed)) },
+                vcx.alloc_slice(&[vcx.mk_trigger(&[result_element.as_dyn()])]),
+                vir::expr! { (((zero) <= (j)) && ((j) < (extent))) ==> ((result_element) == (observed)) },
             );
-            functions.push(vcx.mk_function(
+            functions.push(vcx.opaque_function(vcx.mk_function(
                 raw_sequence,
                 args,
                 vcx.alloc_slice(&[
@@ -299,8 +297,13 @@ impl TaskEncoder for ResourceCollectionEnc {
                 ]),
                 None,
                 Some(sequence_body),
-            ));
+            )));
             let mut methods = Vec::new();
+            // Unfold these recursive observers only in the conversion proof.
+            // Client frames use their checked contracts, preventing unrelated
+            // heap observations from repeatedly instantiating recursive tails.
+            let revealed_sequence_state =
+                |group, index| vcx.reveal_function(sequence_state(group, index));
             for packing in [true, false] {
                 let source = !packing;
                 let target = packing;
@@ -311,7 +314,7 @@ impl TaskEncoder for ResourceCollectionEnc {
                 let tail = vcx.mk_local_ex(tail_decl);
                 let mut body = vec![
                     vcx.mk_local_decl_stmt(saved_decl, Some(state(source, i))),
-                    vcx.mk_local_decl_stmt(tail_decl, Some(sequence_state(source, next))),
+                    vcx.mk_local_decl_stmt(tail_decl, Some(revealed_sequence_state(source, next))),
                 ];
                 if !packing {
                     // The group's body establishes the element's type. Open it
@@ -337,7 +340,9 @@ impl TaskEncoder for ResourceCollectionEnc {
                 body.push(vcx.mk_assert_stmt(vcx.mk_eq_expr(frame, assembled)));
                 body.extend(conversion.indexed_statements(element(i), i, packing));
                 body.push(vcx.mk_assert_stmt(vcx.mk_eq_expr(state(target, i), saved)));
-                body.push(vcx.mk_assert_stmt(vcx.mk_eq_expr(sequence_state(source, next), tail)));
+                body.push(
+                    vcx.mk_assert_stmt(vcx.mk_eq_expr(revealed_sequence_state(source, next), tail)),
+                );
                 body.push(
                     (if packing { pack } else { unpack })(
                         seq,
@@ -348,13 +353,15 @@ impl TaskEncoder for ResourceCollectionEnc {
                     .alloc(),
                 );
                 body.push(vcx.mk_assert_stmt(vcx.mk_eq_expr(state(target, i), saved)));
-                body.push(vcx.mk_assert_stmt(vcx.mk_eq_expr(sequence_state(target, next), tail)));
+                body.push(
+                    vcx.mk_assert_stmt(vcx.mk_eq_expr(revealed_sequence_state(target, next), tail)),
+                );
                 let statements = vcx.alloc_slice(&[
-                    vcx.mk_local_decl_stmt(frame_decl, Some(sequence_state(source, i))),
+                    vcx.mk_local_decl_stmt(frame_decl, Some(revealed_sequence_state(source, i))),
                     vcx.mk_if_stmt(vir::expr! { (i) < (length) }, vcx.alloc_slice(&body), &[]),
                     // Retain the aggregate equality as a proof fact before
                     // checking pointwise observations of the completed state.
-                    vcx.mk_assert_stmt(vcx.mk_eq_expr(sequence_state(target, i), frame)),
+                    vcx.mk_assert_stmt(vcx.mk_eq_expr(revealed_sequence_state(target, i), frame)),
                 ]);
                 let block = vcx.mk_cfg_block(
                     &vir::CfgBlockLabelData::Start,

@@ -1575,15 +1575,22 @@ The slowest case took 237 seconds; these checks need the longer limit.
 Logs are in `target/stdlib-array38-iterator-spec-logs` (the final baseline run
 used build 41; the directory name is retained from the initial experiment).
 
-A symbolic-length caller still cannot prove its aggregate expiry frame after
-unpacking. The smaller standalone proof was not reproducible, and the pledge
-simplification experiments have been removed. The remaining reproduction is
-[im4_array_symbolic_frame.rs](prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/im4_array_symbolic_frame.rs).
-It must pass with wrong-frame and `false` controls before claiming arbitrary
-array value framing. Nested collections and Vec ownership remain open.
+A symbolic-length caller now proves its aggregate call and expiry frames for
+`[&mut u32; N]` through generic identity. The recursive sequence observers are
+opaque to client proofs and explicitly revealed inside the checked conversion
+proofs. Their bodies and postconditions are still verified; this change adds no
+assumed preservation facts. The raw observer's pointwise contract is triggered
+by an index into its result, avoiding recursive heap-observation triggers.
+The [symbolic client](prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/mut_generic_array_symbolic_pass.rs)
+passes native verification (55.20s), and its `false` and unequal-expiry-frame
+controls reject the intended assertion and pledge. The trusted executable
+entry point is only a runtime exercise; the symbolic relay and generic identity
+are verified without trust. The earlier pledge simplification experiments
+remain removed. Arrays of reference-bearing structs still expose a conversion
+state-proof gap; nested collections and Vec ownership also remain open.
 
 This is a development checkpoint, not an IM4 acceptance result. Symbolic
-collection conversion, generic parameters nested in argument type constructors,
+collection conversion for further element shapes, generic parameters nested in argument type constructors,
 collection state transport, native pledges across restoration stages, complete
 diagnostics for unsupported frames, and full regression validation remain
 required. The PCG pointer on this development

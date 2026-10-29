@@ -145,6 +145,18 @@ pub fn mut_slice_contents<T>(slice: &&mut [T]) -> Seq<T> {
     Seq::from_slice(&**slice)
 }
 
+/// A permission-checked snapshot of the mutable referents owned by a value.
+/// This specification-only value does not grant access to the observed heap.
+#[derive(Clone, Copy)]
+pub struct ResourceState(());
+
+/// Observe the current state of all mutable referents owned by `value`.
+/// Equality can express heap framing across generic calls and borrow expiry.
+#[pure]
+pub fn resource_state<T>(_value: &T) -> ResourceState {
+    panic!("resource_state is a specification-only observation")
+}
+
 /// Observe one current referent value through an owned mutable slice.
 /// This specification-only operation checks the index and permission to both
 /// the slice and its selected referent. The returned snapshot grants no heap

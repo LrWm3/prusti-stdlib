@@ -1448,8 +1448,8 @@ moves, use compiler-derived type outlives bounds, and exclude function-item
 and raw-pointer type arguments from owned resources. A short container borrow
 does not become a lifetime bound on its generic element. Relabeling collapses
 identity borrow flows. Validation passed all 250 numbered corpus files, four
-projection tests, eight shape tests, and six body tests. The root submodule
-remains at `dbb94c8` until its encoder supports the same group interface;
+projection tests, eight shape tests, and six body tests. The stable work branch keeps the submodule
+at `dbb94c8` until its encoder supports the same group interface;
 these PCG results alone do not close IM4.
 
 The [generic resource model](prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/generic_resources.vpr)
@@ -1491,10 +1491,36 @@ snapshot. Input resources are not returned twice when their outer storage
 remains borrowed. The generic method interface stays at its definition-site
 shape under substitution.
 
-This is a development checkpoint, not an IM4 acceptance result. Concrete
-call-site group conversions, value/state transport, native pledges across
-restoration stages, complete diagnostics for unsupported frames, and full
-regression validation remain required. The PCG pointer on this development
+The next development chunk adds checked concrete/group conversions for finite
+mutable-reference, nested-reference, struct/tuple, and enum shapes at whole
+parameter boundaries. Calls pack their input resources, unpack their returned
+resources, and repeat the inverse conversions around restoration-wand
+application. The operations fold/unfold actual predicate bodies; they do not
+assume conversion postconditions. Definition-site resource expressions are
+instantiated before inserting caller snapshots, avoiding accidental repeated
+substitution of identically named type parameters.
+
+`resource_state(&value)` is a specification-only, permission-checked observation
+with a dedicated logical state datatype. Known finite shapes observe current
+referent snapshots recursively; an unknown group retains an abstract,
+permission-dependent state. Generic functions can explicitly promise state
+preservation after a call and at borrow expiry. This is separate from shallow
+snapshot equality: returning the same outer pointer does not by itself frame
+references stored behind it. A nested-reference client now proves the initial
+value survives a generic call, writes 7, preserves the stored reference, and
+exports the final value 7. Generic identity also composes through a second
+separately verified generic body.
+All 22 focused checks pass: six positive verifications and runtime executions,
+nine exact negative diagnostics, and a Rust check. The controls cover false
+claims, wrong values, a mutation violating a state frame, missing permissions,
+and executable misuse of the observer. Logs are in
+`target/stdlib-im4-finite-iterator-logs`; the full build also passed.
+
+This is a development checkpoint, not an IM4 acceptance result. Symbolic
+collection conversion, generic parameters nested in argument type constructors,
+collection state transport, native pledges across restoration stages, complete
+diagnostics for unsupported frames, and full regression validation remain
+required. The PCG pointer on this development
 branch is `f610569`; the stable work branch retains the earlier pointer until
 the combined encoder passes its gates.
 

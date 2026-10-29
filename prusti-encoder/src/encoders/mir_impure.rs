@@ -984,12 +984,13 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 let call = call_edge.metadata();
                 // Deduplicate obligations, not entire calls: one call can
                 // produce several wands that expire independently.
-                for (id, wand) in self.encode_function_call_wands(coupled)? {
+                for (id, wand, before, after) in self.encode_function_call_wands(coupled)? {
                     let key = (call.location().block, id, edge.conditions().clone());
                     if to_skip.contains(&key) {
                         continue;
                     }
                     to_skip.push(key);
+                    self.stmts(before);
                     if let Some(footprint) = &mut footprint {
                         footprint.parts.push(self.vcx.mk_wand_expr(wand));
                         // Import the resources before applying the wand. In a
@@ -997,6 +998,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         self.stmt(self.vcx.mk_assert_stmt(wand.lhs));
                     }
                     self.stmt(self.vcx.mk_apply_stmt(wand));
+                    self.stmts(after);
                 }
             }
             BorrowPcgEdgeKind::Coupled(edge)
@@ -1040,7 +1042,16 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
     pub(crate) fn encode_function_call_wands(
         &mut self,
         edge: &PcgCoupledEdgeKind<'vir>,
-    ) -> EncodeResult<'vir, Vec<(usize, vir::Wand<'vir>)>, E> {
+    ) -> EncodeResult<
+        'vir,
+        Vec<(
+            usize,
+            vir::Wand<'vir>,
+            Vec<vir::Stmt<'vir>>,
+            Vec<vir::Stmt<'vir>>,
+        )>,
+        E,
+    > {
         let PcgCoupledEdgeKind(FunctionCallOrLoop::FunctionCall(call_edge)) = edge else {
             unreachable!("expected a function-call edge")
         };
@@ -1241,7 +1252,9 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 .actions(self.pcg_ctxt())
                 .unwrap()
                 .into_iter()
-                .filter(|action| !already_unblocked.contains(action.edge()) && include(action.edge()))
+                .filter(|action| {
+                    !already_unblocked.contains(action.edge()) && include(action.edge())
+                })
                 .collect::<Vec<_>>();
             let mut footprint = Footprint {
                 actions: &actions,

@@ -9,6 +9,7 @@ use crate::encoders::{
         indirect::{
             ExprInput, IndirectPredicatesEnc, SnapshotBindings, projection_for_generalized_idx,
         },
+        resource_conversion::ResourceConversionEnc,
     },
 };
 use pcg::{
@@ -323,29 +324,62 @@ impl<'vir> WandEncOutput<'vir> {
             local_snap = caster.cast_to_callee_ctx(local_snap);
         }
         let substitutions = self.generics_subst(call_ctx, vcx, deps);
-        Some(vcx.with_local_subst(substitutions, || {
-            vcx.mk_conj(
-                &predicates
-                    .iter()
-                    .map(|p| {
-                        p.reify(
-                            vcx,
-                            ExprInput {
-                                snap: local_snap,
-                                heap_label,
-                                bindings,
-                                guard: None,
-                                extent: None,
-                                metadata: None,
-                                binder_depth: 0,
-                                indexed: None,
-                                resource_path: &[],
-                            },
-                        )
-                    })
-                    .collect::<Vec<_>>(),
-            )
-        }))
+        // Build the definition-site expression before inserting a caller
+        // snapshot. Otherwise a caller's type local can be substituted twice
+        // when it has the same name as a callee parameter.
+        let placeholder = vcx.mk_local_decl("_resource_argument", local_snap.ty());
+        let binding_start = bindings.map(|bindings| bindings.borrow().len());
+        let expression = vcx.mk_conj(
+            &predicates
+                .iter()
+                .map(|p| {
+                    p.reify(
+                        vcx,
+                        ExprInput {
+                            snap: vcx.mk_local_ex(placeholder),
+                            heap_label,
+                            bindings,
+                            guard: None,
+                            extent: None,
+                            metadata: None,
+                            binder_depth: 0,
+                            indexed: None,
+                            resource_path: &[],
+                        },
+                    )
+                })
+                .collect::<Vec<_>>(),
+        );
+        fn instantiate<'vir, T: vir::CompType>(
+            vcx: &'vir vir::VirCtxt<'vir>,
+            expression: vir::Expr<'vir, T>,
+            substitutions: &'vir FxHashMap<&'vir str, vir::ExprDyn<'vir>>,
+            snapshot: vir::ExprSnap<'vir>,
+        ) -> vir::Expr<'vir, T> {
+            use vir::{Foldable, Folder, Reify};
+            struct Insert<'vir>(vir::ExprSnap<'vir>);
+            impl<'vir> Folder<'vir, (), !> for Insert<'vir> {
+                fn fold_expr(&mut self, e: vir::ExprDyn<'vir>) -> Option<vir::ExprDyn<'vir>> {
+                    if matches!(e.kind, vir::ExprKindData::Local(local) if local.name == "_resource_argument")
+                    {
+                        Some(self.0.as_dyn())
+                    } else {
+                        e.super_fold_with(self)
+                    }
+                }
+            }
+            let expression =
+                vcx.with_local_subst(substitutions, || expression.lift().reify(vcx, ()));
+            expression
+                .fold_with(&mut Insert(snapshot))
+                .unwrap_or(expression)
+        }
+        if let (Some(bindings), Some(start)) = (bindings, binding_start) {
+            for (_, value) in &mut bindings.borrow_mut()[start..] {
+                *value = instantiate(vcx, *value, substitutions, local_snap);
+            }
+        }
+        Some(instantiate(vcx, expression, substitutions, local_snap))
     }
 
     pub fn indirect_pres<'a, E: TaskEncoder>(
@@ -475,7 +509,7 @@ impl<'vir> WandEncOutput<'vir> {
             visitor,
         )
         .into_iter()
-        .map(|(_, wand)| wand)
+        .map(|(_, wand, _, _)| wand)
         .collect()
     }
 
@@ -490,7 +524,12 @@ impl<'vir> WandEncOutput<'vir> {
         extra_pledges: &[PledgeExpr<'vir>],
         selected: Option<&[usize]>,
         visitor: &mut ImpureEncVisitor<'vir, '_, E>,
-    ) -> Vec<(usize, vir::Wand<'vir>)> {
+    ) -> Vec<(
+        usize,
+        vir::Wand<'vir>,
+        Vec<vir::Stmt<'vir>>,
+        Vec<vir::Stmt<'vir>>,
+    )> {
         let result = visitor
             .vcx
             .mk_local_labelled_old_expr(arguments[mir::RETURN_PLACE.as_usize()], label_post);
@@ -518,7 +557,35 @@ impl<'vir> WandEncOutput<'vir> {
             ) else {
                 continue;
             };
-            wands.push((id, wand));
+            let signature = RustSignature::new(self.function_data.def_id());
+            let mut convert = |node: FunctionShapeNode<Generalized>, pack| {
+                let source = if node.mir_local() == mir::RETURN_PLACE {
+                    signature.output
+                } else {
+                    signature.inputs[node.mir_local().index() - 1]
+                };
+                let normalized = source.decompose_compare_normalize(signature.gparams, call_ctx);
+                if let Some(normalized) = normalized.filter(|ty| ty.param.specifics.is_param()) {
+                    let conversion = visitor
+                        .deps
+                        .require_dep::<ResourceConversionEnc>(normalized.concrete)
+                        .unwrap();
+                    conversion.at_snapshot(args[node.mir_local()], pack)
+                } else {
+                    Vec::new()
+                }
+            };
+            let before = wand_data
+                .lhs
+                .iter()
+                .flat_map(|node| convert(*node, true))
+                .collect();
+            let after = wand_data
+                .rhs
+                .iter()
+                .flat_map(|node| convert((*node).into(), false))
+                .collect();
+            wands.push((id, wand, before, after));
         }
         wands
     }

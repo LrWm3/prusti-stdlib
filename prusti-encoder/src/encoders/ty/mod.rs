@@ -3,6 +3,7 @@ pub mod inhabited;
 pub mod indirect;
 pub(crate) mod indexed;
 pub(crate) mod resources;
+pub(crate) mod resource_conversion;
 pub mod impure;
 pub mod kinds;
 pub mod use_impure;

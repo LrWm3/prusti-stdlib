@@ -146,6 +146,7 @@ pub enum PrustiBuiltin {
     MutSliceLen,
     MutSliceContents,
     MutSliceReferentValue,
+    ResourceState,
     Seq(SeqOp),
     /// An operation on `Set` (`multiset: false`) or `Multiset` (`true`).
     AnySet {
@@ -160,7 +161,10 @@ pub enum PrustiBuiltin {
 
 impl PrustiBuiltin {
     pub fn reads_heap(self) -> bool {
-        matches!(self, Self::MutSliceContents | Self::MutSliceReferentValue)
+        matches!(
+            self,
+            Self::MutSliceContents | Self::MutSliceReferentValue | Self::ResourceState
+        )
     }
 
     /// Classifies the call to `def_id`. Returns `None` iff the called function
@@ -255,6 +259,7 @@ impl PrustiBuiltin {
                     "mut_ref_shared_same_address" => Self::MutRefSharedSameAddress,
                     "mut_slice_len" => Self::MutSliceLen,
                     "mut_slice_contents" => Self::MutSliceContents,
+                    "resource_state" => Self::ResourceState,
                     "mut_slice_referent_value" => Self::MutSliceReferentValue,
                     "old_start" => Self::Spec(SpecBuiltin::ModeStart(Mode::Old)),
                     "old_end" => Self::Spec(SpecBuiltin::ModeEnd(Mode::Old)),
@@ -324,7 +329,11 @@ impl PrustiBuiltin {
     /// These are forbidden in impure code, and should return an error.
     pub fn is_spec_only(&self) -> bool {
         match self {
-            Self::Spec(_) | Self::SnapEq | Self::SnapNe | Self::MutSliceReferentValue => true,
+            Self::Spec(_)
+            | Self::SnapEq
+            | Self::SnapNe
+            | Self::MutSliceReferentValue
+            | Self::ResourceState => true,
             // `Call`/`Erased` are legitimate only inside a `ghost!` block's
             // dead arm, which is exempt from the spec-only rejection: a stray
             // executable `ghost_call` (i.e. not from a `ghost!` block) would
@@ -676,6 +685,25 @@ impl PrustiBuiltinEnc {
                         .field_snaps_to_snap(vec![value])
                         .upcast_ty()
                 }
+            }
+            PrustiBuiltin::ResourceState => {
+                if let Some(span) = ctxt.span {
+                    ctxt.handle_partial_op_error(
+                        "application.precondition:insufficient.permission",
+                        "insufficient permission to observe resource state",
+                        span,
+                    );
+                }
+                let ty = RustTyDecomposition::from_ty(
+                    BuiltinCtxt::deref(ctxt.sig.inputs()[0]),
+                    ctxt.args.context(),
+                );
+                let conversion = ctxt
+                    .deps
+                    .require_dep::<crate::encoders::ty::resource_conversion::ResourceConversionEnc>(
+                    ty,
+                )?;
+                conversion.observe(ctxt.deref_operand(0)?).upcast_ty()
             }
             PrustiBuiltin::Seq(op) => ctxt.encode_seq(op)?,
             PrustiBuiltin::AnySet { multiset, op } => ctxt.encode_any_set(multiset, op)?,

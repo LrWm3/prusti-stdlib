@@ -23,6 +23,7 @@ pub(crate) struct ResourceGroupEnc;
 pub(crate) struct ResourceCase<'vir> {
     guard: vir::ExprBool<'vir>,
     body: vir::ExprBool<'vir>,
+    state: Option<vir::ExprCSnap<'vir>>,
 }
 
 pub(crate) fn group<'vir>(
@@ -83,6 +84,17 @@ impl<'vir> ResourceUse<'vir> {
             caster: deps.require_dep::<GArgsCastEnc<Pure>>(normalized)?,
             ty: deps.require_dep::<TyExprEnc>(ty)?,
         })
+    }
+    pub fn state<Curr, Next>(
+        self,
+        snap: vir::ExprGenSnap<'vir, Curr, Next>,
+        metadata: vir::ExprGenPSnap<'vir, Curr, Next>,
+    ) -> vir::ExprGenCSnap<'vir, Curr, Next> {
+        state_function("indirect_resource_state").call()(
+            self.caster.cast_to_callee_ctx(snap).downcast_ty(),
+            self.ty.lazy(),
+            metadata,
+        )
     }
     pub fn apply(
         self,
@@ -152,6 +164,7 @@ impl TaskEncoder for ResourceGroupEnc {
             let unit = unit_metadata(deps)?;
             let typ = deps.require_dep::<ParamTypEnc>(())?.typ;
             let mut resources = vec![vcx.mk_eq_expr(typ(vcx.mk_local_ex(s)), ty_expr)];
+            let mut state = Some(empty_state());
             match combined.specifics {
                 TySpecifics::Primitive(_)
                 | TySpecifics::ImmRef(_)
@@ -164,34 +177,57 @@ impl TaskEncoder for ResourceGroupEnc {
                     let address = reference.deref_access(snap.downcast_ty());
                     resources.push(physical.ref_to_pred(vcx, address, None));
                     let nested = ResourceUse::new(deps, referent)?;
+                    state = Some(reference_state(
+                        physical.ref_to_snap(address).downcast_ty(),
+                        nested.state(
+                            physical.ref_to_snap(address),
+                            reference.generic_metadata(snap.downcast_ty()),
+                        ),
+                    ));
                     resources.push(nested.apply(
                         physical.ref_to_snap(address),
                         reference.generic_metadata(snap.downcast_ty()),
                     ));
                 }
                 TySpecifics::StructLike(data) => {
+                    let mut fields = Vec::new();
                     for (field, accessor) in data.fields {
                         let resource = ResourceUse::new(deps, field.ty().decompose(task.params))?;
-                        resources.push(resource.apply(accessor.read(snap.downcast_ty()), unit));
+                        let field = accessor.read(snap.downcast_ty());
+                        fields.push(resource.state(field, unit));
+                        resources.push(resource.apply(field, unit));
                     }
+                    state = Some(fields_state(&fields));
                 }
                 TySpecifics::EnumLike(data) => {
                     let discr =
                         pure.expect_enumlike().snap_to_discr_snap.call()(snap.downcast_ty());
                     for variant in data.variants {
                         let mut fields = vec![];
+                        let mut field_states = vec![];
                         for (field, accessor) in variant.inner.fields {
+                            field_states.push(
+                                ResourceUse::new(deps, field.ty().decompose(task.params))?
+                                    .state(accessor.read(snap.downcast_ty()), unit),
+                            );
                             fields.push(
                                 ResourceUse::new(deps, field.ty().decompose(task.params))?
                                     .apply(accessor.read(snap.downcast_ty()), unit),
                             );
                         }
                         let guard = vcx.mk_eq_expr(discr, variant.data.1.discr);
+                        state = Some(vcx.mk_ternary_expr(
+                            guard,
+                            fields_state(&field_states),
+                            state.unwrap(),
+                        ));
                         let body = vcx.mk_conj(&fields);
                         resources.push(vir::expr! { (guard) ==> (body) });
                     }
                 }
                 TySpecifics::ArrayLike(data) => {
+                    // Collection state remains opaque until the checked indexed conversion is available.
+                    state = None;
                     let element = data.0.decompose(task.params);
                     let resource = ResourceUse::new(deps, element)?;
                     let usize_ty = RustTyDecomposition::from_prim_ty(vcx.tcx().types.usize);
@@ -266,11 +302,13 @@ impl TaskEncoder for ResourceGroupEnc {
             let body = body
                 .fold_with(&mut Substitute(&substitutions))
                 .unwrap_or(body);
-            Ok((Some(ResourceCase { guard, body }), ()))
+            let state = state.map(|s| s.fold_with(&mut Substitute(&substitutions)).unwrap_or(s));
+            Ok((Some(ResourceCase { guard, body, state }), ()))
         })
     }
 
     fn emit_outputs<'vir>(program: &mut task_encoder::Program<'vir>) {
+        emit_state_adt(program);
         let cases = Self::all_outputs_local_no_errors(program)
             .into_iter()
             .flatten()
@@ -300,6 +338,108 @@ impl TaskEncoder for ResourceGroupEnc {
                 params,
                 Some(body),
             ));
+            let resource = group(vcx.mk_local_ex(s), vcx.mk_local_ex(t), vcx.mk_local_ex(m));
+            let vir::ExprKindData::PredicateApp(app) = resource.kind else {
+                unreachable!()
+            };
+            let opaque_state = state_function("opaque_resource_state");
+            program.add_function(vcx.mk_function(
+                opaque_state,
+                (s, t, m),
+                vcx.alloc_slice(&[resource]),
+                &[],
+                None,
+                None,
+            ));
+            let state = cases.iter().fold(
+                opaque_state.call()(vcx.mk_local_ex(s), vcx.mk_local_ex(t), vcx.mk_local_ex(m)),
+                |tail, case| match case.state {
+                    Some(state) => {
+                        vcx.mk_ternary_expr(case.guard, vcx.mk_unfolding_expr(app, state), tail)
+                    }
+                    None => tail,
+                },
+            );
+            program.add_function(vcx.mk_function(
+                state_function("indirect_resource_state"),
+                (s, t, m),
+                vcx.alloc_slice(&[resource]),
+                &[],
+                None,
+                Some(state),
+            ));
         });
     }
+}
+
+/// Dedicated logical state: heap contents are never encoded as owned snapshots.
+pub(crate) fn state_type<'vir>() -> vir::TypeCSnap<'vir> {
+    vir::DomainIdnSnap::new(vir::ViperIdent::new("s_ResourceState"), 0)().downcast_ty()
+}
+fn state_function<'vir>(
+    name: &'vir str,
+) -> vir::FunctionIdn<'vir, (vir::PSnap, vir::TyVal, vir::PSnap), vir::CSnap> {
+    vir::FunctionIdn::new(
+        vir::ViperIdent::new(name),
+        (vir::TYPE_PSNAP, vir::TYPE_TYVAL, vir::TYPE_PSNAP),
+        state_type(),
+    )
+}
+pub(crate) fn empty_state<'vir, Curr, Next>() -> vir::ExprGenCSnap<'vir, Curr, Next> {
+    vir::FunctionIdn::<(), vir::CSnap>::new(vir::ViperIdent::new("ResourceEmpty"), (), state_type())
+        .call()()
+}
+pub(crate) fn reference_state<'vir, Curr, Next>(
+    stored: vir::ExprGenPSnap<'vir, Curr, Next>,
+    nested: vir::ExprGenCSnap<'vir, Curr, Next>,
+) -> vir::ExprGenCSnap<'vir, Curr, Next> {
+    vir::FunctionIdn::<(vir::PSnap, vir::CSnap), vir::CSnap>::new(
+        vir::ViperIdent::new("ResourceReference"),
+        (vir::TYPE_PSNAP, state_type()),
+        state_type(),
+    )
+    .call()(stored, nested)
+}
+pub(crate) fn fields_state<'vir, Curr, Next>(
+    fields: &[vir::ExprGenCSnap<'vir, Curr, Next>],
+) -> vir::ExprGenCSnap<'vir, Curr, Next> {
+    vir::with_vcx(|vcx| {
+        let seq = vcx.mk_seq_literal_expr(vcx.alloc_slice(fields), state_type());
+        vir::FunctionIdn::<vir::Seq, vir::CSnap>::new(
+            vir::ViperIdent::new("ResourceFields"),
+            vcx.mk_ty_seq(state_type()),
+            state_type(),
+        )
+        .call()(seq)
+    })
+}
+fn emit_state_adt<'vir>(program: &mut task_encoder::Program<'vir>) {
+    vir::with_vcx(|vcx| {
+        let empty = vcx.mk_adt_constructor("ResourceEmpty", &[] as &[vir::LocalDeclDyn<'vir>]);
+        let reference = vcx.mk_adt_constructor(
+            "ResourceReference",
+            vcx.alloc_slice(&[
+                vcx.mk_local_decl("resource_stored", vir::TYPE_PSNAP)
+                    .as_dyn(),
+                vcx.mk_local_decl("resource_nested", state_type()).as_dyn(),
+            ]),
+        );
+        let fields = vcx.mk_adt_constructor(
+            "ResourceFields",
+            vcx.alloc_slice(&[vcx
+                .mk_local_decl("resource_fields", vcx.mk_ty_seq(state_type()))
+                .as_dyn()]),
+        );
+        let opaque = vcx.mk_adt_constructor(
+            "ResourceUnknown",
+            vcx.alloc_slice(&[vcx
+                .mk_local_decl("resource_unknown", vir::TYPE_INT)
+                .as_dyn()]),
+        );
+        program.add_adt(vcx.mk_adt(
+            vir::ViperIdent::new("s_ResourceState"),
+            &[],
+            vcx.alloc_slice(&[empty, reference, fields, opaque]),
+        ));
+    });
 }

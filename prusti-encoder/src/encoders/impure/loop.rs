@@ -869,7 +869,7 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     .loop_analysis()
                     .in_loop(call.metadata().location().block, loop_id)
             {
-                for (id, wand) in self.encode_function_call_wands(&edge)? {
+                for (id, wand, _, _) in self.encode_function_call_wands(&edge)? {
                     let (_, guards) = retained_wands
                         .entry((call.metadata().location().block, id))
                         .or_insert_with(|| (wand, Vec::new()));

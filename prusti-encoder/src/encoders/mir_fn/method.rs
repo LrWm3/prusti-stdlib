@@ -1,3 +1,4 @@
+use crate::encoders::ty::resource_conversion::{ResourceConversion, ResourceConversionEnc};
 use pcg::borrow_pcg::FunctionData;
 use prusti_interface::PrustiError;
 use prusti_rustc_interface::{middle::mir, span::def_id::DefId};
@@ -20,12 +21,14 @@ use crate::encoders::{
 
 pub struct MethodCallEnc;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct MethodCallEncOutput<'vir> {
     method: MethodEncOutputRef<'vir>,
     ty_args: GArgsTy<'vir>,
     inputs: Vec<GArgCaster<'vir, Impure>>,
     output: GArgCaster<'vir, Impure>,
+    input_resources: Vec<Option<ResourceConversion<'vir>>>,
+    output_resources: Option<ResourceConversion<'vir>>,
 }
 
 impl<'vir> MethodCallEncOutput<'vir> {
@@ -35,10 +38,18 @@ impl<'vir> MethodCallEncOutput<'vir> {
         ret: vir::ExprRef<'vir>,
     ) -> Vec<vir::Stmt<'vir>> {
         assert_eq!(self.inputs.len(), args.len());
+        let mut stmts = args
+            .iter()
+            .zip(&self.input_resources)
+            .flat_map(|(arg, resources)| {
+                resources
+                    .as_ref()
+                    .map(|conversion| conversion.at_storage(*arg, true))
+                    .unwrap_or_default()
+            })
+            .collect::<Vec<_>>();
         let generics = args.iter().zip(self.inputs.iter());
-        let mut stmts: Vec<_> = generics
-            .filter_map(|(arg, caster)| caster.cast_to_callee_ctx(arg))
-            .collect();
+        stmts.extend(generics.filter_map(|(arg, caster)| caster.cast_to_callee_ctx(arg)));
 
         args.insert(0, ret);
         let call = (self.method.method_ref)(&args, self.ty_args.get_ty(), self.ty_args.get_const())
@@ -48,6 +59,9 @@ impl<'vir> MethodCallEncOutput<'vir> {
         let result = self.output.cast_to_caller_ctx(ret);
         if let Some(result) = result {
             stmts.push(result);
+        }
+        if let Some(conversion) = &self.output_resources {
+            stmts.extend(conversion.at_storage(ret, false));
         }
         stmts
     }
@@ -91,6 +105,20 @@ impl TaskEncoder for MethodCallEnc {
             .output
             .decompose_compare_normalize(signature.gparams, task_key.gargs);
         let output = deps.require_dep::<GArgsCastEnc<Impure>>(normalized)?;
+        let output_resources = normalized
+            .filter(|ty| ty.param.specifics.is_param())
+            .map(|ty| deps.require_dep::<ResourceConversionEnc>(ty.concrete))
+            .transpose()?;
+        let input_resources = signature
+            .inputs
+            .iter()
+            .map(|ty| {
+                ty.decompose_compare_normalize(signature.gparams, task_key.gargs)
+                    .filter(|ty| ty.param.specifics.is_param())
+                    .map(|ty| deps.require_dep::<ResourceConversionEnc>(ty.concrete))
+                    .transpose()
+            })
+            .collect::<Result<Vec<_>, _>>()?;
         Ok((
             (),
             MethodCallEncOutput {
@@ -98,6 +126,8 @@ impl TaskEncoder for MethodCallEnc {
                 ty_args,
                 inputs,
                 output,
+                input_resources,
+                output_resources,
             },
         ))
     }

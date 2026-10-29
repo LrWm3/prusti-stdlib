@@ -52,6 +52,7 @@ pub type TyPureBuiltin<'vir> = <PureTyDatas as TyDatas<'vir>>::BuiltinData;
 
 #[derive(Debug, Clone, Copy)]
 pub enum TyPureBuiltinData {
+    ResourceState,
     Int,
     Real,
     Set,
@@ -474,6 +475,9 @@ impl<'vir> TyPureBuilder<'vir> {
         // by the native Viper `Int`/`Perm`/`Bool` types; nothing is emitted
         // for them.
         let self_type = match &ty.specifics {
+            TySpecifics::Builtin(RustBuiltinData::ResourceState) => {
+                super::resources::state_type().upcast_ty()
+            }
             TySpecifics::Builtin(RustBuiltinData::Int) => vir::TYPE_INT.upcast_ty(),
             TySpecifics::Builtin(RustBuiltinData::Real) => vir::TYPE_PERM.upcast_ty(),
             // The collection builtins are encoded at their most generic

@@ -240,6 +240,7 @@ impl<'tcx> TyDatas<'tcx> for RustTyDatas {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RustBuiltinData<'tcx> {
+    ResourceState,
     Int,
     Real,
     Set(LazyRustTy<'tcx>),
@@ -754,6 +755,7 @@ impl<'tcx> TySpecifics<'tcx, RustTyDatas> {
             EnvQuery::new(vcx.tcx()).is_adt_in_crate(adt, "prusti_contracts")
         }) {
             match adt.non_enum_variant().name.to_string().as_str() {
+                "ResourceState" => Self::Builtin(RustBuiltinData::ResourceState),
                 "Int" => Self::Builtin(RustBuiltinData::Int),
                 "Real" => Self::Builtin(RustBuiltinData::Real),
                 "Set" => Self::Builtin(RustBuiltinData::Set(LazyRustTy(Self::new_param_ty(0)))),

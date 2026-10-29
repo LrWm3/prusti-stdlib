@@ -261,7 +261,9 @@ impl<'a, 'vir> TyUsePureWalker<'a, 'vir> {
                 use super::rust_ty::RustBuiltinData;
                 let no_cast = GArgCaster::NoCast;
                 let casters = match data.0 {
-                    RustBuiltinData::Int | RustBuiltinData::Real => [no_cast, no_cast],
+                    RustBuiltinData::ResourceState
+                    | RustBuiltinData::Int
+                    | RustBuiltinData::Real => [no_cast, no_cast],
                     RustBuiltinData::Set(elem)
                     | RustBuiltinData::Multiset(elem)
                     | RustBuiltinData::Seq(elem) => {
@@ -477,7 +479,10 @@ impl<'vir> TyUsePureRaw<'vir> {
 }
 
 impl<'vir> TyUsePureMutRef<'vir> {
-    pub(crate) fn generic_metadata(&self, snap: vir::ExprCSnap<'vir>) -> vir::ExprPSnap<'vir> {
+    pub(crate) fn generic_metadata<Curr, Next>(
+        &self,
+        snap: vir::ExprGenCSnap<'vir, Curr, Next>,
+    ) -> vir::ExprGenPSnap<'vir, Curr, Next> {
         self.pure.metadata_access.call()(snap)
     }
 

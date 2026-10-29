@@ -471,7 +471,7 @@ impl<'vir> TypeContext<'vir> {
                             ExpKind::AnySetContains(lhs, rhs)
                         }
                         vir::TypeKind::Seq(_) => ExpKind::SeqContains(lhs, rhs),
-                        vir::TypeKind::Map(..) => ExpKind::MapContains(rhs, lhs),
+                        vir::TypeKind::Map(..) => ExpKind::MapContains(lhs, rhs),
                         _ => return Err(ConversionError::UnsupportedExpression),
                     },
                     vir::CollectionBinOpKind::Index => match op.lhs.ty().kind() {
@@ -715,6 +715,72 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires real Z3; set FERRUM_TEST_Z3"]
+    fn vir_map_membership_preserves_key_and_map_order() {
+        let z3 = std::env::var_os("FERRUM_TEST_Z3").expect("set FERRUM_TEST_Z3");
+        std::thread::Builder::new()
+            .stack_size(ferrum::VERIFICATION_STACK_SIZE)
+            .spawn(move || {
+                vir::init_vcx(vir::VirCtxt::new_without_tcx());
+                let programs = vir::with_vcx(|vcx| {
+                    [true, false].map(|present| {
+                        let one = vcx.mk_int::<1>();
+                        let two = vcx.mk_int::<2>();
+                        let empty = vcx.mk_map_empty_expr(one.ty(), one.ty());
+                        let map = vcx.mk_map_update_expr(empty, one, one);
+                        let member = vcx.mk_map_contains_expr(map, if present { one } else { two });
+                        let assertion = vcx.mk_assert_stmt(member);
+                        let label = vcx.alloc(vir::CfgBlockLabelData::End);
+                        let end = vcx.alloc(vir::TerminatorStmtData::Exit);
+                        let block =
+                            vcx.mk_cfg_block(label, &[], vcx.alloc_slice(&[assertion]), end);
+                        let method = vcx.mk_method_unchecked(
+                            "test",
+                            &[],
+                            &[],
+                            &[],
+                            &[],
+                            Some(vcx.alloc_slice(&[block])),
+                        );
+                        program_to_silver(vcx.mk_program(
+                            &[],
+                            &[],
+                            &[],
+                            &[],
+                            &[],
+                            vcx.alloc_slice(&[method]),
+                        ))
+                        .unwrap()
+                    })
+                });
+                let mut frontend = native_frontend(
+                    &["--z3Exe".into(), z3.to_string_lossy().into_owned()],
+                    Arc::new(NoopReporter),
+                )
+                .unwrap();
+                assert!(matches!(
+                    frontend.verify(&programs[0]).unwrap(),
+                    VerificationResult::Success
+                ));
+                let VerificationResult::Failure(errors) = frontend.verify(&programs[1]).unwrap()
+                else {
+                    panic!("missing map key must fail verification");
+                };
+                assert_eq!(
+                    errors
+                        .iter()
+                        .map(|error| error.full_id())
+                        .collect::<Vec<_>>(),
+                    ["assert.failed:assertion.false"]
+                );
+                frontend.stop().unwrap();
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    #[test]
     fn function_decreases_is_retained_in_postconditions() {
         use vir::CastType;
         vir::init_vcx(vir::VirCtxt::new_without_tcx());
@@ -726,6 +792,7 @@ mod tests {
             ));
             let function = vcx.alloc(vir::FunctionData {
                 name: "f",
+                opaque: false,
                 args: &[],
                 ret: value.ty().as_dyn(),
                 pres: &[],

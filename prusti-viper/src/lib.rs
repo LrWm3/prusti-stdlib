@@ -637,7 +637,7 @@ impl<'vir, 'v> ToViper<'vir, 'v> for vir::FuncApp<'vir> {
                 0,
                 "non-domain functions cannot have type variables"
             );
-            ctx.ast.func_app(
+            ctx.ast.func_app_with_reveal(
                 self.target,
                 &self
                     .args
@@ -646,6 +646,7 @@ impl<'vir, 'v> ToViper<'vir, 'v> for vir::FuncApp<'vir> {
                     .collect::<Vec<_>>(),
                 self.result_ty.to_viper_no_pos(ctx),
                 pos,
+                self.reveal,
             )
         }
     }
@@ -666,7 +667,7 @@ impl<'vir, 'v> ToViper<'vir, 'v> for vir::Function<'vir> {
             vir::DecreasesGenData::Star => Some(ctx.ast.decreases_star()),
             vir::DecreasesGenData::None => None,
         };
-        ctx.ast.function(
+        ctx.ast.function_with_opacity(
             self.name,
             &self
                 .args
@@ -687,6 +688,7 @@ impl<'vir, 'v> ToViper<'vir, 'v> for vir::Function<'vir> {
                 .collect::<Vec<_>>(),
             ctx.ast.no_position(), // TODO: position (each function should have its own)
             self.expr.map(|v| v.to_viper_no_pos(ctx)),
+            self.opaque,
         )
     }
 }

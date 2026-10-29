@@ -282,6 +282,9 @@ impl<'vir, Curr, Next> Debug for CollectionLiteralGenData<'vir, Curr, Next> {
 
 impl<'vir, Curr, Next> Debug for FuncAppGenData<'vir, Curr, Next> {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        if self.reveal {
+            write!(f, "@reveal() ")?;
+        }
         write!(f, "{}(", self.target)?;
         fmt_comma_sep(f, self.args)?;
         write!(f, ")")?;
@@ -291,6 +294,9 @@ impl<'vir, Curr, Next> Debug for FuncAppGenData<'vir, Curr, Next> {
 
 impl<'vir, Curr, Next> Debug for FunctionGenData<'vir, Curr, Next> {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        if self.opaque {
+            writeln!(f, "@opaque()")?;
+        }
         writeln!(f, "function {}(", self.name)?;
         fmt_comma_sep_lines(f, self.args, 0)?;
         writeln!(f, "): {:?}", self.ret)?;

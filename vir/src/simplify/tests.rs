@@ -122,6 +122,7 @@ fn with_ctx(f: impl for<'vir> FnOnce(&SimplifyCtx<'vir>, &Builder<'vir, 'vir>)) 
         let adt = vcx.mk_adt(crate::ViperIdent::new("P"), &[], vcx.alloc_slice(&[cons]));
         let function = |name, pres| -> Function<'_> {
             vcx.alloc(FunctionGenData {
+                opaque: false,
                 name,
                 args: &[],
                 ret: TYPE_INT.as_dyn(),

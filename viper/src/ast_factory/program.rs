@@ -86,6 +86,21 @@ impl<'a> AstFactory<'a> {
         pos: Position,
         body: Option<Expr>,
     ) -> Function<'a> {
+        self.function_with_opacity(name, formal_args, typ, pres, posts, pos, body, false)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn function_with_opacity(
+        &self,
+        name: &str,
+        formal_args: &[LocalVarDecl],
+        typ: Type,
+        pres: &[Expr],
+        posts: &[Expr],
+        pos: Position,
+        body: Option<Expr>,
+        opaque: bool,
+    ) -> Function<'a> {
         let obj = self.jni.unwrap_result(ast::Function::with(self.env).new(
             self.jni.new_string(name),
             self.jni.new_seq(&map_to_jobjects!(formal_args)),
@@ -97,7 +112,11 @@ impl<'a> AstFactory<'a> {
                 Some(x) => self.jni.new_option(Some(x.to_jobject())),
             },
             pos.to_jobject(),
-            self.no_info(),
+            if opaque {
+                self.annotation_info("opaque")
+            } else {
+                self.no_info()
+            },
             self.no_trafos(),
         ));
         Function::new(obj)

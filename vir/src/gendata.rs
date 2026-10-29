@@ -167,6 +167,9 @@ pub struct CollectionUpdateGenData<'vir, Curr, Next> {
 
 #[derive(VirHash, VirReify, VirSerde, VirVisitable, VirFoldable)]
 pub struct FuncAppGenData<'vir, Curr, Next> {
+    /// Reveal an opaque function's checked body at this application.
+    #[vir(reify_pass)]
+    pub reveal: bool,
     pub target: &'vir str, // TODO: identifiers
     pub args: &'vir [ExprGenDyn<'vir, Curr, Next>],
     // TODO: does this need to be here? (we already track the type in the
@@ -563,6 +566,9 @@ pub struct PredicateGenData<'vir, Curr, Next> {
 
 #[derive(VirHash, VirReify, VirSerde, VirVisitable, VirFoldable)]
 pub struct FunctionGenData<'vir, Curr, Next> {
+    /// Callers use the checked contract unless an application explicitly reveals the body.
+    #[vir(reify_pass)]
+    pub opaque: bool,
     pub name: &'vir str, // TODO: identifiers
     #[vir(reify_pass)]
     pub args: &'vir [LocalDeclDyn<'vir>],

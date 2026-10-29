@@ -770,6 +770,9 @@ fn main() {
             java_class!("viper.silver.ast.SimpleInfo", vec![
                 constructor!(),
             ]),
+            java_class!("viper.silver.ast.AnnotationInfo", vec![
+                constructor!(),
+            ]),
             java_class!("viper.silver.ast.Sub", vec![
                 constructor!(),
             ]),

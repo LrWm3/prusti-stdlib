@@ -233,12 +233,42 @@ impl<'tcx> VirCtxt<'tcx> {
     ) -> ExprGen<'vir, Curr, Next, R> {
         self.alloc(ExprGenData::new(self.alloc(ExprKindGenData::FuncApp(
             self.arena.alloc(FuncAppGenData {
+                reveal: false,
                 target,
                 args,
                 result_ty: result_ty.as_dyn(),
                 typ_var_map,
             }),
         ))))
+    }
+
+    /// Use the checked definition of an opaque heap-dependent function here.
+    pub fn reveal_function<'vir, Curr, Next, T: CompType>(
+        &'vir self,
+        expr: ExprGen<'vir, Curr, Next, T>,
+    ) -> ExprGen<'vir, Curr, Next, T> {
+        let ExprKindGenData::FuncApp(app) = expr.kind else {
+            panic!("only function applications can be revealed");
+        };
+        self.alloc(ExprGenData::new_inner(
+            self.alloc(ExprKindGenData::FuncApp(self.alloc(FuncAppGenData {
+                reveal: true,
+                ..**app
+            }))),
+            expr.debug_info,
+            expr.span,
+            expr.ty(),
+        ))
+    }
+
+    pub fn opaque_function<'vir, Curr, Next>(
+        &'vir self,
+        function: FunctionGen<'vir, Curr, Next>,
+    ) -> FunctionGen<'vir, Curr, Next> {
+        self.alloc(FunctionGenData {
+            opaque: true,
+            ..*function
+        })
     }
 
     #[allow(clippy::type_complexity)]
@@ -1137,6 +1167,7 @@ impl<'tcx> VirCtxt<'tcx> {
             }
         }
         self.alloc(FunctionGenData {
+            opaque: false,
             name,
             args,
             ret: ret.as_dyn(),

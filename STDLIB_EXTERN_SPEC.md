@@ -1933,6 +1933,28 @@ full gate. The universally quantified concrete wrong-value caller also exceeds
 600 seconds on build 94. These are unresolved proof/solver-encoding cases,
 not successful negative controls or accepted native frames.
 
+The universally quantified concrete reborrow gate now passes. Its frame
+triggers on a saved sequence element lookup. Trigger encoding unwraps the
+logical value of a `Ghost<T>` result: matching the synthetic Ghost constructor
+prevented ordinary element accesses from instantiating the frame. The complete
+untrusted generic definition and concrete caller prove the updated referent at
+an arbitrary in-bounds index (122.73s); the wrong-value control is rejected at
+its assertion (215.53s). Rust checking and runtime execution also pass, using
+build 105 and the same 600-second/30-second time bounds. Reproduce with
+`--suite iterator --skip-library --case 'mut_sequence_state_forall_reborrow_*'`
+and the solver options above. Logs:
+`target/stdlib-im4-universal105-iterator-spec-logs`.
+
+The complete sequence suite passes 20 of 21 checks with that change. Its
+`observation_pass` case loses an owned element's value after an array-to-slice
+observation; the same failure reproduces on build 97, before Ghost trigger
+unwrapping (`target/stdlib-im4-sequence105-sequence-spec-logs` and
+`target/stdlib-im4-sequence97-baseline-sequence-spec-logs`). This remains a
+regression gate. The native holder caller also verifies in isolation when the
+experimental frame uses lookup triggers, but the full native run still reports
+a generated conversion helper's observer-permission failure. Native contracts
+and combined prefix loops are not accepted at this checkpoint.
+
 The first step is a prerequisite for the others: adding an abstract predicate
 only to call-site contracts would not establish that a generic implementation
 actually preserves it.

@@ -14,7 +14,7 @@ use crate::encoders::{
 };
 use itertools::Itertools;
 use pcg::utils::Place;
-use prusti_interface::PrustiError;
+use prusti_interface::{PrustiError, environment::EnvQuery};
 use prusti_rustc_interface::{
     data_structures::graph::{self, Successors},
     index::IndexVec,
@@ -1735,10 +1735,26 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                 let TyKind::Ref(_, cl_ty, _) = cl_ty.kind() else {
                     panic!("illegal prusti::{name}: expected a trigger closure, got {cl_ty:?}")
                 };
-                let (cl_qvars, expr) = self.encode_spec_closure(name, *cl_ty, cl_snap)?;
+                let (cl_qvars, mut expr) = self.encode_spec_closure(name, *cl_ty, cl_snap)?;
                 // The triggers are parsed with the quantifier's own binders, so
                 // they must quantify exactly the same variables as the body.
                 assert_eq!(cl_qvars, qvars);
+                // Collection indexing returns a Ghost<T> to avoid moving T in
+                // Rust. Match its logical value, not the bookkeeping wrapper:
+                // ordinary indexed resource accesses do not construct Ghosts.
+                // Snapshot normalization cancels the projection when the
+                // trigger directly constructs the wrapper (as Seq::index does).
+                let TyKind::Closure(_, cl_args) = cl_ty.kind() else {
+                    unreachable!()
+                };
+                let result_ty = cl_args.as_closure().sig().skip_binder().output();
+                if let TyKind::Adt(adt, _) = result_ty.kind()
+                    && EnvQuery::new(self.vcx.tcx()).is_adt_in_crate(*adt, "prusti_contracts")
+                    && adt.non_enum_variant().name.as_str() == "Ghost"
+                {
+                    expr = self.ty_use(result_ty).expect_structlike().fields[0]
+                        .read(expr.downcast_ty());
+                }
                 exprs.push(expr);
             }
             sets.push(self.vcx.mk_trigger(&exprs));

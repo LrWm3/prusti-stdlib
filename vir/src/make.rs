@@ -1,6 +1,6 @@
 use crate::{
-    CastType, CompType, HasType, ViperIdent, VirCtxt, callable::*, data::*, debug_info::DebugInfo,
-    gendata::*, genrefs::*, refs::*, typecheck_error,
+    callable::*, data::*, debug_info::DebugInfo, gendata::*, genrefs::*, refs::*, typecheck_error,
+    CastType, CompType, HasType, ViperIdent, VirCtxt,
 };
 use cfg_if::cfg_if;
 use prusti_rustc_interface::middle::ty;
@@ -19,9 +19,36 @@ cfg_if! {
         //   variables are not checked
         // - Unsupported types are not checked
 
-        use std::collections::HashMap;
+        use std::collections::{HashMap, HashSet};
+
+        #[derive(Default)]
+        struct BindingCheck<'vir> {
+            bindings: HashMap<&'vir str, TypeDyn<'vir>>,
+            // Expressions form a DAG. Revisit a shared node only when its
+            // lexical bindings differ; a pointer alone would miss type errors
+            // in a second scope.
+            checked: HashSet<(usize, usize)>,
+            scope: usize,
+            next_scope: usize,
+        }
+        impl<'vir> BindingCheck<'vir> {
+            fn fresh_scope(&mut self) {
+                self.next_scope += 1;
+                self.scope = self.next_scope;
+            }
+            fn insert(&mut self, name: &'vir str, ty: TypeDyn<'vir>) {
+                self.bindings.insert(name, ty);
+                self.fresh_scope();
+            }
+            fn restore(&mut self, name: &'vir str, previous: Option<TypeDyn<'vir>>) {
+                match previous {
+                    Some(ty) => { self.bindings.insert(name, ty); }
+                    None => { self.bindings.remove(name); }
+                }
+            }
+        }
         fn check_predicate_app_bindings<'vir, Curr, Next>(
-            m: &mut HashMap<&'vir str, TypeDyn<'vir>>,
+            m: &mut BindingCheck<'vir>,
             e: PredicateAppGen<'vir, Curr, Next>
         ) {
             for arg in e.args.iter() {
@@ -32,7 +59,7 @@ cfg_if! {
             }
         }
         fn check_stmt_bindings<'vir, Curr, Next>(
-            m: &mut HashMap<&'vir str, TypeDyn<'vir>>,
+            m: &mut BindingCheck<'vir>,
             e: StmtGen<'vir, Curr, Next>
         ) {
             match e.kind {
@@ -87,12 +114,15 @@ cfg_if! {
             }
         }
         fn check_expr_bindings<'vir, Curr, Next>(
-            m: &mut HashMap<&'vir str, TypeDyn<'vir>>,
+            m: &mut BindingCheck<'vir>,
             e: ExprGenDyn<'vir, Curr, Next>
         ) {
+            if !m.checked.insert((std::ptr::from_ref(e).cast::<()>() as usize, m.scope)) {
+                return;
+            }
             match e.kind {
                 ExprKindGenData::Local(LocalData { name, ty, debug_info }) => {
-                    if let Some(bound_ty) = m.get(name) {
+                    if let Some(bound_ty) = m.bindings.get(name) {
                         if !matches!(bound_ty.kind(), TypeKind::Unsupported(_)) &&
                            !matches!(ty.kind(), TypeKind::Unsupported(_)) &&
                            bound_ty != ty
@@ -108,11 +138,16 @@ cfg_if! {
                 },
                 ExprKindGenData::Let(LetGenData { name, val, expr }) => {
                     check_expr_bindings(m, *val);
-                    if !matches!(val.kind, ExprKindGenData::Lazy(..)) {
-                        m.insert(name, val.ty());
-                    }
+                    let scope = m.scope;
+                    let previous = if matches!(val.kind, ExprKindGenData::Lazy(..)) {
+                        m.bindings.remove(name)
+                    } else {
+                        m.bindings.insert(name, val.ty())
+                    };
+                    m.fresh_scope();
                     check_expr_bindings(m, *expr);
-                    m.remove(name);
+                    m.restore(name, previous);
+                    m.scope = scope;
                 },
                 ExprKindGenData::FuncApp(FuncAppGenData { args, .. })
                 | ExprKindGenData::CollectionLiteral(CollectionLiteralGenData {
@@ -171,18 +206,21 @@ cfg_if! {
                 }
                 ExprKindGenData::Forall(ForallGenData { qvars, triggers, body })
                 | ExprKindGenData::Exists(ExistsGenData { qvars, triggers, body }) => {
-                    for qvar in qvars.iter() {
-                        m.insert(qvar.name, qvar.ty_dyn());
-                    }
+                    let scope = m.scope;
+                    let previous = qvars.iter().map(|qvar| {
+                        (qvar.name, m.bindings.insert(qvar.name, qvar.ty_dyn()))
+                    }).collect::<Vec<_>>();
+                    m.fresh_scope();
                     for trigger in triggers.iter() {
                         for expr in trigger.exprs.iter() {
                             check_expr_bindings(m, *expr);
                         }
                     }
                     check_expr_bindings(m, body.as_dyn());
-                    for qvar in qvars.iter() {
-                        m.remove(qvar.name);
+                    for (name, ty) in previous.into_iter().rev() {
+                        m.restore(name, ty);
                     }
+                    m.scope = scope;
                 }
                 ExprKindGenData::InhaleExhale(InhaleExhaleGenData { inhale, exhale }) => {
                     check_expr_bindings(m, inhale.as_dyn());
@@ -542,7 +580,7 @@ impl<'tcx> VirCtxt<'tcx> {
         )));
         cfg_if! {
             if #[cfg(debug_assertions)] {
-                check_expr_bindings(&mut HashMap::new(), let_expr.as_dyn());
+                check_expr_bindings(&mut BindingCheck::default(), let_expr.as_dyn());
             }
         }
         let_expr
@@ -1158,7 +1196,7 @@ impl<'tcx> VirCtxt<'tcx> {
             }
             cfg_if! {
                 if #[cfg(debug_assertions)] {
-                    let mut m = HashMap::new();
+                    let mut m = BindingCheck::default();
                     for arg in args {
                         m.insert(arg.name, arg.ty_dyn());
                     }
@@ -1469,7 +1507,7 @@ impl<'tcx> VirCtxt<'tcx> {
         cfg_if! {
             if #[cfg(debug_assertions)] {
                 if let Some(blocks) = blocks {
-                    let mut m = HashMap::new();
+                    let mut m = BindingCheck::default();
                     for arg in args {
                         m.insert(arg.name, arg.ty_dyn());
                     }
@@ -1657,3 +1695,6 @@ impl<'tcx> VirCtxt<'tcx> {
         exp
     }
 }
+
+#[cfg(all(test, debug_assertions))]
+mod binding_tests;

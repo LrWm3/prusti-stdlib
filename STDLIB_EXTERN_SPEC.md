@@ -1809,6 +1809,15 @@ verifier stack or exceeds its time limit, and the experimental whole-sequence
 observer did not resolve that failure. Native iterator resource frames and
 combined prefix loops remain open.
 
+The first native resource-frame probe exposed an encoder performance problem
+before Viper started. A debugger sample showed the debug binding checker
+recursively revisiting shared expression nodes. It now caches visits by node
+and lexical scope, and restores shadowed bindings after lets and quantifiers.
+All 34 VIR unit tests pass, including a shared graph with over a trillion tree
+occurrences and controls that retain type-error detection across scopes
+(`/tmp/prusti-im4-bindings82-tests.log`). The iterator frame itself remains
+experimental until its native positive and negative gates pass.
+
 The first step is a prerequisite for the others: adding an abstract predicate
 only to call-site contracts would not establish that a generic implementation
 actually preserves it.

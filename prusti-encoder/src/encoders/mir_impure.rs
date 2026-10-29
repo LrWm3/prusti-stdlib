@@ -3749,9 +3749,8 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                             .map(|arg| self.encode_operand(&arg.node).unwrap())
                             .collect::<Vec<_>>();
 
-                        let call = func_out.call(method_in, dest);
-
                         let label_pre = self.new_label("pre");
+                        let call = func_out.call(method_in, dest, label_pre);
                         let conditional_posts =
                             self.conditional_specs_for_call(func_def_id, caller_substs, false);
                         let conditional_args = if conditional_posts.is_empty() {

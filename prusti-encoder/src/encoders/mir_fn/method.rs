@@ -29,6 +29,7 @@ pub struct MethodCallEncOutput<'vir> {
     output: GArgCaster<'vir, Impure>,
     input_resources: Vec<Option<ResourceConversion<'vir>>>,
     output_resources: Option<ResourceConversion<'vir>>,
+    returned_inputs: Vec<bool>,
 }
 
 impl<'vir> MethodCallEncOutput<'vir> {
@@ -36,6 +37,7 @@ impl<'vir> MethodCallEncOutput<'vir> {
         &self,
         mut args: Vec<vir::ExprRef<'vir>>,
         ret: vir::ExprRef<'vir>,
+        label_pre: &'vir str,
     ) -> Vec<vir::Stmt<'vir>> {
         assert_eq!(self.inputs.len(), args.len());
         let mut stmts = args
@@ -48,6 +50,25 @@ impl<'vir> MethodCallEncOutput<'vir> {
                     .unwrap_or_default()
             })
             .collect::<Vec<_>>();
+        // Generic arguments whose resource groups are returned directly by
+        // the callee need the same inverse conversion as a returned value.
+        // Their owned storage has been consumed, so use its pre-call snapshot.
+        let restored = vir::with_vcx(|vcx| {
+            args.iter()
+                .zip(&self.input_resources)
+                .zip(&self.returned_inputs)
+                .filter_map(|((arg, conversion), returned)| {
+                    returned.then_some((*arg, conversion.as_ref()?))
+                })
+                .flat_map(|(arg, conversion)| {
+                    let snapshot = vcx.mk_local_labelled_old_expr(
+                        conversion.physical.ref_to_snap(arg),
+                        label_pre,
+                    );
+                    conversion.at_snapshot(snapshot, false)
+                })
+                .collect::<Vec<_>>()
+        });
         let generics = args.iter().zip(self.inputs.iter());
         stmts.extend(generics.filter_map(|(arg, caster)| caster.cast_to_callee_ctx(arg)));
 
@@ -55,6 +76,7 @@ impl<'vir> MethodCallEncOutput<'vir> {
         let call = (self.method.method_ref)(&args, self.ty_args.get_ty(), self.ty_args.get_const())
             .alloc();
         stmts.push(call);
+        stmts.extend(restored);
 
         let result = self.output.cast_to_caller_ctx(ret);
         if let Some(result) = result {
@@ -119,6 +141,27 @@ impl TaskEncoder for MethodCallEnc {
                     .transpose()
             })
             .collect::<Result<Vec<_>, _>>()?;
+        let returned_inputs = if input_resources.iter().any(Option::is_some) {
+            let wands = deps.require_dep::<WandEnc>(WandEncTask {
+                data: FunctionData::new(callee_def_id),
+            })?;
+            let blocked = wands.blocked_inputs();
+            input_resources
+                .iter()
+                .enumerate()
+                .map(|(index, conversion)| {
+                    let local = mir::Local::from(index + 1);
+                    conversion.is_some()
+                        && wands.inputs().any(|node| node.mir_local() == local)
+                        && wands
+                            .inputs()
+                            .filter(|node| node.mir_local() == local)
+                            .all(|node| !blocked.contains(&node))
+                })
+                .collect()
+        } else {
+            vec![false; input_resources.len()]
+        };
         Ok((
             (),
             MethodCallEncOutput {
@@ -128,6 +171,7 @@ impl TaskEncoder for MethodCallEnc {
                 output,
                 input_resources,
                 output_resources,
+                returned_inputs,
             },
         ))
     }

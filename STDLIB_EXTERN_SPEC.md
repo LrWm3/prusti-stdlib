@@ -1540,6 +1540,17 @@ whole-parameter interface across crate boundaries, including an associated
 type instantiated with a mutable reference. Parameters nested in argument
 constructors and collection views remain open.
 
+Generic calls also unpack whole-parameter input resource groups that their
+contracts return immediately, rather than through an expiry wand. The inverse
+conversion uses the input's pre-call snapshot because its owned storage has
+been consumed. This repairs `drop` and generic discard helpers for reference
+wrappers: the owner can use its referents again. A two-lifetime wrapper client,
+its runtime execution, and a `false` control pass all four focused checks
+(`--case 'mut_generic_discard*'`). The complete `after_call*` regression subset
+also passes all ten checks, including captured values after a move or mutation
+and wrong-value/consistency controls. This returns permissions; it does not
+invent a value-preservation contract for arbitrary generic destructors.
+
 Array literals now retain their complete generic element snapshots through
 the existing sequence constructor. Equating only the concrete projection had
 lost the element type tag needed to justify a collection resource group.

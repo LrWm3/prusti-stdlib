@@ -1360,17 +1360,21 @@ the same reference at two indices. Shared aliases use a set of referent
 identities, so repeated sequence occurrences do not multiply permissions.
 
 The model verifies two simultaneous yields, resource/value restoration with a
-symbolic remaining tail, reference replacement, and a symbolic loop that
-renumbers wrappers for a slice view. Replacement transfers the previous
-referent out while transferring the replacement in. Twelve negative controls
-reject false/stale/wrong-target claims, access to the borrowed owner, duplicated
-mutable resources, writes with shared permission, and a false claim after
-constructing empty resources. Additional controls cover repeated expansion
-views, missing resources on opening and closing, and duplicate wrappers. Run
-`./x.py exec python3 scripts/test_stdlib_element_resources.py`; individual logs
-are in `target/stdlib-im3-resources-logs`. The extended model verified in 18.60s and all twelve negative controls produced
-their exact expected diagnostic. These model checks complement the concrete
-Rust tests above; they do not establish generic resource transport.
+symbolic remaining tail, reference replacement, nested referent framing, and a
+symbolic loop that renumbers wrappers for a slice view. Indexed wrappers carry
+a structural path as well as the slot index; sibling empty-resource instances
+may share the same physical address without merging their logical ownership.
+Replacement transfers the previous referent out while transferring the
+replacement in. Seventeen negative controls reject false/stale/wrong-target
+claims, access to the borrowed owner, duplicated mutable resources, writes with
+shared permission, missing opening/closing/future resources, invalid saved
+referent reads, and false claims after repeated views or empty resources.
+Run `./x.py exec python3 scripts/test_stdlib_element_resources.py`; individual
+logs are in `target/stdlib-im3-resources-logs`. On 2026-10-28, all 18 checks
+passed with their exact expected diagnostics; the positive model verified in
+13.06s. The same validation run passed all 34 concrete checks, ten borrow
+checks, and fifteen native iterator regression checks. These checks complement
+the concrete Rust tests above; they do not establish generic resource transport.
 
 The representation follows Viper's documented
 [quantified-permission injectivity requirement](https://viper.ethz.ch/tutorial/quantified-permissions-injectivity.html)

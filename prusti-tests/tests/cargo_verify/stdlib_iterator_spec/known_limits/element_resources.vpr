@@ -157,26 +157,26 @@ method witness()
 // Repeated graph views may request an already open/closed resource. Each
 // fallback checks the alternative representation and cannot create it.
 predicate payload(r: Ref) { acc(r.value) }
-predicate indexed_payload(index: Int, r: Ref) { payload(r) }
+predicate indexed_payload(index: Int, path: Seq[Int], r: Ref) { payload(r) }
 
 method repeated_views()
 {
   var a: Ref := new(value)
   a.value := 1
   fold payload(a)
-  fold indexed_payload(0, a)
-  if (perm(indexed_payload(0, a)) > none) { unfold indexed_payload(0, a) }
+  fold indexed_payload(0, Seq[Int](), a)
+  if (perm(indexed_payload(0, Seq[Int](), a)) > none) { unfold indexed_payload(0, Seq[Int](), a) }
   else { assert payload(a) }
-  if (perm(indexed_payload(0, a)) > none) { unfold indexed_payload(0, a) }
+  if (perm(indexed_payload(0, Seq[Int](), a)) > none) { unfold indexed_payload(0, Seq[Int](), a) }
   else { assert payload(a) }
   unfold payload(a)
   a.value := 7
   fold payload(a)
-  if (perm(indexed_payload(0, a)) > none) { assert indexed_payload(0, a) }
-  else { fold indexed_payload(0, a) }
-  if (perm(indexed_payload(0, a)) > none) { assert indexed_payload(0, a) }
-  else { fold indexed_payload(0, a) }
-  unfold indexed_payload(0, a)
+  if (perm(indexed_payload(0, Seq[Int](), a)) > none) { assert indexed_payload(0, Seq[Int](), a) }
+  else { fold indexed_payload(0, Seq[Int](), a) }
+  if (perm(indexed_payload(0, Seq[Int](), a)) > none) { assert indexed_payload(0, Seq[Int](), a) }
+  else { fold indexed_payload(0, Seq[Int](), a) }
+  unfold indexed_payload(0, Seq[Int](), a)
   unfold payload(a)
   assert a.value == 7
 }
@@ -185,40 +185,40 @@ method repeated_views()
 // Capturing that address before opening preserves its identity at restoration.
 field link: Ref
 predicate slot(r: Ref) { acc(r.link) }
-predicate indexed_slot(i: Int, r: Ref) { slot(r) }
+predicate indexed_slot(i: Int, path: Seq[Int], r: Ref) { slot(r) }
 function target(r: Ref): Ref
   requires slot(r)
 { unfolding slot(r) in r.link }
 function nested_target(i: Int, r: Ref): Ref
-  requires indexed_slot(i, r)
-{ unfolding indexed_slot(i, r) in target(r) }
+  requires indexed_slot(i, Seq[Int](), r)
+{ unfolding indexed_slot(i, Seq[Int](), r) in target(r) }
 function nested_value(i: Int, r: Ref): Int
-  requires indexed_slot(i, r) && indexed_payload(i, nested_target(i, r))
-{ unfolding indexed_payload(i, nested_target(i, r)) in
+  requires indexed_slot(i, Seq[Int](), r) && indexed_payload(i, Seq(0), nested_target(i, r))
+{ unfolding indexed_payload(i, Seq(0), nested_target(i, r)) in
     unfolding payload(nested_target(i, r)) in nested_target(i, r).value }
 
 method nested_resources(xs: Seq[Ref], i: Int, other: Int)
   requires 0 <= i && i < |xs| && 0 <= other && other < |xs| && i != other
   requires forall j: Int :: {xs[j]}
-    0 <= j && j < |xs| ==> indexed_slot(j, xs[j])
+    0 <= j && j < |xs| ==> indexed_slot(j, Seq[Int](), xs[j])
   requires forall j: Int :: {xs[j]}
-    0 <= j && j < |xs| ==> indexed_payload(j, nested_target(j, xs[j]))
+    0 <= j && j < |xs| ==> indexed_payload(j, Seq(0), nested_target(j, xs[j]))
   ensures forall j: Int :: {xs[j]}
-    0 <= j && j < |xs| ==> indexed_slot(j, xs[j])
+    0 <= j && j < |xs| ==> indexed_slot(j, Seq[Int](), xs[j])
   ensures forall j: Int :: {xs[j]}
-    0 <= j && j < |xs| ==> indexed_payload(j, nested_target(j, xs[j]))
+    0 <= j && j < |xs| ==> indexed_payload(j, Seq(0), nested_target(j, xs[j]))
   ensures nested_value(i, xs[i]) == 7
   ensures nested_value(other, xs[other]) == old(nested_value(other, xs[other]))
 {
   var r: Ref := nested_target(i, xs[i])
-  unfold indexed_slot(i, xs[i])
-  unfold indexed_payload(i, r)
+  unfold indexed_slot(i, Seq[Int](), xs[i])
+  unfold indexed_payload(i, Seq(0), r)
   unfold payload(r)
   r.value := 7
   fold payload(r)
-  fold indexed_slot(i, xs[i])
+  fold indexed_slot(i, Seq[Int](), xs[i])
   assert nested_target(i, xs[i]) == r
-  fold indexed_payload(i, r)
+  fold indexed_payload(i, Seq(0), r)
 }
 
 // A replacement must return the updated collection immediately. Its wand
@@ -226,24 +226,39 @@ method nested_resources(xs: Seq[Ref], i: Int, other: Int)
 // the replacement's referent. The old referent comes from the captured frame.
 method replace_resources(xs: Seq[Ref], i: Int, replacement: Ref) returns (ys: Seq[Ref])
   requires 0 <= i && i < |xs|
-  requires forall j: Int :: {xs[j]} 0 <= j && j < |xs| ==> indexed_payload(j, xs[j])
+  requires forall j: Int :: {xs[j]} 0 <= j && j < |xs| ==> indexed_payload(j, Seq[Int](), xs[j])
   requires payload(replacement)
   ensures ys == xs[i := replacement]
-  ensures forall j: Int :: {ys[j]} 0 <= j && j < |ys| ==> indexed_payload(j, ys[j])
-  ensures (forall j: Int :: {ys[j]} 0 <= j && j < |ys| ==> indexed_payload(j, ys[j])) --*
-    ((forall j: Int :: {xs[j]} 0 <= j && j < |xs| ==> indexed_payload(j, xs[j])) && payload(replacement))
+  ensures forall j: Int :: {ys[j]} 0 <= j && j < |ys| ==> indexed_payload(j, Seq[Int](), ys[j])
+  ensures (forall j: Int :: {ys[j]} 0 <= j && j < |ys| ==> indexed_payload(j, Seq[Int](), ys[j])) --*
+    ((forall j: Int :: {xs[j]} 0 <= j && j < |xs| ==> indexed_payload(j, Seq[Int](), xs[j])) && payload(replacement))
 {
   var previous: Ref := xs[i]
-  unfold indexed_payload(i, previous)
-  fold indexed_payload(i, replacement)
+  unfold indexed_payload(i, Seq[Int](), previous)
+  fold indexed_payload(i, Seq[Int](), replacement)
   ys := xs[i := replacement]
   label pkg
-  package (forall j: Int :: {ys[j]} 0 <= j && j < |ys| ==> indexed_payload(j, ys[j])) --*
-    ((forall j: Int :: {xs[j]} 0 <= j && j < |xs| ==> indexed_payload(j, xs[j])) && payload(replacement)) {
+  package (forall j: Int :: {ys[j]} 0 <= j && j < |ys| ==> indexed_payload(j, Seq[Int](), ys[j])) --*
+    ((forall j: Int :: {xs[j]} 0 <= j && j < |xs| ==> indexed_payload(j, Seq[Int](), xs[j])) && payload(replacement)) {
     assert old[pkg](perm(payload(previous))) > none ==> payload(previous)
     if (perm(payload(replacement)) > none) { assert payload(replacement) }
-    else { unfold indexed_payload(i, replacement) }
-    if (perm(indexed_payload(i, previous)) > none) { assert indexed_payload(i, previous) }
-    else { fold indexed_payload(i, previous) }
+    else { unfold indexed_payload(i, Seq[Int](), replacement) }
+    if (perm(indexed_payload(i, Seq[Int](), previous)) > none) { assert indexed_payload(i, Seq[Int](), previous) }
+    else { fold indexed_payload(i, Seq[Int](), previous) }
   }
+}
+
+// Sibling fields require different logical ownership tokens even if their
+// physical addresses coincide, as they may for zero-sized referents.
+predicate empty_payload(r: Ref) { true }
+predicate indexed_empty_payload(i: Int, path: Seq[Int], r: Ref) { empty_payload(r) }
+method sibling_paths(r: Ref)
+  ensures indexed_empty_payload(0, Seq(0), r) && indexed_empty_payload(0, Seq(1), r)
+{
+  fold empty_payload(r)
+  fold empty_payload(r)
+  if (perm(indexed_empty_payload(0, Seq(0), r)) > none) { assert indexed_empty_payload(0, Seq(0), r) }
+  else { fold indexed_empty_payload(0, Seq(0), r) }
+  if (perm(indexed_empty_payload(0, Seq(1), r)) > none) { assert indexed_empty_payload(0, Seq(1), r) }
+  else { fold indexed_empty_payload(0, Seq(1), r) }
 }

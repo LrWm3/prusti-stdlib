@@ -28,6 +28,7 @@ pub fn parse_prusti(tokens: TokenStream) -> syn::Result<TokenStream> {
 pub struct PledgeSource {
     pub argument: syn::Ident,
     pub dereferences: usize,
+    pub opaque: bool,
 }
 
 fn pledge_source(reference: Option<TokenStream>) -> syn::Result<Option<PledgeSource>> {
@@ -36,28 +37,37 @@ fn pledge_source(reference: Option<TokenStream>) -> syn::Result<Option<PledgeSou
     };
     let mut expression = syn::parse2::<syn::Expr>(reference)?;
     let mut dereferences = 0;
+    let mut opaque = false;
     loop {
         expression = match expression {
             syn::Expr::Unary(unary) if matches!(unary.op, syn::UnOp::Deref(_)) => {
                 dereferences += 1;
                 *unary.expr
             }
+            syn::Expr::Index(index)
+                if !opaque
+                    && matches!(&*index.index, syn::Expr::Verbatim(tokens) if tokens.to_string() == "_") =>
+            {
+                opaque = true;
+                *index.expr
+            }
             syn::Expr::Paren(paren) => *paren.expr,
             syn::Expr::Path(path) if path.path.get_ident().is_some() => {
                 let argument = path.path.get_ident().unwrap().clone();
-                if argument == "result" && dereferences == 0 {
+                if argument == "result" && dereferences == 0 && !opaque {
                     return Ok(None);
                 }
                 return Ok(Some(PledgeSource {
                     argument,
                     dereferences,
+                    opaque,
                 }));
             }
             _ => {
                 return err(
                     expression.span(),
                     "expiry selector must name an input, optionally dereferenced",
-                )
+                );
             }
         };
     }
@@ -1285,7 +1295,13 @@ mod tests {
         let source = source.unwrap();
         assert_eq!(source.argument, "value");
         assert_eq!(source.dereferences, 2);
+        let (source, _) = parse_prusti_pledge(quote!((*self)[_] => true)).unwrap();
+        let source = source.unwrap();
+        assert_eq!(source.argument, "self");
+        assert_eq!(source.dereferences, 1);
+        assert!(source.opaque);
         for tokens in [
+            quote!(value[_][_] => true),
             quote!(value.field => true),
             quote!(value[0] => true),
             quote!(call() => true),

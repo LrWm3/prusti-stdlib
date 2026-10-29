@@ -1214,8 +1214,8 @@ impl<'vir> WandEncOutput<'vir> {
             wand.pledges.clear();
         }
         for pledge in pledges {
-            let selected = if let Some((argument, dereferences)) = pledge.source {
-                let source = self.pledge_source(argument, dereferences, vcx)?;
+            let selected = if let Some((argument, dereferences, opaque)) = pledge.source {
+                let source = self.pledge_source(argument, dereferences, opaque, vcx)?;
                 let matches = wands
                     .iter()
                     .enumerate()
@@ -1261,6 +1261,7 @@ impl<'vir> WandEncOutput<'vir> {
         &self,
         argument: usize,
         dereferences: usize,
+        opaque: bool,
         vcx: &'vir vir::VirCtxt<'vir>,
     ) -> Result<WandRhsKey, WandEncError> {
         let sig = self.fn_sig(vcx, None);
@@ -1281,7 +1282,23 @@ impl<'vir> WandEncOutput<'vir> {
             };
             selected = *target;
         }
-        let lifetime = if let ty::TyKind::Ref(region, _, _) = selected.kind() {
+        let lifetime = if opaque {
+            let regions: IndexVec<_, GeneralizedLifetime<'vir>> =
+                vcx.tcx().extract_regions(selected);
+            let groups = regions
+                .iter()
+                .copied()
+                .filter(|region| matches!(region, GeneralizedLifetime::RegionsIn(_)))
+                .collect::<Vec<_>>();
+            match groups.as_slice() {
+                [group] => *group,
+                _ => {
+                    return Err(WandEncError::Unsupported(
+                        "expiry selector must identify a unique opaque input resource group".into(),
+                    ));
+                }
+            }
+        } else if let ty::TyKind::Ref(region, _, _) = selected.kind() {
             GeneralizedLifetime::Region((*region).into())
         } else {
             let regions: IndexVec<_, GeneralizedLifetime<'vir>> =

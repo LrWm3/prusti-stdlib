@@ -195,7 +195,12 @@ impl AstRewriter {
             })?;
         // Store a positional selector so renaming arguments in an extern spec
         // or a separate crate does not change the selected restoration stage.
-        let value = format!("{}:{}", index + 1, source.dereferences);
+        let value = format!(
+            "{}:{}{}",
+            index + 1,
+            source.dereferences,
+            if source.opaque { ":opaque" } else { "" }
+        );
         let syn::Item::Fn(spec) = spec else {
             unreachable!()
         };

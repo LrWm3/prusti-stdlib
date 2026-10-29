@@ -1681,10 +1681,18 @@ are independent of conversion helpers, so an observation does not introduce
 unneeded generic pack/unpack obligations. The existing symbolic-array positive
 also passes with its original solver bounds (128.37s).
 
+Expiry selectors now accept `input[_]` (and dereferenced inputs) for a unique
+opaque resource group. The selector resolves the definition's group identity,
+independently of concrete lifetimes that also occur in the container. A generic
+identity function checks its group-state expiry pledge, and its mutable-reference
+caller proves the final write. Its false control and the missing/ambiguous-group
+diagnostics pass. The combined selector/observer run passes all 14 checks;
+all 37 specification-parser unit tests pass as well. This selector grants no
+additional permissions and does not supply a preservation relation by itself.
+
 The next value-frame step uses these observations without rereading expired
-iterator storage. Extend
-expiry selection with `input[_]` for a unique opaque resource group; reject
-missing or ambiguous groups. Then state the native constructor and `next`
+iterator storage. First check an untrusted generic slice reborrow with a
+per-element group-state pledge. Then state the native constructor and `next`
 resource frames at that group stage, using saved pre-call and post-call
 sequences. Verify contract well-formedness and the concrete two-yield/holder
 restoration probes before extending the prefix-loop summary. Keep the physical

@@ -103,8 +103,8 @@ impl<'vir> PledgeExpr<'vir> {
 /// predicate if present.
 #[derive(Clone, Copy, Debug)]
 pub struct EncodedPledge<'vir> {
-    /// Input MIR local and number of dereferences selecting its restoration.
-    pub source: Option<(usize, usize)>,
+    /// Input MIR local, dereference count, and whether to select its opaque group.
+    pub source: Option<(usize, usize, bool)>,
     /// The VIR expression and span corresponding to the `assert_on_expiry`
     /// predicate, if present.
     pub expiry_obligation: Option<PledgeExpr<'vir>>,
@@ -390,11 +390,18 @@ impl TaskEncoder for MirSpecEnc {
                         )
                         .and_then(prusti_interface::utils::read_prusti_attr_value)
                         .map(|value| {
-                            let (argument, dereferences) =
-                                value.split_once(':').expect("generated pledge source");
+                            let mut fields = value.split(':');
+                            let argument = fields.next().expect("pledge source argument");
+                            let dereferences = fields.next().expect("pledge source dereferences");
+                            let opaque = match fields.next() {
+                                None => false,
+                                Some("opaque") => true,
+                                _ => panic!("generated pledge source kind"),
+                            };
                             (
                                 argument.parse().expect("pledge source argument"),
                                 dereferences.parse().expect("pledge source dereferences"),
+                                opaque,
                             )
                         });
                         Some(EncodedPledge {

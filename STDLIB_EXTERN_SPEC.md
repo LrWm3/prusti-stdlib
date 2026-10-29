@@ -1452,6 +1452,20 @@ projection tests, eight shape tests, and six body tests. The root submodule
 remains at `dbb94c8` until its encoder supports the same group interface;
 these PCG results alone do not close IM4.
 
+The [generic resource model](prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/generic_resources.vpr)
+verifies whole groups for mutable references and pairs, a nonempty opaque
+fallback, generic identity with a heap-dependent state frame, nested reference
+replacement, and symbolic collection conversion in both directions. Each
+conversion captures a value before unfolding and proves it unchanged after
+folding; its loop invariant preserves the converted prefix and remaining suffix.
+Equal owned values with empty resources may coexist. Nine negative controls
+reject forged unknown groups, missing/duplicated referents, incomplete pairs,
+observations/calls without permissions, wrong conversion values, and false
+claims. All ten checks passed (positive 5.24s):
+`./x.py exec python3 scripts/test_stdlib_generic_resources.py`, with logs in
+`target/stdlib-im4-groups-logs`. This is the proof pattern for the pending Rust
+encoder integration, not an implemented cross-crate interface.
+
 The first step is a prerequisite for the others: adding an abstract predicate
 only to call-site contracts would not establish that a generic implementation
 actually preserves it.

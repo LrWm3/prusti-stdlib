@@ -1,0 +1,116 @@
+// Checked finite resource groups, value-preserving conversions, and replacement.
+// Unknown types keep an opaque resource; equal empty values may coexist.
+adt Type { IntType(); RefType(inner: Type); PairType(left: Type, right: Type); UnknownType(id: Int) }
+adt Snap { Num(number: Int); Ptr(address: Ref); Pair(first: Snap, second: Snap); UnknownSnap(token: Int) }
+field value: Snap
+function typed(s: Snap, t: Type): Bool {
+  (t.isIntType ==> s.isNum) &&
+  (t.isRefType ==> s.isPtr) &&
+  (t.isPairType ==> s.isPair && typed(s.first, t.left) && typed(s.second, t.right))
+}
+predicate physical(r: Ref, t: Type) { acc(r.value) && typed(r.value, t) }
+function read(r: Ref, t: Type): Snap
+  requires physical(r, t)
+  ensures typed(result, t)
+{ unfolding physical(r, t) in r.value }
+predicate opaque_group(s: Snap, t: Type)
+predicate group(s: Snap, t: Type) {
+  typed(s, t) &&
+  (t.isRefType ==> physical(s.address, t.inner) && group(read(s.address, t.inner), t.inner)) &&
+  (t.isPairType ==> group(s.first, t.left) && group(s.second, t.right)) &&
+  (t.isUnknownType ==> opaque_group(s, t))
+}
+adt State { EmptyState(); ReferenceState(stored: Snap, nested: State); PairState(first_state: State, second_state: State); UnknownState(state_id: Int) }
+function opaque_state(s: Snap, t: Type): State
+  requires opaque_group(s, t)
+function state(s: Snap, t: Type): State
+  requires group(s, t)
+{ unfolding group(s, t) in
+    (t.isRefType ? ReferenceState(read(s.address, t.inner), state(read(s.address, t.inner), t.inner)) :
+     (t.isPairType ? PairState(state(s.first, t.left), state(s.second, t.right)) :
+      (t.isUnknownType ? opaque_state(s, t) : EmptyState()))) }
+predicate indexed_physical(i: Int, r: Ref) { physical(r, IntType()) }
+predicate indexed_group(i: Int, s: Snap, t: Type) { group(s, t) }
+function value_at(i: Int, s: Snap): Int
+  requires indexed_group(i, s, RefType(IntType()))
+{ unfolding indexed_group(i, s, RefType(IntType())) in
+  unfolding group(s, RefType(IntType())) in read(s.address, IntType()).number }
+
+function physical_value_at(i: Int, r: Ref): Int
+  requires indexed_physical(i, r)
+{ unfolding indexed_physical(i, r) in read(r, IntType()).number }
+
+method generic_identity(s: Snap, t: Type) returns (out: Snap)
+  requires group(s, t)
+  ensures group(out, t) && out == s
+  ensures state(out, t) == old(state(s, t))
+{ out := s }
+
+method pack(xs: Seq[Ref])
+  requires forall i: Int :: { indexed_physical(i, xs[i]) } 0 <= i && i < |xs| ==> indexed_physical(i, xs[i])
+  ensures forall i: Int :: { indexed_group(i, Ptr(xs[i]), RefType(IntType())) } 0 <= i && i < |xs| ==> indexed_group(i, Ptr(xs[i]), RefType(IntType()))
+  ensures forall j: Int :: { value_at(j, Ptr(xs[j])) } 0 <= j && j < |xs| ==> value_at(j, Ptr(xs[j])) == old(physical_value_at(j, xs[j]))
+{
+  var i: Int := 0
+  while (i < |xs|)
+    invariant 0 <= i && i <= |xs|
+    invariant forall j: Int :: { indexed_group(j, Ptr(xs[j]), RefType(IntType())) } 0 <= j && j < i ==> indexed_group(j, Ptr(xs[j]), RefType(IntType()))
+    invariant forall j: Int :: { indexed_physical(j, xs[j]) } i <= j && j < |xs| ==> indexed_physical(j, xs[j])
+    invariant forall j: Int :: { value_at(j, Ptr(xs[j])) } 0 <= j && j < i ==> value_at(j, Ptr(xs[j])) == old(physical_value_at(j, xs[j]))
+    invariant forall j: Int :: { physical_value_at(j, xs[j]) } i <= j && j < |xs| ==> physical_value_at(j, xs[j]) == old(physical_value_at(j, xs[j]))
+  {
+    var saved: Int := physical_value_at(i, xs[i])
+    assert saved == old(physical_value_at(i, xs[i]))
+    unfold indexed_physical(i, xs[i])
+    fold group(read(xs[i], IntType()), IntType())
+    fold group(Ptr(xs[i]), RefType(IntType()))
+    fold indexed_group(i, Ptr(xs[i]), RefType(IntType()))
+    assert value_at(i, Ptr(xs[i])) == saved
+    i := i + 1
+  }
+}
+method unpack(xs: Seq[Ref])
+  requires forall i: Int :: { indexed_group(i, Ptr(xs[i]), RefType(IntType())) } 0 <= i && i < |xs| ==> indexed_group(i, Ptr(xs[i]), RefType(IntType()))
+  ensures forall i: Int :: { indexed_physical(i, xs[i]) } 0 <= i && i < |xs| ==> indexed_physical(i, xs[i])
+  ensures forall j: Int :: { physical_value_at(j, xs[j]) } 0 <= j && j < |xs| ==> physical_value_at(j, xs[j]) == old(value_at(j, Ptr(xs[j])))
+{
+  var i: Int := 0
+  while (i < |xs|)
+    invariant 0 <= i && i <= |xs|
+    invariant forall j: Int :: { indexed_physical(j, xs[j]) } 0 <= j && j < i ==> indexed_physical(j, xs[j])
+    invariant forall j: Int :: { indexed_group(j, Ptr(xs[j]), RefType(IntType())) } i <= j && j < |xs| ==> indexed_group(j, Ptr(xs[j]), RefType(IntType()))
+    invariant forall j: Int :: { physical_value_at(j, xs[j]) } 0 <= j && j < i ==> physical_value_at(j, xs[j]) == old(value_at(j, Ptr(xs[j])))
+    invariant forall j: Int :: { value_at(j, Ptr(xs[j])) } i <= j && j < |xs| ==> value_at(j, Ptr(xs[j])) == old(value_at(j, Ptr(xs[j])))
+  {
+    var saved: Int := value_at(i, Ptr(xs[i]))
+    assert saved == old(value_at(i, Ptr(xs[i])))
+    unfold indexed_group(i, Ptr(xs[i]), RefType(IntType()))
+    unfold group(Ptr(xs[i]), RefType(IntType()))
+    unfold group(read(xs[i], IntType()), IntType())
+    fold indexed_physical(i, xs[i])
+    assert physical_value_at(i, xs[i]) == saved
+    i := i + 1
+  }
+}
+method two_equal_owned_values()
+{
+  var s: Snap := Num(7)
+  fold group(s, IntType())
+  fold group(s, IntType())
+  s := generic_identity(s, IntType())
+  s := generic_identity(s, IntType())
+  unfold group(s, IntType())
+  unfold group(s, IntType())
+}
+method nested_replacement(s: Snap, fresh: Snap) returns (previous: Snap)
+  requires group(s, RefType(RefType(IntType()))) && group(fresh, RefType(IntType()))
+  ensures group(s, RefType(RefType(IntType()))) && group(previous, RefType(IntType()))
+{
+  unfold group(s, RefType(RefType(IntType())))
+  previous := read(s.address, RefType(IntType()))
+  unfold physical(s.address, RefType(IntType()))
+  assert unfolding group(fresh, RefType(IntType())) in typed(fresh, RefType(IntType()))
+  s.address.value := fresh
+  fold physical(s.address, RefType(IntType()))
+  fold group(s, RefType(RefType(IntType())))
+}

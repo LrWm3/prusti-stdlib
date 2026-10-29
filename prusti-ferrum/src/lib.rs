@@ -64,6 +64,7 @@ pub struct TypeContext<'vir> {
     adts: std::collections::HashMap<&'vir str, vir::Adt<'vir>>,
     domain_functions:
         std::collections::HashMap<&'vir str, (vir::Domain<'vir>, vir::DomainFunction<'vir>)>,
+    domain_axioms: std::collections::HashMap<&'vir str, vir::Domain<'vir>>,
     adt_constructors:
         std::collections::HashMap<&'vir str, (vir::Adt<'vir>, vir::AdtConstructor<'vir>)>,
     adt_destructors: std::collections::HashMap<&'vir str, vir::Adt<'vir>>,
@@ -86,6 +87,11 @@ impl<'vir> TypeContext<'vir> {
                         .iter()
                         .map(move |f| (f.name.to_str(), (*domain, *f)))
                 })
+                .collect(),
+            domain_axioms: program
+                .domains
+                .iter()
+                .flat_map(|domain| domain.axioms.iter().map(move |axiom| (axiom.name, *domain)))
                 .collect(),
             adt_constructors: program
                 .adts
@@ -699,6 +705,90 @@ mod tests {
     }
 
     #[test]
+    fn function_decreases_is_retained_in_postconditions() {
+        use vir::CastType;
+        vir::init_vcx(vir::VirCtxt::new_without_tcx());
+        vir::with_vcx(|vcx| {
+            let value = vcx.mk_int::<1>();
+            let decreases = vcx.alloc(vir::DecreasesGenData::Tuple(
+                vcx.alloc_slice(&[value.as_dyn()]),
+                None,
+            ));
+            let function = vcx.alloc(vir::FunctionData {
+                name: "f",
+                args: &[],
+                ret: value.ty().as_dyn(),
+                pres: &[],
+                posts: &[],
+                decreases,
+                expr: None,
+            });
+            let program = program_to_silver(vcx.mk_program(
+                &[],
+                &[],
+                &[],
+                &[],
+                vcx.alloc_slice(&[function]),
+                &[],
+            ))
+            .unwrap();
+            let ferrum_silver::ast::expression::ExpKind::Extension(extension) =
+                program.functions[0].posts[0].kind()
+            else {
+                panic!("expected decreases clause");
+            };
+            let clause = extension.0.as_any().downcast_ref::<ferrum_silver::plugin::standard::termination::termination_ast_extension::DecreasesClause>().unwrap();
+            assert!(
+                matches!(&clause.kind, ferrum_silver::plugin::standard::termination::termination_ast_extension::DecreasesKind::Tuple { tuple,.. } if tuple.len()==1)
+            );
+        });
+    }
+
+    #[test]
+    fn duplicate_domain_axiom_names_use_last_owner_like_jni_adapter() {
+        vir::init_vcx(vir::VirCtxt::new_without_tcx());
+        vir::with_vcx(|vcx| {
+            let a = vcx.alloc(vir::DomainAxiomData {
+                name: "same",
+                expr: vcx.mk_bool::<true>(),
+            });
+            let b = vcx.alloc(vir::DomainAxiomData {
+                name: "same",
+                expr: vcx.mk_bool::<true>(),
+            });
+            let first = vcx.alloc(vir::DomainData {
+                name: "First",
+                typarams: &[],
+                axioms: vcx.alloc_slice(&[a]),
+                functions: &[],
+                interpretation: None,
+            });
+            let second = vcx.alloc(vir::DomainData {
+                name: "Second",
+                typarams: &[],
+                axioms: vcx.alloc_slice(&[b]),
+                functions: &[],
+                interpretation: None,
+            });
+            let program = program_to_silver(vcx.mk_program(
+                &[],
+                &[],
+                vcx.alloc_slice(&[first, second]),
+                &[],
+                &[],
+                &[],
+            ))
+            .unwrap();
+            let ferrum_silver::ast::program::DomainAxiomKind::Named { domain_name, .. } =
+                program.domains[0].axioms[0].kind()
+            else {
+                panic!("expected named axiom");
+            };
+            assert_eq!(domain_name, "Second");
+        });
+    }
+
+    #[test]
     fn malformed_domain_arity_is_rejected() {
         vir::init_vcx(vir::VirCtxt::new_without_tcx());
         vir::with_vcx(|vcx| {
@@ -831,6 +921,54 @@ mod tests {
                     frontend.verify(&program).unwrap(),
                     VerificationResult::Success
                 ));
+                frontend.stop().unwrap();
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    #[test]
+    #[ignore = "requires real Z3; set FERRUM_TEST_Z3"]
+    fn vir_wand_package_and_apply_reach_native_verifier() {
+        let z3 = std::env::var_os("FERRUM_TEST_Z3").expect("set FERRUM_TEST_Z3");
+        std::thread::Builder::new()
+            .stack_size(ferrum::VERIFICATION_STACK_SIZE)
+            .spawn(move || {
+                vir::init_vcx(vir::VirCtxt::new_without_tcx());
+                let program = vir::with_vcx(|vcx| {
+                    let wand = vcx.mk_wand(vcx.mk_bool::<true>(), vcx.mk_bool::<true>());
+                    let package = vcx.mk_package_stmt(wand, &[]);
+                    let apply = vcx.mk_apply_stmt(wand);
+                    let label = vcx.alloc(vir::CfgBlockLabelData::End);
+                    let end = vcx.alloc(vir::TerminatorStmtData::Exit);
+                    let block =
+                        vcx.mk_cfg_block(label, &[], vcx.alloc_slice(&[package, apply]), end);
+                    let method = vcx.mk_method_unchecked(
+                        "test",
+                        &[],
+                        &[],
+                        &[],
+                        &[],
+                        Some(vcx.alloc_slice(&[block])),
+                    );
+                    program_to_silver(vcx.mk_program(
+                        &[],
+                        &[],
+                        &[],
+                        &[],
+                        &[],
+                        vcx.alloc_slice(&[method]),
+                    ))
+                    .unwrap()
+                });
+                let mut frontend = native_frontend(
+                    &["--z3Exe".into(), z3.to_string_lossy().into_owned()],
+                    Arc::new(NoopReporter),
+                )
+                .unwrap();
+                let result = frontend.verify(&program).unwrap();
+                assert!(matches!(result, VerificationResult::Success), "{result:?}");
                 frontend.stop().unwrap();
             })
             .unwrap()
@@ -1060,6 +1198,39 @@ impl<'vir> TypeContext<'vir> {
                     StmtKind::Unfold(predicate)
                 };
                 Stmt::new(kind, meta)
+            }
+            vir::StmtKindData::Refute(exp) => {
+                ferrum_silver::plugin::standard::refute::refute_ast_extension::Refute::new(
+                    self.expression(&exp)?,
+                    meta,
+                )
+                .statement()
+            }
+            vir::StmtKindData::Apply(wand) => {
+                let wand = ferrum_silver::ast::expression::Exp::new(
+                    ExpKind::MagicWand(self.expression(&wand.lhs)?, self.expression(&wand.rhs)?),
+                    Metadata::default(),
+                );
+                Stmt::new(StmtKind::Apply(wand), meta)
+            }
+            vir::StmtKindData::Package(wand, proof) => {
+                let wand = ferrum_silver::ast::expression::Exp::new(
+                    ExpKind::MagicWand(self.expression(&wand.lhs)?, self.expression(&wand.rhs)?),
+                    Metadata::default(),
+                );
+                let mut nested = Vec::new();
+                let statements = proof
+                    .iter()
+                    .map(|stmt| self.statement(stmt, &mut nested))
+                    .collect::<Result<Vec<_>, _>>()?;
+                let proof_script = Stmt::new(
+                    StmtKind::Seqn {
+                        statements,
+                        declarations: nested,
+                    },
+                    Metadata::default(),
+                );
+                Stmt::new(StmtKind::Package { wand, proof_script }, meta)
             }
             vir::StmtKindData::PureAssign(assign) => {
                 let lhs = self.expression(&assign.lhs)?;
@@ -1409,7 +1580,15 @@ pub fn program_to_silver(
                             .interpretation
                             .as_ref()
                             .map(|i| i.interpretation.into()),
-                        domain_name: domain.name.into(),
+                        domain_name: context
+                            .domain_functions
+                            .get(function.name.to_str())
+                            .ok_or(ConversionError::UnsupportedProgramMember(
+                                "domain function owner",
+                            ))?
+                            .0
+                            .name
+                            .into(),
                         meta: Metadata::default(),
                     }))
                 })
@@ -1421,7 +1600,14 @@ pub fn program_to_silver(
                     Ok(DomainAxiom::new(DomainAxiomKind::Named {
                         name: axiom.name.into(),
                         exp: context.expression(&axiom.expr)?,
-                        domain_name: domain.name.into(),
+                        domain_name: context
+                            .domain_axioms
+                            .get(axiom.name)
+                            .ok_or(ConversionError::UnsupportedProgramMember(
+                                "domain axiom owner",
+                            ))?
+                            .name
+                            .into(),
                         meta: Metadata::default(),
                     }))
                 })
@@ -1478,10 +1664,30 @@ pub fn program_to_silver(
         .functions
         .iter()
         .map(|function| {
-            if !matches!(function.decreases, vir::DecreasesGenData::None) {
-                return Err(ConversionError::UnsupportedProgramMember(
-                    "function decreases",
-                ));
+            use ferrum_silver::plugin::standard::termination::termination_ast_extension::{
+                DecreasesClause, DecreasesKind,
+            };
+            let mut posts = function
+                .posts
+                .iter()
+                .map(|e| context.expression(e))
+                .collect::<Result<Vec<_>, _>>()?;
+            let decreases = match function.decreases {
+                vir::DecreasesGenData::None => None,
+                vir::DecreasesGenData::Tuple(values, condition) => Some(DecreasesKind::Tuple {
+                    tuple: values
+                        .iter()
+                        .map(|e| context.expression(e))
+                        .collect::<Result<_, _>>()?,
+                    condition: condition.map(|e| context.expression(&e)).transpose()?,
+                }),
+                vir::DecreasesGenData::Wildcard(condition) => Some(DecreasesKind::Wildcard {
+                    condition: condition.map(|e| context.expression(&e)).transpose()?,
+                }),
+                vir::DecreasesGenData::Star => Some(DecreasesKind::Star),
+            };
+            if let Some(kind) = decreases {
+                posts.push(DecreasesClause::new(kind, Metadata::default()).expression());
             }
             Ok(ferrum_silver::ast::program::Function::new(
                 ferrum_silver::ast::program::FunctionData {
@@ -1497,11 +1703,7 @@ pub fn program_to_silver(
                         .iter()
                         .map(|e| context.expression(e))
                         .collect::<Result<_, _>>()?,
-                    posts: function
-                        .posts
-                        .iter()
-                        .map(|e| context.expression(e))
-                        .collect::<Result<_, _>>()?,
+                    posts,
                     body: function.expr.map(|e| context.expression(&e)).transpose()?,
                     meta: Metadata::default(),
                 },

@@ -435,6 +435,14 @@ impl PrustiTokenStream {
                 let mut stream = self.pop_group(Delimiter::Parenthesis).ok_or_else(|| {
                     error(span, "expected parenthesized expression after quantifier")
                 })?;
+                let capture = if matches!(stream.tokens.front(),
+                    Some(PrustiToken::Token(TokenTree::Ident(ident))) if ident == "move")
+                {
+                    stream.tokens.pop_front();
+                    quote!(move)
+                } else {
+                    TokenStream::new()
+                };
                 let args = stream
                     .pop_closure_args()
                     .ok_or_else(|| error(span, "expected quantifier body"))?;
@@ -482,7 +490,7 @@ impl PrustiTokenStream {
                 check_triggers(&triggers, &bound_vars)?;
                 let args = args.parse()?;
                 let body = stream.parse()?;
-                kind.translate(span, triggers, args, body)
+                kind.translate(span, triggers, args, body, capture)
             }
 
             Some(PrustiToken::SpecEnt(span, _)) | Some(PrustiToken::CallDesc(span, _)) => {
@@ -976,6 +984,7 @@ impl Quantifier {
         triggers: Vec<Vec<TokenStream>>,
         args: TokenStream,
         body: TokenStream,
+        capture: TokenStream,
     ) -> TokenStream {
         let full_span = join_spans(span, body.span());
         let trigger_sets = triggers
@@ -985,7 +994,7 @@ impl Quantifier {
                 // closure: the encoder relies on the two being encoded alike.
                 let triggers = TokenStream::from_iter(set.into_iter().map(|trigger| {
                     quote_spanned! { trigger.span() =>
-                    &( #[prusti::spec_only] | #args | ( #trigger ) ), }
+                    &( #[prusti::spec_only] #capture | #args | ( #trigger ) ), }
                 }));
                 quote_spanned! { full_span => ( #triggers ) }
             })
@@ -994,11 +1003,11 @@ impl Quantifier {
         match self {
             Self::Forall => quote_spanned! { full_span => ::prusti_contracts::forall(
                 ( #( #trigger_sets, )* ),
-                &( #[prusti::spec_only] | #args | -> bool { #body } ),
+                &( #[prusti::spec_only] #capture | #args | -> bool { #body } ),
             ) },
             Self::Exists => quote_spanned! { full_span => ::prusti_contracts::exists(
                 ( #( #trigger_sets, )* ),
-                &( #[prusti::spec_only] | #args | -> bool { #body } ),
+                &( #[prusti::spec_only] #capture | #args | -> bool { #body } ),
             ) },
         }
     }
@@ -1317,6 +1326,19 @@ mod tests {
             let _err = _res.unwrap_err();
             assert_eq!(_err.to_string(), $expected);
         }};
+    }
+
+    #[test]
+    fn quantifier_move_captures() {
+        for quantifier in ["forall", "exists"] {
+            let source = format!(
+                "{quantifier}(move |x: i32| x == f(x), triggers = [(f(x),)])"
+            );
+            let translated = parse_prusti(source.parse().unwrap()).unwrap().to_string();
+            // The body and its trigger observe the same captured values.
+            assert_eq!(translated.matches("move | x : i32 |").count(), 2);
+            assert!(parse_prusti(format!("{quantifier}(move true)").parse().unwrap()).is_err());
+        }
     }
 
     #[test]

@@ -1690,9 +1690,20 @@ diagnostics pass. The combined selector/observer run passes all 14 checks;
 all 37 specification-parser unit tests pass as well. This selector grants no
 additional permissions and does not supply a preservation relation by itself.
 
-The next value-frame step uses these observations without rereading expired
-iterator storage. First check an untrusted generic slice reborrow with a
-per-element group-state pledge. Then state the native constructor and `next`
+An untrusted generic slice reborrow now verifies a universally quantified
+per-element group-state expiry pledge. Its false pledge is rejected, and the
+Rust check and runtime exercise pass (four checks, build 67,
+`target/stdlib-im4-move67-iterator-spec-logs`). `forall` and `exists` now accept
+`move` captures, including their explicit triggers; all 38 parser tests pass.
+Using value captures for the saved sequences avoids the Java stack overflow
+seen with the expanded reference captures in the concrete reborrow probe.
+The concrete caller still fails its final-value assertion: collection
+conversion currently exports aggregate preservation without a usable checked
+relation for each opaque element's state. Experimental stronger conversion
+postconditions have not passed and are not an accepted frame.
+
+The next value-frame step connects the checked element observations across
+collection conversions. Then state the native constructor and `next`
 resource frames at that group stage, using saved pre-call and post-call
 sequences. Verify contract well-formedness and the concrete two-yield/holder
 restoration probes before extending the prefix-loop summary. Keep the physical

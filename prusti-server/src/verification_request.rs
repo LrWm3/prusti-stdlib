@@ -95,7 +95,10 @@ impl ServerVerificationRequest {
                     }
                 };
                 stopwatch.start_next("backend verification");
-                result.kind = backend.verify(procedures, sender.clone());
+                result.kind = {
+                    let _phase = crate::bench_phase::Phase::start("backend verification");
+                    backend.verify(procedures, sender.clone())
+                };
                 result.time_ms = stopwatch.finish().as_millis();
             }
             #[cfg(feature = "ferrum")]
@@ -160,10 +163,13 @@ impl VerificationRequest {
             VerificationBackend::Ferrum => {
                 #[cfg(feature = "ferrum")]
                 {
-                    let program = vir::with_vcx(|vcx| {
-                        prusti_ferrum::program_to_silver(vcx.get_program(self.program))
-                            .map_err(|e| format!("VIR conversion: {e:?}"))
-                    })
+                    let program = {
+                        let _phase = crate::bench_phase::Phase::start("VIR conversion");
+                        vir::with_vcx(|vcx| {
+                            prusti_ferrum::program_to_silver(vcx.get_program(self.program))
+                                .map_err(|e| format!("VIR conversion: {e:?}"))
+                        })
+                    }
                     .and_then(|program| {
                         if config::dump_viper_program() {
                             let rendered =
@@ -210,10 +216,13 @@ impl VerificationRequest {
                 ast_utils.with_local_frame(16, || {
                     let ast_factory = context.new_ast_factory();
 
-                    let viper_program = vir::with_vcx(|vcx| {
-                        let program = vcx.get_program(self.program);
-                        prusti_viper::program_to_viper(program, &ast_factory)
-                    });
+                    let viper_program = {
+                        let _phase = crate::bench_phase::Phase::start("VIR conversion");
+                        vir::with_vcx(|vcx| {
+                            let program = vcx.get_program(self.program);
+                            prusti_viper::program_to_viper(program, &ast_factory)
+                        })
+                    };
 
                     if config::dump_viper_program() {
                         stopwatch.start_next("dumping viper program");

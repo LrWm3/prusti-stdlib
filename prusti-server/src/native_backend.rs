@@ -237,9 +237,12 @@ fn verify_internal(
                     (Err(error), Err(cleanup)) => Err(format!("{error}; {cleanup}")),
                 };
             }
-            let result = frontend
-                .verify(&program)
-                .map_err(|e| format!("verification: {e}"));
+            let result = {
+                let _phase = crate::bench_phase::Phase::start("backend verification");
+                frontend
+                    .verify(&program)
+                    .map_err(|e| format!("verification: {e}"))
+            };
             for warning in frontend.take_warnings() {
                 log::warn!("Ferrum: {warning}");
             }

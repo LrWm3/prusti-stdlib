@@ -18,6 +18,7 @@ use prusti_rustc_interface::{data_structures::fx::FxHashMap, span::DUMMY_SP};
 use prusti_utils::{config, Stopwatch};
 use viper::{self, Cache, PersistentCache};
 
+mod bench_phase;
 mod client;
 mod process_verification;
 pub mod server;

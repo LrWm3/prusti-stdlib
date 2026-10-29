@@ -36,3 +36,14 @@ postcondition makes a subsequent `exhale false` unreachable. Both the exact
 Scala baseline and this native adapter accepted the existing `assert!(false)`
 fixture. Checked arithmetic overflow, including mutable-reference increment,
 is a useful negative integration case and is rejected at matching Rust spans.
+
+Set `FERRUM_BENCH_PHASES=1` with INFO logging enabled to record nanosecond timings
+for Rust-to-VIR encoding, VIR-to-backend conversion and the backend verification
+call. Driver logs contain encoding; server logs contain conversion and verification
+when using a remote server. Set the variable in both processes for all phases.
+The JVM verification measurement includes its wrapper/polling path; the native
+measurement covers `frontend.verify`. Neither separates solver startup, preamble,
+SMT solving or result mapping. Keep caches disabled, record binary/input hashes,
+and measure startup, first request and later requests separately before comparing.
+The initial paired warm-service smoke completed eight requests with caching off;
+it establishes that the measurement path works, not a performance improvement.

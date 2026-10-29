@@ -1636,8 +1636,15 @@ Logs are in `target/stdlib-im4-constructor58-{iterator,resources}-spec-logs`;
 the corrected Option positive and its false control were rerun separately.
 The seven native scalar early-drop/full-prefix checks also pass with the new
 constructor conversion (`target/stdlib-im4-native56-iterator-spec-logs`).
-The original two-yield mutable-reference write probe now verifies in 153s;
-stronger final-value and negative controls are being checked before promotion.
+The original two-yield mutable-reference write probe now verifies. It is
+promoted to `mut_native_mut_ref_write_pass`, with a false control that fails at
+the intended assertion. The Rust check and runtime exercise also pass (four
+checks, 90.41s for the positive and 143.11s for the false control, with
+`--proverEnableTimeBounds` and a 300-second program limit). Stronger assertions
+that reread the restored slice exposed a PCG future-projection conflict; a
+plain-Rust reproducer isolates it before Viper. That restoration path remains
+under investigation, so this checkpoint establishes the writes, not final
+referent-value framing.
 
 The symbolic-array positive still passes with the original solver resource
 bounds (126.49s in the concurrent build-58 run). The experimental
@@ -1645,7 +1652,8 @@ bounds (126.49s in the concurrent build-58 run). The experimental
 the emitted program is identical to the earlier passing checkpoint. This is a
 configuration-sensitive proof limitation, not evidence of a constructor
 encoding regression or a Viper bug. Keep the original array settings while
-continuing to improve proof stability.
+continuing to improve proof stability. All five symbolic-array checks pass
+with the original settings (`target/stdlib-im4-array58-default-iterator-spec-logs`).
 
 This is a development checkpoint, not an IM4 acceptance result. Symbolic
 collection conversion for further element shapes, generic parameters nested

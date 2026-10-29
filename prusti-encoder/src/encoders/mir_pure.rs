@@ -480,9 +480,16 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                     | PureKind::RestorationBlockClosure
             ),
             spec_closure: matches!(kind, PureKind::SpecClosure { .. }),
+            // Expiry pledges also need their temporaries expanded before
+            // temporal heap selection. Otherwise `old` can contain a wand's
+            // bound local, preventing Viper from abstracting the entry-heap
+            // read and making the callee's `old` differ from a caller label.
             inline_snapshots: matches!(
                 kind,
-                PureKind::SpecBlock(_)
+                PureKind::Spec {
+                    allow_before_expiry: true,
+                    ..
+                } | PureKind::SpecBlock(_)
                     | PureKind::SpecBlockClosure
                     | PureKind::RestorationBlock(_)
                     | PureKind::RestorationBlockClosure

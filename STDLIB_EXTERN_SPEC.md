@@ -1869,6 +1869,20 @@ all pass their expected checks (five checks including Rust and runtime,
 30-second assertions with time bounds). No helper contract or resource
 assumption changes in this checkpoint.
 
+Expiry pledges now expand their temporary snapshots before selecting temporal
+heaps, including pledges without a quantifier. This removes the differing
+`old`/`old[pre2]` structure in the native head wand. An untrusted slice reborrow
+with an old heap observation through a temporary verifies, its reachable
+`false` client is rejected, and its wrong pledge is rejected at the pledge
+itself. The ten prior temporal-capture checks also pass. Logs are in
+`target/stdlib-im4-expiry92-borrow-spec-logs`; the wrong-pledge test's annotation
+was moved to the diagnostic's opening line and its rerun passes in
+`target/stdlib-im4-expiry92-span-borrow-spec-logs`. The native experiment now
+advances to a resource-observer permission failure. A checked diagnostic
+assertion isolates missing equality between a sized yielded reference's
+metadata and unit metadata; the encoded `Pointee::Metadata` type function
+currently lacks that compiler-defined equation.
+
 The first step is a prerequisite for the others: adding an abstract predicate
 only to call-site contracts would not establish that a generic implementation
 actually preserves it.

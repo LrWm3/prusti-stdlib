@@ -196,6 +196,7 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
                         Some(PostCapture {
                             label: Some(vir::OldLabel::Label(label)),
                             bindings: None,
+                            memo: None,
                         }),
                     )));
                 });
@@ -768,6 +769,7 @@ impl<'vir> WandEncOutput<'vir> {
         let capture = Some(PostCapture {
             label: output_heap_label.map(vir::OldLabel::Label),
             bindings: output_bindings,
+            memo: output_bindings.map(|_| &*vcx.alloc(std::cell::RefCell::new(Default::default()))),
         });
         let pledge_expr = |pledge: &PledgeExpr<'vir>| match pledge_old_label {
             Some(label) => {

@@ -1828,6 +1828,15 @@ stale-value controls, both index bounds, missing permission, and executable-use
 rejection (`target/stdlib-im4-observer82-iterator-spec-logs`). This regression
 run uses the original solver resource bounds.
 
+Repeated `after_call` reads now share one captured snapshot within a wand when
+the expression, arguments, and temporal context are identical. This avoids
+hundreds of duplicate capture bindings in the native contract experiment.
+All ten existing `after_call` checks pass, including moving the owner, false
+and wrong pledges, and invalid/nested temporal uses
+(`target/stdlib-im4-capture86-borrow-spec-logs`). The debug encoder now reaches
+the JVM on the native probe, but its expanded expression is still too large;
+this checkpoint does not establish the native restoration value proof.
+
 The first step is a prerequisite for the others: adding an abstract predicate
 only to call-site contracts would not establish that a generic implementation
 actually preserves it.

@@ -49,10 +49,20 @@ pub enum MirPureEncError {
     // UnsupportedTerminator,
 }
 
+type PostCaptureKey<'vir> = (
+    usize,
+    DefId,
+    usize,
+    vir::OldLabel<'vir>,
+    Option<vir::OldLabel<'vir>>,
+);
+
 #[derive(Clone, Copy)]
 pub struct PostCapture<'vir> {
     pub label: Option<vir::OldLabel<'vir>>,
     pub bindings: Option<&'vir SnapshotBindings<'vir>>,
+    pub memo:
+        Option<&'vir std::cell::RefCell<FxHashMap<PostCaptureKey<'vir>, vir::LocalDeclSnap<'vir>>>>,
 }
 
 pub type ExprInput<'vir> = (
@@ -1528,12 +1538,31 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                     Box::new(move |vcx, lctx: ExprInput<'vir>| {
                         use vir::Reify;
                         let capture = lctx.3.expect("after_call requires a pledge context");
+                        // Reification visits a shared expression once per use.
+                        // One post-call heap read needs only one capture in this
+                        // wand. Include its complete argument and temporal context
+                        // so reads at distinct sites or heaps remain separate.
+                        let key = (
+                            std::ptr::from_ref(inner).cast::<()>() as usize,
+                            lctx.0,
+                            std::ptr::from_ref(lctx.1).cast::<()>() as usize,
+                            lctx.2,
+                            capture.label,
+                        );
+                        if let Some(memo) = capture.memo
+                            && let Some(decl) = memo.borrow().get(&key)
+                        {
+                            return vcx.mk_local_ex(*decl).kind;
+                        }
                         let value = vcx.maybe_apply_label(inner.reify(vcx, lctx), capture.label);
                         if let Some(bindings) = capture.bindings {
                             let name =
                                 vir::vir_format!(vcx, "_wand_snapshot_{}", bindings.borrow().len());
                             let decl = vcx.mk_local_decl(name, value.ty());
                             bindings.borrow_mut().push((decl, value));
+                            if let Some(memo) = capture.memo {
+                                memo.borrow_mut().insert(key, decl);
+                            }
                             vcx.mk_local_ex(decl).kind
                         } else {
                             value.kind

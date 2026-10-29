@@ -437,28 +437,15 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 .map_err(EncodeRvalueError::from)?
                 .into()),
 
-            mir::Rvalue::Aggregate(box _kind @ mir::AggregateKind::Array(..), elements) => {
-                let e_rvalue_ty = self.ty_use_pure(rvalue_ty);
-                let al = e_rvalue_ty.expect_array();
-                let tmp_exp: vir::ExprCSnap<'vir> =
-                    self.new_tmp(e_rvalue_ty.snapshot.downcast_ty());
-                for (idx, element) in elements.iter().enumerate() {
-                    let element_snap = self.encode_operand_snap(element, operand_snaps)?;
-                    self.stmt(
-                        self.vcx.mk_inhale_stmt(
-                            self.vcx.mk_eq_expr(
-                                al.index(
-                                    tmp_exp,
-                                    self.vcx
-                                        .mk_const_expr(vir::ConstData::Int(idx as u128))
-                                        .downcast_ty(),
-                                ),
-                                element_snap,
-                            ),
-                        ),
-                    );
-                }
-                Ok(tmp_exp.upcast_ty().into())
+            mir::Rvalue::Aggregate(box mir::AggregateKind::Array(..), elements) => {
+                let array = self.ty_use_pure(rvalue_ty).expect_array();
+                let elements = elements
+                    .iter()
+                    .map(|element| self.encode_operand_snap(element, operand_snaps))
+                    .collect::<Result<Vec<_>, _>>()?;
+                // Preserve the complete generic element snapshot, including its type
+                // tag. Equality after a concrete projection loses that information.
+                Ok(array.elems_to_snap(&elements).upcast_ty().into())
             }
 
             mir::Rvalue::Aggregate(

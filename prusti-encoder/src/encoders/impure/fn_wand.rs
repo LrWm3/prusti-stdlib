@@ -674,16 +674,22 @@ impl<'vir> WandEncOutput<'vir> {
             if sources.is_empty() {
                 // The contract still contains this wand. It need not be
                 // applied when all opaque sources instantiate to checked empty
-                // groups and it carries no expiry pledge. Merely having no
-                // projection is insufficient for unknown or collection types.
-                let mut trivial = wand.pledges.is_empty();
+                // groups and it carries no caller obligation. Discarding its
+                // additional postconditions only weakens the available facts;
+                // an assert_on_expiry obligation must never be discarded.
+                // Merely having no projection is insufficient for unknown or
+                // collection types.
+                let mut disposable = wand
+                    .pledges
+                    .iter()
+                    .all(|pledge| pledge.expiry_obligation.is_none());
                 for node in &source_nodes {
                     let regions: IndexVec<_, GeneralizedLifetime<'vir>> =
                         vcx.tcx().extract_regions(node.ty(self.fn_sig(vcx, None)));
                     let Some(GeneralizedLifetime::RegionsIn(opaque)) =
                         regions.get(node.region_idx())
                     else {
-                        trivial = false;
+                        disposable = false;
                         break;
                     };
                     let actual = call_ctx.normalize(opaque.ty(vcx.tcx()));
@@ -695,9 +701,9 @@ impl<'vir> WandEncOutput<'vir> {
                         .map_err(|_| {
                             "cannot check an empty instantiated resource group".to_string()
                         })?;
-                    trivial &= conversion.has_trivial_resources();
+                    disposable &= conversion.has_trivial_resources();
                 }
-                if trivial {
+                if disposable {
                     continue;
                 }
                 return Err("function-call wand has no identifiable source projections".to_string());

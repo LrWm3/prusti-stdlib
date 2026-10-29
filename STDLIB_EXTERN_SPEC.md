@@ -1895,6 +1895,22 @@ clients all pass (12 checks,
 `target/stdlib-im4-metadata94-resources-spec-logs`, 600-second program limit,
 30-second assertions with time bounds).
 
+A call-site wand whose opaque sources all instantiate to checked empty
+resource groups may now discard extra expiry postconditions. This weakens the
+facts available to the caller. It must still retain or reject any
+`assert_on_expiry` obligation; an empty projection mapping alone does not
+justify discarding a wand. The scalar reborrow proves its updated value and
+rejects a reachable `false`, and the existing conditional obligation positive
+and wrong-value controls pass. A whole-value generic obligation instantiated
+with `u32` is conservatively rejected at its expiry. Logs are in
+`target/stdlib-im4-empty96-iterator-spec-logs` (build 97) and
+`target/stdlib-im4-pledges98-iterator-spec-logs`; they use the recorded
+600-second program limit and 30-second assertions with time bounds. The scalar
+positive takes 308.22s and its false control 150.35s. An initial slice-based
+obligation diagnostic also reported a generated unpack helper's type-preservation
+failure; it is not counted as a successful negative proof. The smaller
+whole-value diagnostic isolates obligation retention and passes in 3.95s.
+
 The first step is a prerequisite for the others: adding an abstract predicate
 only to call-site contracts would not establish that a generic implementation
 actually preserves it.

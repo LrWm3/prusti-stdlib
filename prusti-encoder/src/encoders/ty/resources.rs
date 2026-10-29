@@ -106,6 +106,13 @@ impl<'vir> ResourceUse<'vir> {
     ) -> vir::ExprGenSeq<'vir, Curr, Next> {
         sequence_state_function().call()(sequence, self.ty.lazy(), start)
     }
+    pub fn sequence_element_state<Curr, Next>(
+        self,
+        sequence: vir::ExprGenSeq<'vir, Curr, Next>,
+        index: vir::ExprGenInt<'vir, Curr, Next>,
+    ) -> vir::ExprGenCSnap<'vir, Curr, Next> {
+        sequence_element_state_function().call()(sequence, self.ty.lazy(), index)
+    }
     pub fn state<Curr, Next>(
         self,
         snap: vir::ExprGenSnap<'vir, Curr, Next>,
@@ -485,6 +492,20 @@ fn sequence_state_function<'vir>()
         )
     })
 }
+fn sequence_element_state_function<'vir>()
+-> vir::FunctionIdn<'vir, (vir::Seq, vir::TyVal, vir::Int), vir::CSnap> {
+    vir::with_vcx(|vcx| {
+        vir::FunctionIdn::new(
+            vir::ViperIdent::new("indirect_sequence_element_state"),
+            (
+                vcx.mk_ty_seq(vir::TYPE_PSNAP),
+                vir::TYPE_TYVAL,
+                vir::TYPE_INT,
+            ),
+            state_type(),
+        )
+    })
+}
 pub(crate) fn fields_sequence_state<'vir, Curr, Next>(
     sequence: vir::ExprGenSeq<'vir, Curr, Next>,
 ) -> vir::ExprGenCSnap<'vir, Curr, Next> {
@@ -572,6 +593,19 @@ fn emit_sequence_state<'vir>(
                 &[],
             )
             .downcast_ty::<vir::CSnap>();
+        // Generic contracts and concrete pack/unpack helpers use one observer
+        // symbol, so their quantified frames share the same heap footprint.
+        program.add_function(vcx.mk_function(
+            sequence_element_state_function(),
+            (sequence, ty, start),
+            vcx.alloc_slice(&[
+                vir::expr! { ((zero) <= (i)) && ((i) < (length)) },
+                indexed.wrap(group(element(i), t, unit), i, &[]),
+            ]),
+            &[],
+            None,
+            Some(head),
+        ));
         let next = (vir::expr! { (i) + ([vcx.mk_uint::<1>()]) }).downcast_ty();
         let recursive = sequence_state_function().call()(seq, t, next);
         let body = vcx.mk_ternary_expr(

@@ -33,9 +33,13 @@ def main():
     parser.add_argument("--case", action="append", help="select binary names by glob; may be repeated")
     parser.add_argument("--skip-library", action="store_true", help="verify selected clients without separately verifying the spec library")
     parser.add_argument("--timeout", type=int, default=180, help="verification time limit per generated program in seconds (default: 180)")
+    parser.add_argument("--solver-timeout-ms", type=int, help="time/resource budget per solver assertion in milliseconds")
+    parser.add_argument("--solver-time-bounds", action="store_true", help="use elapsed-time bounds instead of Z3 resource bounds")
     args = parser.parse_args()
     if args.timeout <= 0:
         parser.error("--timeout must be positive")
+    if args.solver_timeout_ms is not None and args.solver_timeout_ms <= 0:
+        parser.error("--solver-timeout-ms must be positive")
     command_timeout = max(300, args.timeout + 120)
     root = Path(__file__).resolve().parent.parent
     sequence = args.suite == "sequence"
@@ -121,6 +125,10 @@ def main():
             "PRUSTI_EXTRA_VERIFIER_ARGS": "--timeout={} --numberOfParallelVerifiers 1".format(args.timeout),
             "PRUSTI_LOG_DIR": str(log_dir / "verifier"),
         })
+        if args.solver_timeout_ms is not None:
+            env["PRUSTI_ASSERT_TIMEOUT"] = str(args.solver_timeout_ms)
+        if args.solver_time_bounds:
+            env["PRUSTI_EXTRA_VERIFIER_ARGS"] += " --proverEnableTimeBounds"
         compiled = run("rust-check", ["cargo", "check", "--bins"], env)
         if compiled:
             if args.suite == "extern":
@@ -172,7 +180,7 @@ def main():
                     results.append({"case": "viper-trigger-" + quantifier, "passed": passed, "seconds": 0})
                     print("Viper {} trigger: {} ({})".format(quantifier, "PASS" if passed else "FAIL", program), flush=True)
 
-    (log_dir / "results.json").write_text(json.dumps({"toolchain": toolchain, "case_patterns": args.case, "spec_library_selected": not args.skip_library, "verifier_timeout": args.timeout, "cases": results}, indent=2) + "\n")
+    (log_dir / "results.json").write_text(json.dumps({"toolchain": toolchain, "case_patterns": args.case, "spec_library_selected": not args.skip_library, "verifier_timeout": args.timeout, "solver_timeout_ms": args.solver_timeout_ms, "solver_time_bounds": args.solver_time_bounds, "cases": results}, indent=2) + "\n")
     if not all(result["passed"] for result in results):
         raise SystemExit(1)
     scope = "Selected" if args.case or args.skip_library else "All"

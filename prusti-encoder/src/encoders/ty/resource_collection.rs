@@ -19,7 +19,7 @@ pub(crate) struct ResourceCollection<'vir> {
     unpack: MethodIdn<'vir, Arguments>,
     params: GenericParams<'vir>,
     raw_sequence: vir::FunctionIdn<'vir, Arguments, vir::Seq>,
-    raw_state: vir::FunctionIdn<'vir, Arguments, vir::CSnap>,
+    element_state: ResourceElementState<'vir>,
 }
 impl<'vir> ResourceCollection<'vir> {
     pub fn observe<Curr, Next>(
@@ -62,28 +62,7 @@ impl<'vir> ResourceCollection<'vir> {
         sequence: vir::ExprGenSeq<'vir, Curr, Next>,
         index: vir::ExprGenInt<'vir, Curr, Next>,
     ) -> vir::ExprGenCSnap<'vir, Curr, Next> {
-        vir::with_vcx(|vcx| {
-            self.raw_state.call()(
-                sequence,
-                index,
-                vcx.alloc_slice(
-                    &self
-                        .params
-                        .ty_exprs()
-                        .iter()
-                        .map(|e| e.lazy())
-                        .collect::<Vec<_>>(),
-                ),
-                vcx.alloc_slice(
-                    &self
-                        .params
-                        .const_exprs()
-                        .iter()
-                        .map(|e| e.lazy())
-                        .collect::<Vec<_>>(),
-                ),
-            )
-        })
+        self.element_state.observe(sequence, index)
     }
 
     pub fn statements(&self, sequence: vir::ExprSeq<'vir>, pack: bool) -> Vec<vir::Stmt<'vir>> {
@@ -152,7 +131,7 @@ impl TaskEncoder for ResourceCollectionEnc {
                 None,
             ));
         }
-        deps.require_ref::<ResourceElementStateEnc>(*task)?;
+        let element_state = deps.require_dep::<ResourceElementStateEnc>(*task)?;
         let caster = deps.require_dep::<GArgsCastEnc<crate::encoders::Pure>>(
             (!task.ty.specifics.is_param()).then_some(RustTyNormalized {
                 param: RustTyDecomposition::param(),
@@ -188,21 +167,18 @@ impl TaskEncoder for ResourceCollectionEnc {
                 vir::vir_format_identifier!(vcx, "resource_unpack_{suffix:x}"),
                 arity,
             );
-            let raw_state = vir::FunctionIdn::<Arguments, vir::CSnap>::new(
-                vir::vir_format_identifier!(vcx, "resource_raw_state_{suffix:x}"),
-                arity,
-                state_type(),
-            );
-            let group_state = vir::FunctionIdn::<Arguments, vir::CSnap>::new(
-                vir::vir_format_identifier!(vcx, "resource_group_state_{suffix:x}"),
-                arity,
-                state_type(),
-            );
             let raw_sequence = vir::FunctionIdn::<Arguments, vir::Seq>::new(
                 vir::vir_format_identifier!(vcx, "resource_raw_sequence_{suffix:x}"),
                 arity,
                 vcx.mk_ty_seq(state_type()),
             );
+            let group_sequence = vir::FunctionIdn::<Arguments, vir::Seq>::new(
+                vir::vir_format_identifier!(vcx, "resource_group_sequence_{suffix:x}"),
+                arity,
+                vcx.mk_ty_seq(state_type()),
+            );
+            let observed_group =
+                |index| group_sequence.call()(seq, index, params.ty_exprs(), params.const_exprs());
             let sequence_state = |group: bool, index| {
                 if group {
                     resource.sequence_state(seq, index)
@@ -211,12 +187,11 @@ impl TaskEncoder for ResourceCollectionEnc {
                 }
             };
             let state = |group: bool, index| {
-                (if group { group_state } else { raw_state }).call()(
-                    seq,
-                    index,
-                    params.ty_exprs(),
-                    params.const_exprs(),
-                )
+                if group {
+                    resource.sequence_element_state(seq, index)
+                } else {
+                    element_state.observe(seq, index)
+                }
             };
             let element = |index| {
                 caster.cast_to_caller_ctx(
@@ -298,6 +273,50 @@ impl TaskEncoder for ResourceCollectionEnc {
                 None,
                 Some(sequence_body),
             )));
+            // This observer specializes the aggregate to one finite element
+            // shape. Its pointwise contract does not participate in the
+            // recursive global observer's collection/type dependency cycle.
+            let offset = vcx
+                .mk_bin_op_expr(vir::BinOpKind::Sub, j, i)
+                .downcast_ty::<vir::Int>();
+            let group_element = state(true, j);
+            let group_elements = |values| {
+                vcx.mk_forall_expr(
+                    variables,
+                    vcx.alloc_slice(&[vcx.mk_trigger(&[group_element.as_dyn()])]),
+                    vir::expr! { ([range(i)]) ==> ((group_element) ==
+                    ([vcx.mk_seq_index_expr(values, offset).downcast_ty::<vir::CSnap>()])) },
+                )
+            };
+            let known_decl = vcx.mk_local_decl("conversion_known_group", result.ty());
+            let known = vcx.mk_local_ex(known_decl);
+            let group_body = vcx.mk_let_expr(
+                known_decl,
+                vcx.reveal_function(sequence_state(true, i)),
+                vcx.mk_ternary_expr(
+                    vcx.mk_eq_expr(i, length),
+                    known,
+                    vcx.mk_seq_concat_expr(
+                        vcx.mk_seq_literal_expr(vcx.alloc_slice(&[state(true, i)]), state_type()),
+                        observed_group(next),
+                    ),
+                ),
+            );
+            functions.push(vcx.opaque_function(vcx.mk_function(
+                group_sequence,
+                args,
+                vcx.alloc_slice(&[
+                    vir::expr! { ((zero) <= (i)) && ((i) <= (length)) },
+                    resources(true, i),
+                ]),
+                vcx.alloc_slice(&[
+                    vcx.mk_eq_expr(result, sequence_state(true, i)),
+                    vcx.mk_eq_expr(vcx.mk_collection_len_expr(result), extent),
+                    group_elements(result),
+                ]),
+                None,
+                Some(group_body),
+            )));
             let mut methods = Vec::new();
             // Unfold these recursive observers only in the conversion proof.
             // Client frames use their checked contracts, preventing unrelated
@@ -356,28 +375,61 @@ impl TaskEncoder for ResourceCollectionEnc {
                 body.push(
                     vcx.mk_assert_stmt(vcx.mk_eq_expr(revealed_sequence_state(target, next), tail)),
                 );
-                let statements = vcx.alloc_slice(&[
+                let initial = vcx.mk_old_expr(if packing {
+                    sequence_state(false, i)
+                } else {
+                    observed_group(i)
+                });
+                let group_decl = vcx.mk_local_decl("conversion_group_elements", result.ty());
+                let mut statements = vec![];
+                if !packing {
+                    statements.push(vcx.mk_local_decl_stmt(group_decl, Some(observed_group(i))));
+                    statements
+                        .push(vcx.mk_assert_stmt(group_elements(vcx.mk_local_ex(group_decl))));
+                }
+                statements.extend([
                     vcx.mk_local_decl_stmt(frame_decl, Some(revealed_sequence_state(source, i))),
+                    // Establish the pre-state relation while its complete
+                    // quantified footprint is still available.
+                    vcx.mk_assert_stmt(vcx.mk_eq_expr(frame, initial)),
                     vcx.mk_if_stmt(vir::expr! { (i) < (length) }, vcx.alloc_slice(&body), &[]),
                     // Retain the aggregate equality as a proof fact before
                     // checking pointwise observations of the completed state.
                     vcx.mk_assert_stmt(vcx.mk_eq_expr(revealed_sequence_state(target, i), frame)),
                 ]);
+                if packing {
+                    statements.push(vcx.mk_local_decl_stmt(group_decl, Some(observed_group(i))));
+                    statements
+                        .push(vcx.mk_assert_stmt(group_elements(vcx.mk_local_ex(group_decl))));
+                    statements.push(vcx.mk_assert_stmt(vcx.mk_eq_expr(observed_group(i), frame)));
+                }
                 let block = vcx.mk_cfg_block(
                     &vir::CfgBlockLabelData::Start,
                     &[],
-                    statements,
+                    vcx.alloc_slice(&statements),
                     &vir::TerminatorStmtGenData::Exit,
                 );
                 // Describe preservation directly in the method's pre-state.
                 // Passing the same heap-dependent observer as an argument and
                 // a precondition made callers prove equality across the
                 // permission transfer itself, especially inside wand packages.
-                let initial = vcx.mk_old_expr(sequence_state(source, i));
                 let mut posts = vec![
                     typed(i),
                     resources(target, i),
-                    vcx.mk_eq_expr(sequence_state(target, i), initial),
+                    vcx.mk_eq_expr(
+                        if packing {
+                            observed_group(i)
+                        } else {
+                            sequence_state(false, i)
+                        },
+                        initial,
+                    ),
+                    vcx.mk_forall_expr(
+                        variables,
+                        vcx.alloc_slice(&[vcx.mk_trigger(&[state(target, j).as_dyn()])]),
+                        vir::expr! { ([range(i)]) ==> (([state(target, j)]) ==
+                        ([vcx.mk_old_expr(state(source, j))])) },
+                    ),
                 ];
                 let access = super::indexed::observe_element(raw_element(j), j);
                 let observed = if packing {
@@ -432,7 +484,7 @@ impl TaskEncoder for ResourceCollectionEnc {
                     unpack,
                     params,
                     raw_sequence,
-                    raw_state,
+                    element_state,
                 },
             ))
         })
@@ -455,6 +507,7 @@ pub(crate) struct ResourceElementStateEnc;
 pub(crate) struct ResourceElementState<'vir> {
     raw_state: vir::FunctionIdn<'vir, Arguments, vir::CSnap>,
     params: GenericParams<'vir>,
+    opaque: Option<ResourceUse<'vir>>,
 }
 
 impl<'vir> ResourceElementState<'vir> {
@@ -463,6 +516,9 @@ impl<'vir> ResourceElementState<'vir> {
         sequence: vir::ExprGenSeq<'vir, Curr, Next>,
         index: vir::ExprGenInt<'vir, Curr, Next>,
     ) -> vir::ExprGenCSnap<'vir, Curr, Next> {
+        if let Some(resource) = self.opaque {
+            return resource.sequence_element_state(sequence, index);
+        }
         vir::with_vcx(|vcx| {
             self.raw_state.call()(
                 sequence,
@@ -508,6 +564,7 @@ impl TaskEncoder for ResourceElementStateEnc {
         deps: &mut TaskEncoderDependencies<'vir, Self>,
     ) -> EncodeFullResult<'vir, Self> {
         deps.emit_output_ref(*task, ())?;
+        deps.require_ref::<super::resources::ResourceSequenceEnc>(())?;
         let conversion = deps.require_dep::<ResourceConversionEnc>(*task)?;
         if !conversion.supports_indexed_resources() {
             return Err(task_encoder::EncodeFullError::EncodingError(
@@ -522,6 +579,12 @@ impl TaskEncoder for ResourceElementStateEnc {
             }),
         )?;
         let params = deps.require_dep::<GenericParamsEnc>(task.args.context())?;
+        let opaque = matches!(
+            task.ty.specifics,
+            super::TySpecifics::Param(_) | super::TySpecifics::Opaque(_)
+        )
+        .then(|| ResourceUse::new(deps, *task))
+        .transpose()?;
         vir::with_vcx(|vcx| {
             let mut hash = std::collections::hash_map::DefaultHasher::new();
             format!("{task:?}").hash(&mut hash);
@@ -572,7 +635,14 @@ impl TaskEncoder for ResourceElementStateEnc {
                     )
                 })
                 .collect();
-            Ok((functions, ResourceElementState { raw_state, params }))
+            Ok((
+                functions,
+                ResourceElementState {
+                    raw_state,
+                    params,
+                    opaque,
+                },
+            ))
         })
     }
 

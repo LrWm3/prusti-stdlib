@@ -1785,6 +1785,30 @@ Rust checking, `target/stdlib-im4-loop78-default-iterator-spec-logs`). This
 closes those regression failures, not the remaining native reference-element
 value and combined prefix-loop gates.
 
+The indexed reborrow now proves the final referent value across the complete
+pack → generic expiry pledge → unpack path. Generic contracts and concrete
+conversions use the same checked per-element group observer; specialized
+aggregate observers export checked pointwise relations without expanding the
+global recursive observer in client proofs. The untrusted reborrow positive
+and wrong-value control, Rust check, and runtime exercise pass (four checks,
+`target/stdlib-im4-reborrow79-time30-iterator-spec-logs`). This run uses a
+600-second program limit, 30-second solver assertions, and time bounds. The
+positive also passes with the original resource bounds (build 76, 136.61s),
+but the negative exceeded its 300-second program limit under those bounds.
+Reproduce the accepted configuration with:
+
+```sh
+./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite iterator \
+  --case 'mut_sequence_state_reborrow_*' --skip-library --timeout 600 \
+  --solver-timeout-ms 30000 --solver-time-bounds
+```
+
+Every conversion and observer body remains checked. This is an indexed
+checkpoint: a universally quantified concrete caller still overflows the
+verifier stack or exceeds its time limit, and the experimental whole-sequence
+observer did not resolve that failure. Native iterator resource frames and
+combined prefix loops remain open.
+
 The first step is a prerequisite for the others: adding an abstract predicate
 only to call-site contracts would not establish that a generic implementation
 actually preserves it.

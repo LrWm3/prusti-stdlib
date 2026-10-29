@@ -446,12 +446,10 @@ paths could make zero-sized element comparisons inconsistent.
 
 ## IM4: Native inner-reference restoration after yield expiry
 
-`im4_mut_ref_restoration_{pass,false,wrong}` and
-`im4_holder_restoration_{pass,false,wrong}` strengthen the native write-only
-probes with reads of the restored source. The former exposed a PCG conflict
-between current and future lifetime projections; PCG `50e6a46` fixes it and
-passes the numbered corpus and shape/projection tests. On encoder build 60,
-the positive proofs now fail at their final-value assertions (177.23s for two
-yields, 129.62s for the holder). The false and wrong controls are retained for
-future paired validation; failures at earlier positive assertions are not
-accepted negative proofs. Logs: `target/stdlib-im4-native-ref60-iterator-spec-logs`.
+The holder and two-reference restoration probes have moved into `src/bin` as
+`mut_native_{holder,mut_ref}_restoration_{pass,false,wrong}`. Their complete
+positive proofs and intended negative diagnostics passed with the experimental
+native resource contracts (build 123). The regular suite now checks these
+contracts together with initial/untouched referent framing, empty/exhausted
+iteration, and `IntoIterator`. Combined whole-prefix resource-state loops
+remain separate acceptance work; see `STDLIB_EXTERN_SPEC.md`.

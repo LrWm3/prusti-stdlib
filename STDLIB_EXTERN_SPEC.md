@@ -2079,6 +2079,23 @@ settings remain required for this library gate. The full symbolic-array
 positive likewise passes under resource bounds (341.07s, build 137) but fails
 under time bounds; this proof-configuration limitation remains documented.
 
+The native resource contracts are now in the bundled slice specification.
+The regular fixture verifies holder and two-reference restoration, empty and
+exhausted iteration, and initial/untouched referent framing, with all eight
+exact-diagnostic false/wrong-state controls passing (build 137,
+`target/stdlib-im4-native137-iterator-spec-logs`). Mutable-slice `IntoIterator`
+initially failed its second final-value assertion in that batch; a fresh full
+run passes in 289.59s on build 141, including every generated conversion body
+(`target/stdlib-im4-into146-iterator-spec-logs`). This remains evidence of
+solver sensitivity, not a consistently passing single batch. Both runs use
+600-second program and 30-second assertion time bounds, disabled caches, and
+overflow/panic checks. The six former native restoration probes are promoted
+from `known_limits` alongside the new boundary/framing/IntoIterator pairs.
+This closes the concrete straight-line native resource cases; combined
+resource-state loops, reference-bearing Vec views, and the outstanding array
+negative rerun remain open. An array consistency control exceeded 600 seconds
+in the resource-bound batch; its timeout is not counted as rejection.
+
 The first step is a prerequisite for the others: adding an abstract predicate
 only to call-site contracts would not establish that a generic implementation
 actually preserves it.

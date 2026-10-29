@@ -38,8 +38,14 @@ cannot call the marker. The `mut_element_*` clients separately check direct inde
 mutable-reference elements, fixed arrays, optional references, and structs
 with two independent lifetimes. They prove mutation and framing through
 ordinary Rust scalar reads, with exact wrong-value and false controls. Native
-iteration over mutable-reference elements and generic reference resources
-remain incomplete; additional iterator operations are outside these examples.
+straight-line iteration now also restores mutable-reference elements and
+reference-bearing holders, including initial and untouched referent values,
+empty/exhausted cases, and mutable-slice `IntoIterator`. The
+`mut_native_{holder,mut_ref}_restoration_*` and `mut_native_resource_*` cases
+exercise these resource contracts. Whole-prefix loops over reference-bearing
+elements and their Vec views remain incomplete. Solver configuration and
+the fresh-run `IntoIterator` result are recorded in `STDLIB_EXTERN_SPEC.md`;
+the complete native batch has not yet passed consistently.
 
 A separate untrusted iterator stores an explicit borrowed tail and implements
 `next` with `mem::replace` and `split_at_mut`. Its regressions restore multiple

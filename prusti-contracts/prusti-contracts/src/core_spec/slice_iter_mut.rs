@@ -11,6 +11,20 @@ impl<T> [T] {
     #[ensures(mut_slice_len(&*mut_iter_tail(&result)) == old(self.len()))]
     #[ensures(mut_slice_contents(&*mut_iter_tail(&result)) == old(Seq::from_slice(&*self)))]
     #[after_expiry(self => Seq::from_slice(&*self) == before_expiry(mut_slice_contents(&*mut_iter_tail(&result))))]
+    #[after_expiry(self[_] => {
+        let source = old(Seq::from_slice(&*self));
+        forall(move |j: Int| (Int::from(0) <= j && j < source.len()) ==>
+            sequence_resource_state(&source, j)
+                == before_expiry(sequence_resource_state(&source, j)),
+            triggers = [(source[j],)])
+    })]
+    #[ensures({
+        let source = old(Seq::from_slice(&*self));
+        let tail = mut_slice_contents(&*mut_iter_tail(&result));
+        forall(move |j: Int| (Int::from(0) <= j && j < source.len()) ==>
+            sequence_resource_state(&tail, j) == old(sequence_resource_state(&source, j)),
+            triggers = [(tail[j],)])
+    })]
     #[ensures(mut_iter_refs(&result).len() == Int::from(old(self.len())))]
     #[ensures(forall(|i: usize| i < old(self.len()) ==>
         mut_ref_shared_same_address(&*mut_iter_refs(&result)[i], old(&self[i]))))]
@@ -47,6 +61,40 @@ impl<'a, T> Iterator for core::slice::IterMut<'a, T> {
         Some(_) => mut_iter_refs(&*self) == old(mut_iter_refs(&*self))[1..],
         None => mut_iter_refs(&*self) == old(mut_iter_refs(&*self)),
     })]
+    #[after_expiry(self[_] => {
+        let source = old(mut_slice_contents(&*mut_iter_tail(&*self)));
+        match &result {
+            Some(_) => {
+                sequence_resource_state(&source, Int::from(0))
+                    == before_expiry(resource_state(&*source[Int::from(0)]))
+            },
+            None => true,
+        }
+    })]
+    #[after_expiry(self[_] => {
+        let source = old(mut_slice_contents(&*mut_iter_tail(&*self)));
+        let tail = source[1..];
+        forall(move |j: Int| (Int::from(1) <= j && j < source.len()) ==>
+            sequence_resource_state(&source, j)
+                == before_expiry(sequence_resource_state(&tail, j - Int::from(1))),
+            triggers = [(source[j],)])
+    })]
+    #[ensures({
+        let source = old(mut_slice_contents(&*mut_iter_tail(&*self)));
+        match &result {
+            Some(value) => resource_state(&**value)
+                == old(sequence_resource_state(&source, Int::from(0))),
+            None => true,
+        }
+    })]
+    #[ensures({
+        let source = old(mut_slice_contents(&*mut_iter_tail(&*self)));
+        let tail = mut_slice_contents(&*mut_iter_tail(&*self));
+        forall(move |j: Int| (Int::from(0) <= j && j < tail.len()) ==>
+            sequence_resource_state(&tail, j)
+                == old(sequence_resource_state(&source, j + Int::from(1))),
+            triggers = [(tail[j],)])
+    })]
     fn next(&mut self) -> Option<&'a mut T>;
 }
 
@@ -57,6 +105,20 @@ impl<'a, T> core::iter::IntoIterator for &'a mut [T] {
     #[ensures(mut_slice_len(&*mut_iter_tail(&result)) == old(self.len()))]
     #[ensures(mut_slice_contents(&*mut_iter_tail(&result)) == old(Seq::from_slice(&*self)))]
     #[after_expiry(self => Seq::from_slice(&*self) == before_expiry(mut_slice_contents(&*mut_iter_tail(&result))))]
+    #[after_expiry(self[_] => {
+        let source = old(Seq::from_slice(&*self));
+        forall(move |j: Int| (Int::from(0) <= j && j < source.len()) ==>
+            sequence_resource_state(&source, j)
+                == before_expiry(sequence_resource_state(&source, j)),
+            triggers = [(source[j],)])
+    })]
+    #[ensures({
+        let source = old(Seq::from_slice(&*self));
+        let tail = mut_slice_contents(&*mut_iter_tail(&result));
+        forall(move |j: Int| (Int::from(0) <= j && j < source.len()) ==>
+            sequence_resource_state(&tail, j) == old(sequence_resource_state(&source, j)),
+            triggers = [(tail[j],)])
+    })]
     #[ensures(mut_iter_refs(&result).len() == Int::from(old(self.len())))]
     #[ensures(forall(|i: usize| i < old(self.len()) ==>
         mut_ref_shared_same_address(&*mut_iter_refs(&result)[i], old(&self[i]))))]

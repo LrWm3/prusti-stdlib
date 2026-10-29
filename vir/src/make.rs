@@ -19,32 +19,68 @@ cfg_if! {
         //   variables are not checked
         // - Unsupported types are not checked
 
-        use std::collections::{HashMap, HashSet};
+        use prusti_rustc_interface::data_structures::fx::{FxHashMap, FxHashSet};
+        use std::rc::Rc;
+        use crate::Visitor;
 
         #[derive(Default)]
         struct BindingCheck<'vir> {
-            bindings: HashMap<&'vir str, TypeDyn<'vir>>,
-            // Expressions form a DAG. Revisit a shared node only when its
-            // lexical bindings differ; a pointer alone would miss type errors
-            // in a second scope.
-            checked: HashSet<(usize, usize)>,
-            scope: usize,
-            next_scope: usize,
+            bindings: FxHashMap<&'vir str, TypeDyn<'vir>>,
+            // Only free variables affect an expression's type check. Distinct
+            // enclosing lets often bind irrelevant temporaries; treating each
+            // as a new scope makes a shared expression graph exponential again.
+            free: FxHashMap<usize, Rc<[&'vir str]>>,
+            checked: FxHashSet<(usize, Vec<Option<TypeDyn<'vir>>>)>,
         }
         impl<'vir> BindingCheck<'vir> {
-            fn fresh_scope(&mut self) {
-                self.next_scope += 1;
-                self.scope = self.next_scope;
-            }
             fn insert(&mut self, name: &'vir str, ty: TypeDyn<'vir>) {
                 self.bindings.insert(name, ty);
-                self.fresh_scope();
             }
             fn restore(&mut self, name: &'vir str, previous: Option<TypeDyn<'vir>>) {
                 match previous {
                     Some(ty) => { self.bindings.insert(name, ty); }
                     None => { self.bindings.remove(name); }
                 }
+            }
+            fn free_variables<Curr, Next>(&mut self, e: ExprGenDyn<'vir, Curr, Next>) -> Rc<[&'vir str]> {
+                let key = std::ptr::from_ref(e).cast::<()>() as usize;
+                if let Some(names) = self.free.get(&key) {
+                    return names.clone();
+                }
+                let mut names = FxHashSet::default();
+                match e.kind {
+                    ExprKindGenData::Local(local) => { names.insert(local.name); }
+                    ExprKindGenData::Let(binding) => {
+                        names.extend(self.free_variables(binding.expr).iter().copied());
+                        names.remove(binding.name);
+                        names.extend(self.free_variables(binding.val).iter().copied());
+                    }
+                    _ => {
+                        struct Children<'vir, Curr, Next>(Vec<ExprGenDyn<'vir, Curr, Next>>);
+                        impl<'vir, Curr, Next> Visitor<'vir, Curr, Next> for Children<'vir, Curr, Next> {
+                            fn visit_expr(&mut self, e: ExprGenDyn<'vir, Curr, Next>) { self.0.push(e); }
+                        }
+                        let mut children = Children(Vec::new());
+                        e.super_visit_with(&mut children);
+                        for child in children.0 {
+                            names.extend(self.free_variables(child).iter().copied());
+                        }
+                        if let ExprKindGenData::Forall(ForallGenData { qvars, .. })
+                            | ExprKindGenData::Exists(ExistsGenData { qvars, .. }) = e.kind {
+                            for var in qvars.iter() { names.remove(var.name); }
+                        }
+                    }
+                }
+                let mut names = names.into_iter().collect::<Vec<_>>();
+                names.sort_unstable();
+                let names: Rc<[_]> = names.into();
+                self.free.insert(key, names.clone());
+                names
+            }
+            fn already_checked<Curr, Next>(&mut self, e: ExprGenDyn<'vir, Curr, Next>) -> bool {
+                let variables = self.free_variables(e);
+                let bindings = variables.iter().map(|name| self.bindings.get(name).copied()).collect();
+                !self.checked.insert((std::ptr::from_ref(e).cast::<()>() as usize, bindings))
             }
         }
         fn check_predicate_app_bindings<'vir, Curr, Next>(
@@ -117,7 +153,7 @@ cfg_if! {
             m: &mut BindingCheck<'vir>,
             e: ExprGenDyn<'vir, Curr, Next>
         ) {
-            if !m.checked.insert((std::ptr::from_ref(e).cast::<()>() as usize, m.scope)) {
+            if m.already_checked(e) {
                 return;
             }
             match e.kind {
@@ -138,16 +174,13 @@ cfg_if! {
                 },
                 ExprKindGenData::Let(LetGenData { name, val, expr }) => {
                     check_expr_bindings(m, *val);
-                    let scope = m.scope;
                     let previous = if matches!(val.kind, ExprKindGenData::Lazy(..)) {
                         m.bindings.remove(name)
                     } else {
                         m.bindings.insert(name, val.ty())
                     };
-                    m.fresh_scope();
                     check_expr_bindings(m, *expr);
                     m.restore(name, previous);
-                    m.scope = scope;
                 },
                 ExprKindGenData::FuncApp(FuncAppGenData { args, .. })
                 | ExprKindGenData::CollectionLiteral(CollectionLiteralGenData {
@@ -206,11 +239,9 @@ cfg_if! {
                 }
                 ExprKindGenData::Forall(ForallGenData { qvars, triggers, body })
                 | ExprKindGenData::Exists(ExistsGenData { qvars, triggers, body }) => {
-                    let scope = m.scope;
                     let previous = qvars.iter().map(|qvar| {
                         (qvar.name, m.bindings.insert(qvar.name, qvar.ty_dyn()))
                     }).collect::<Vec<_>>();
-                    m.fresh_scope();
                     for trigger in triggers.iter() {
                         for expr in trigger.exprs.iter() {
                             check_expr_bindings(m, *expr);
@@ -220,7 +251,6 @@ cfg_if! {
                     for (name, ty) in previous.into_iter().rev() {
                         m.restore(name, ty);
                     }
-                    m.scope = scope;
                 }
                 ExprKindGenData::InhaleExhale(InhaleExhaleGenData { inhale, exhale }) => {
                     check_expr_bindings(m, inhale.as_dyn());

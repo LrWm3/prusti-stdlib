@@ -1812,11 +1812,19 @@ combined prefix loops remain open.
 The first native resource-frame probe exposed an encoder performance problem
 before Viper started. A debugger sample showed the debug binding checker
 recursively revisiting shared expression nodes. It now caches visits by node
-and lexical scope, and restores shadowed bindings after lets and quantifiers.
-All 34 VIR unit tests pass, including a shared graph with over a trillion tree
-occurrences and controls that retain type-error detection across scopes
-(`/tmp/prusti-im4-bindings82-tests.log`). The iterator frame itself remains
+and the types of its free variables, and restores shadowed bindings after lets
+and quantifiers. A cache keyed by every lexical scope still repeated work under
+irrelevant temporary bindings; the refined cache avoids that repetition.
+All 35 VIR unit tests pass, including shared graphs with and without enclosing
+binders and controls that retain type-error detection across scopes
+(`/tmp/prusti-im4-bindings83-tests.log`). The iterator frame itself remains
 experimental until its native positive and negative gates pass.
+
+All nine existing sequence-observer checks pass with the indexed transport
+changes: Rust checking, runtime execution, correct observation, false and
+stale-value controls, both index bounds, missing permission, and executable-use
+rejection (`target/stdlib-im4-observer82-iterator-spec-logs`). This regression
+run uses the original solver resource bounds.
 
 The first step is a prerequisite for the others: adding an abstract predicate
 only to call-site contracts would not establish that a generic implementation

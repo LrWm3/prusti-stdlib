@@ -71,3 +71,16 @@ fn quantifier_restores_shadowed_binding() {
         check_expr_bindings(&mut BindingCheck::default(), e.as_dyn());
     });
 }
+
+#[test]
+fn shared_graph_under_irrelevant_bindings() {
+    with_vcx(|vcx| {
+        let mut body = vcx.mk_bool::<true>().as_dyn();
+        for _ in 0..35 {
+            let left = let_node(vcx, vcx.mk_uint::<0>().as_dyn(), body);
+            let right = let_node(vcx, vcx.mk_bool::<true>().as_dyn(), body);
+            body = vcx.mk_bin_op_expr(BinOpKind::And, left, right).as_dyn();
+        }
+        check_expr_bindings(&mut BindingCheck::default(), body);
+    });
+}

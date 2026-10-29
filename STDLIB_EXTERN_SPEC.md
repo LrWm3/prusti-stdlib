@@ -1517,18 +1517,19 @@ and executable misuse of the observer. Logs are in
 `target/stdlib-im4-finite-iterator-logs`; the full build also passed.
 
 The separate `stdlib_resources_spec` fixture now verifies a `no_std`
-`resource_specs` library containing generic identity and a twice-composed
-identity. Clients use its exported snapshot, resource-state, and expiry
+`resource_specs` library containing generic identity, a twice-composed
+identity, and identity over a trait's associated type. Clients use its exported snapshot, resource-state, and expiry
 contracts for mutable references, nested mutable references, a public wrapper
 with two independent lifetimes, a non-`Copy` owned struct, and shared references.
-All four positive clients verify and run. Three negative controls reject a
+All five positive clients verify and run. Five negative controls reject a
 wrong restored value, a wrong nested value, and `false` after returning to the
 owner. Library verification, the Rust check, runtime executions, and these
-clients make 13 checks. Run them with
+clients make 17 checks. Run them with
 `./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite resources`;
 logs are in `target/stdlib-resources-spec-logs`. This establishes the finite
-whole-parameter interface across crate boundaries; associated types,
-parameters nested in argument constructors, and collection views remain open.
+whole-parameter interface across crate boundaries, including an associated
+type instantiated with a mutable reference. Parameters nested in argument
+constructors and collection views remain open.
 
 Array literals now retain their complete generic element snapshots through
 the existing sequence constructor. Equating only the concrete projection had

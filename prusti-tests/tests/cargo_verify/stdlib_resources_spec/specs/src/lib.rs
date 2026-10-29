@@ -23,3 +23,14 @@ pub struct References<'a, 'b> {
 pub struct Owned {
     pub value: u32,
 }
+
+pub trait ResourceSource {
+    type Resource;
+}
+
+#[ensures(result === old(value))]
+#[ensures(resource_state(&result) === old(resource_state(&value)))]
+#[after_expiry(resource_state(&value) === before_expiry(resource_state(&result)))]
+pub fn identity_associated<S: ResourceSource>(value: S::Resource) -> S::Resource {
+    identity(value)
+}

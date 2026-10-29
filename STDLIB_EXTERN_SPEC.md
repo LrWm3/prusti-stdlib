@@ -1883,6 +1883,18 @@ assertion isolates missing equality between a sized yielded reference's
 metadata and unit metadata; the encoded `Pointee::Metadata` type function
 currently lacks that compiler-defined equation.
 
+The `Pointee` trait encoding now includes Rust's compiler-defined equation
+`T: Sized => <T as Pointee>::Metadata = ()`. Ordinary impl-item encoding cannot
+supply it because `Pointee` has a compiler implementation. The equation is
+guarded by `Sized`; it adds no referent permissions or heap-state equality and
+does not constrain unsized metadata to unit. The native holder probe passes
+the previous permission check and reaches its final value assertion, which
+still fails without explicit frame triggers. The resource library and selected
+cross-crate mutable, associated-type, owned/shared, false, and wrong-value
+clients all pass (12 checks,
+`target/stdlib-im4-metadata94-resources-spec-logs`, 600-second program limit,
+30-second assertions with time bounds).
+
 The first step is a prerequisite for the others: adding an abstract predicate
 only to call-site contracts would not establish that a generic implementation
 actually preserves it.

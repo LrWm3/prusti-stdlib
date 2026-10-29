@@ -1,4 +1,4 @@
-use prusti_rustc_interface::{middle::ty, span::def_id::DefId};
+use prusti_rustc_interface::{hir::attrs::LangItem, middle::ty, span::def_id::DefId};
 use rustc_hash::FxHashMap;
 use task_encoder::{EncodeFullResult, OutputRefAny, TaskEncoder, TaskEncoderDependencies};
 use vir::{FunctionIdn, ViperIdent, vir_format_identifier};
@@ -108,6 +108,11 @@ impl TaskEncoder for TraitEnc {
             );
             dom_funcs.push(vcx.mk_domain_function(impl_fun, false, None));
 
+            let metadata_fn = tcx
+                .lang_items()
+                .get(LangItem::Metadata)
+                .and_then(|metadata| assoc_types.get(&metadata).copied());
+
             // Emit the impl function reference early, so that it can be used to encode caller
             // bounds without causing dependency cycles.
             deps.emit_output_ref(
@@ -119,6 +124,33 @@ impl TaskEncoder for TraitEnc {
                     impl_fun,
                 },
             )?;
+
+            let mut axioms = Vec::new();
+            if let Some(metadata_fn) = metadata_fn {
+                // Pointee is compiler implemented, so there is no ordinary
+                // impl item to encode this associated-type equation. Rust
+                // gives every Sized pointee unit metadata; unsized pointees
+                // retain their own metadata (e.g. a slice's length).
+                let sized = deps
+                    .require_ref::<TraitEnc>(tcx.require_lang_item(
+                        LangItem::Sized,
+                        prusti_rustc_interface::span::DUMMY_SP,
+                    ))?
+                    .impl_fun;
+                let unit = deps.require_dep::<super::TyExprEnc>(RustTyDecomposition::from_ty(
+                    tcx.types.unit,
+                    GParams::empty(),
+                ))?;
+                let metadata = metadata_fn(trait_generics.ty_exprs(), trait_generics.const_exprs());
+                let sized = sized(trait_generics.ty_exprs(), &[]);
+                let fact = vir::expr! { (sized) ==> ((metadata) == (unit)) };
+                axioms.push(vcx.mk_domain_axiom(
+                    vir_format_identifier!(vcx, "{trait_name}_sized_metadata"),
+                    vir::expr! {
+                        forall ..[trait_generics.ty_decls()] :: { [metadata] } [fact]
+                    },
+                ));
+            }
 
             // Each relevant impl contributes an axiom stating where it makes
             // `impl_fun` hold (see `impl_unlock_keys` for the gating).
@@ -157,7 +189,7 @@ impl TaskEncoder for TraitEnc {
             let trait_domain = vcx.mk_domain(
                 vir_format_identifier!(vcx, "trait_{trait_name}"),
                 &[],
-                &[],
+                vcx.alloc_slice(&axioms),
                 vcx.alloc_slice(&dom_funcs),
                 None,
             );

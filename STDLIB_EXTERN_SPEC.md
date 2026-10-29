@@ -1815,9 +1815,11 @@ recursively revisiting shared expression nodes. It now caches visits by node
 and the types of its free variables, and restores shadowed bindings after lets
 and quantifiers. A cache keyed by every lexical scope still repeated work under
 irrelevant temporary bindings; the refined cache avoids that repetition.
-All 35 VIR unit tests pass, including shared graphs with and without enclosing
-binders and controls that retain type-error detection across scopes
-(`/tmp/prusti-im4-bindings83-tests.log`). The iterator frame itself remains
+Free-variable summaries are retained across overlapping constructor checks
+and cleared with the VIR arena. All 36 VIR unit tests pass, including shared
+graphs with and without enclosing binders and controls that retain type-error
+detection across scopes and separate checks
+(`/tmp/prusti-im4-bindings84-tests.log`). The iterator frame itself remains
 experimental until its native positive and negative gates pass.
 
 All nine existing sequence-observer checks pass with the indexed transport

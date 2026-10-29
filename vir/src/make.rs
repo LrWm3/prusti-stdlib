@@ -20,7 +20,9 @@ cfg_if! {
         // - Unsupported types are not checked
 
         use prusti_rustc_interface::data_structures::fx::{FxHashMap, FxHashSet};
-        use std::rc::Rc;
+        use std::{cell::RefCell, rc::Rc};
+
+        pub(crate) type BindingFreeVariables = FxHashMap<usize, Rc<[Rc<str>]>>;
         use crate::Visitor;
 
         #[derive(Default)]
@@ -29,10 +31,13 @@ cfg_if! {
             // Only free variables affect an expression's type check. Distinct
             // enclosing lets often bind irrelevant temporaries; treating each
             // as a new scope makes a shared expression graph exponential again.
-            free: FxHashMap<usize, Rc<[&'vir str]>>,
+            free: Rc<RefCell<BindingFreeVariables>>,
             checked: FxHashSet<(usize, Vec<Option<TypeDyn<'vir>>>)>,
         }
         impl<'vir> BindingCheck<'vir> {
+            fn new(vcx: &VirCtxt<'_>) -> Self {
+                Self { free: vcx.binding_free_variables.clone(), ..Self::default() }
+            }
             fn insert(&mut self, name: &'vir str, ty: TypeDyn<'vir>) {
                 self.bindings.insert(name, ty);
             }
@@ -42,18 +47,18 @@ cfg_if! {
                     None => { self.bindings.remove(name); }
                 }
             }
-            fn free_variables<Curr, Next>(&mut self, e: ExprGenDyn<'vir, Curr, Next>) -> Rc<[&'vir str]> {
+            fn free_variables<Curr, Next>(&mut self, e: ExprGenDyn<'vir, Curr, Next>) -> Rc<[Rc<str>]> {
                 let key = std::ptr::from_ref(e).cast::<()>() as usize;
-                if let Some(names) = self.free.get(&key) {
+                if let Some(names) = self.free.borrow().get(&key) {
                     return names.clone();
                 }
                 let mut names = FxHashSet::default();
                 match e.kind {
-                    ExprKindGenData::Local(local) => { names.insert(local.name); }
+                    ExprKindGenData::Local(local) => { names.insert(Rc::<str>::from(local.name)); }
                     ExprKindGenData::Let(binding) => {
-                        names.extend(self.free_variables(binding.expr).iter().copied());
+                        names.extend(self.free_variables(binding.expr).iter().cloned());
                         names.remove(binding.name);
-                        names.extend(self.free_variables(binding.val).iter().copied());
+                        names.extend(self.free_variables(binding.val).iter().cloned());
                     }
                     _ => {
                         struct Children<'vir, Curr, Next>(Vec<ExprGenDyn<'vir, Curr, Next>>);
@@ -63,7 +68,7 @@ cfg_if! {
                         let mut children = Children(Vec::new());
                         e.super_visit_with(&mut children);
                         for child in children.0 {
-                            names.extend(self.free_variables(child).iter().copied());
+                            names.extend(self.free_variables(child).iter().cloned());
                         }
                         if let ExprKindGenData::Forall(ForallGenData { qvars, .. })
                             | ExprKindGenData::Exists(ExistsGenData { qvars, .. }) = e.kind {
@@ -74,12 +79,12 @@ cfg_if! {
                 let mut names = names.into_iter().collect::<Vec<_>>();
                 names.sort_unstable();
                 let names: Rc<[_]> = names.into();
-                self.free.insert(key, names.clone());
+                self.free.borrow_mut().insert(key, names.clone());
                 names
             }
             fn already_checked<Curr, Next>(&mut self, e: ExprGenDyn<'vir, Curr, Next>) -> bool {
                 let variables = self.free_variables(e);
-                let bindings = variables.iter().map(|name| self.bindings.get(name).copied()).collect();
+                let bindings = variables.iter().map(|name| self.bindings.get(name.as_ref()).copied()).collect();
                 !self.checked.insert((std::ptr::from_ref(e).cast::<()>() as usize, bindings))
             }
         }
@@ -610,7 +615,7 @@ impl<'tcx> VirCtxt<'tcx> {
         )));
         cfg_if! {
             if #[cfg(debug_assertions)] {
-                check_expr_bindings(&mut BindingCheck::default(), let_expr.as_dyn());
+                check_expr_bindings(&mut BindingCheck::new(self), let_expr.as_dyn());
             }
         }
         let_expr
@@ -1226,7 +1231,7 @@ impl<'tcx> VirCtxt<'tcx> {
             }
             cfg_if! {
                 if #[cfg(debug_assertions)] {
-                    let mut m = BindingCheck::default();
+                    let mut m = BindingCheck::new(self);
                     for arg in args {
                         m.insert(arg.name, arg.ty_dyn());
                     }
@@ -1537,7 +1542,7 @@ impl<'tcx> VirCtxt<'tcx> {
         cfg_if! {
             if #[cfg(debug_assertions)] {
                 if let Some(blocks) = blocks {
-                    let mut m = BindingCheck::default();
+                    let mut m = BindingCheck::new(self);
                     for arg in args {
                         m.insert(arg.name, arg.ty_dyn());
                     }

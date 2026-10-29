@@ -43,6 +43,12 @@ pub struct VirCtxt<'tcx> {
 
     /// Locals replaced during reification, see [VirCtxt::with_local_subst].
     local_subst: RefCell<Option<&'tcx FxHashMap<&'tcx str, ExprDyn<'tcx>>>>,
+
+    /// Binding checks run while expressions are being constructed. Keep their
+    /// scope-independent summaries across checks of overlapping prefixes.
+    /// Names are owned, so this cache never extends an expression's lifetime.
+    #[cfg(debug_assertions)]
+    pub(crate) binding_free_variables: std::rc::Rc<RefCell<crate::make::BindingFreeVariables>>,
 }
 
 impl<'tcx> VirCtxt<'tcx> {
@@ -60,6 +66,8 @@ impl<'tcx> VirCtxt<'tcx> {
             specs: Some(RefCell::new(Specifications::new(spec_map))),
             ident_style,
             local_subst: RefCell::new(None),
+            #[cfg(debug_assertions)]
+            binding_free_variables: Default::default(),
         }
     }
 
@@ -72,6 +80,8 @@ impl<'tcx> VirCtxt<'tcx> {
             specs: None,
             ident_style: IdentStyle::DefPath,
             local_subst: RefCell::new(None),
+            #[cfg(debug_assertions)]
+            binding_free_variables: Default::default(),
         }
     }
 
@@ -135,6 +145,8 @@ impl<'tcx> VirCtxt<'tcx> {
     }
 
     pub fn reset(&mut self) {
+        #[cfg(debug_assertions)]
+        self.binding_free_variables.borrow_mut().clear();
         self.arena.reset();
     }
 

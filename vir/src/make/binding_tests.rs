@@ -39,7 +39,7 @@ fn shared_expression_graph() {
 #[should_panic]
 fn shared_node_is_checked_in_each_scope() {
     with_vcx(|vcx| {
-        let shared = vcx.mk_local_ex(vcx.mk_local_decl("x", TYPE_BOOL)).as_dyn();
+        let shared: ExprDyn<'_> = vcx.mk_local_ex(vcx.mk_local_decl("x", TYPE_BOOL)).as_dyn();
         let bound = let_node(vcx, vcx.mk_uint::<0>().as_dyn(), shared);
         let e = vcx.mk_bin_op_expr(BinOpKind::And, shared, bound);
         check_expr_bindings(&mut BindingCheck::default(), e.as_dyn());
@@ -82,5 +82,19 @@ fn shared_graph_under_irrelevant_bindings() {
             body = vcx.mk_bin_op_expr(BinOpKind::And, left, right).as_dyn();
         }
         check_expr_bindings(&mut BindingCheck::default(), body);
+    });
+}
+
+#[test]
+#[should_panic]
+fn cached_free_variables_retain_binding_checks() {
+    with_vcx(|vcx| {
+        let shared: ExprDyn<'_> = vcx.mk_local_ex(vcx.mk_local_decl("x", TYPE_BOOL)).as_dyn();
+        let mut first = BindingCheck::new(vcx);
+        first.insert("x", TYPE_BOOL.as_dyn());
+        check_expr_bindings(&mut first, shared);
+        let mut second = BindingCheck::new(vcx);
+        second.insert("x", TYPE_INT.as_dyn());
+        check_expr_bindings(&mut second, shared);
     });
 }

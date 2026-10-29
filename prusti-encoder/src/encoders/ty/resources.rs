@@ -24,7 +24,6 @@ pub(crate) struct ResourceCase<'vir> {
     guard: vir::ExprBool<'vir>,
     body: vir::ExprBool<'vir>,
     state: Option<vir::ExprCSnap<'vir>>,
-    sequence: Option<(IndexedResources<'vir>, vir::ExprPSnap<'vir>)>,
 }
 
 pub(crate) fn group<'vir, Curr, Next>(
@@ -187,7 +186,6 @@ impl TaskEncoder for ResourceGroupEnc {
             let typ = deps.require_dep::<ParamTypEnc>(())?.typ;
             let mut resources = vec![vcx.mk_eq_expr(typ(vcx.mk_local_ex(s)), ty_expr)];
             let mut state = Some(empty_state());
-            let mut sequence = None;
             match combined.specifics {
                 TySpecifics::Primitive(_)
                 | TySpecifics::ImmRef(_)
@@ -282,7 +280,7 @@ impl TaskEncoder for ResourceGroupEnc {
                     state = Some(fields_sequence_state(
                         resource.sequence_state(elements, zero),
                     ));
-                    sequence = Some((indexed.clone(), unit));
+                    deps.require_ref::<ResourceSequenceEnc>(())?;
                     resources.push(vir::expr! { (zero) <= (extent) });
                     resources.push(quantify_resources(
                         vcx,
@@ -332,15 +330,7 @@ impl TaskEncoder for ResourceGroupEnc {
                 .fold_with(&mut Substitute(&substitutions))
                 .unwrap_or(body);
             let state = state.map(|s| s.fold_with(&mut Substitute(&substitutions)).unwrap_or(s));
-            Ok((
-                Some(ResourceCase {
-                    guard,
-                    body,
-                    state,
-                    sequence,
-                }),
-                (),
-            ))
+            Ok((Some(ResourceCase { guard, body, state }), ()))
         })
     }
 
@@ -352,9 +342,6 @@ impl TaskEncoder for ResourceGroupEnc {
             .collect::<Vec<_>>();
         if cases.is_empty() && Self::all_outputs_local_no_errors(program).is_empty() {
             return;
-        }
-        if let Some((indexed, unit)) = cases.iter().find_map(|case| case.sequence.as_ref()) {
-            emit_sequence_state(program, indexed, *unit);
         }
         vir::with_vcx(|vcx| {
             let (s, t, m) = declarations();
@@ -510,6 +497,40 @@ pub(crate) fn fields_sequence_state<'vir, Curr, Next>(
         .call()(sequence)
     })
 }
+/// The sequence observer is needed by both collection owners and observations
+/// of saved sequences. Its declaration must not depend on an array type being
+/// present elsewhere in the program.
+pub(crate) struct ResourceSequenceEnc;
+
+impl TaskEncoder for ResourceSequenceEnc {
+    task_encoder::encoder_cache!(ResourceSequenceEnc);
+    const ENCODER_NAME: &'static str = "resource sequence observer encoder";
+    type TaskDescription<'vir> = ();
+    type OutputFullLocal<'vir> = (IndexedResources<'vir>, vir::ExprPSnap<'vir>);
+
+    fn task_to_key<'vir>(_task: &Self::TaskDescription<'vir>) -> Self::TaskKey<'vir> {}
+
+    fn do_encode_full<'vir>(
+        task: &Self::TaskKey<'vir>,
+        deps: &mut TaskEncoderDependencies<'vir, Self>,
+    ) -> EncodeFullResult<'vir, Self> {
+        deps.emit_output_ref(*task, ())?;
+        let unit = unit_metadata(deps)?;
+        let resource = vir::with_vcx(|vcx| {
+            let (snapshot, ty, _) = declarations();
+            group(vcx.mk_local_ex(snapshot), vcx.mk_local_ex(ty), unit)
+        });
+        let indexed = IndexedResources::new(deps, resource)?;
+        Ok(((indexed, unit), ()))
+    }
+
+    fn emit_outputs<'vir>(program: &mut task_encoder::Program<'vir>) {
+        for (indexed, unit) in Self::all_outputs_local_no_errors(program) {
+            emit_sequence_state(program, &indexed, unit);
+        }
+    }
+}
+
 fn emit_sequence_state<'vir>(
     program: &mut task_encoder::Program<'vir>,
     indexed: &IndexedResources<'vir>,

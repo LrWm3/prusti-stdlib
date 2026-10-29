@@ -57,17 +57,33 @@ impl<'vir> ResourceCollection<'vir> {
         })
     }
 
-    pub fn observe_element(
+    pub fn observe_element<Curr, Next>(
         &self,
-        sequence: vir::ExprSeq<'vir>,
-        index: vir::ExprInt<'vir>,
-    ) -> vir::ExprCSnap<'vir> {
-        self.raw_state.call()(
-            sequence,
-            index,
-            self.params.ty_exprs(),
-            self.params.const_exprs(),
-        )
+        sequence: vir::ExprGenSeq<'vir, Curr, Next>,
+        index: vir::ExprGenInt<'vir, Curr, Next>,
+    ) -> vir::ExprGenCSnap<'vir, Curr, Next> {
+        vir::with_vcx(|vcx| {
+            self.raw_state.call()(
+                sequence,
+                index,
+                vcx.alloc_slice(
+                    &self
+                        .params
+                        .ty_exprs()
+                        .iter()
+                        .map(|e| e.lazy())
+                        .collect::<Vec<_>>(),
+                ),
+                vcx.alloc_slice(
+                    &self
+                        .params
+                        .const_exprs()
+                        .iter()
+                        .map(|e| e.lazy())
+                        .collect::<Vec<_>>(),
+                ),
+            )
+        })
     }
 
     pub fn statements(&self, sequence: vir::ExprSeq<'vir>, pack: bool) -> Vec<vir::Stmt<'vir>> {
@@ -128,6 +144,7 @@ impl TaskEncoder for ResourceCollectionEnc {
         deps: &mut TaskEncoderDependencies<'vir, Self>,
     ) -> EncodeFullResult<'vir, Self> {
         deps.emit_output_ref(*task, ())?;
+        deps.require_ref::<super::resources::ResourceSequenceEnc>(())?;
         let conversion = deps.require_dep::<ResourceConversionEnc>(*task)?;
         if !conversion.supports_indexed_resources() {
             return Err(task_encoder::EncodeFullError::EncodingError(
@@ -135,6 +152,7 @@ impl TaskEncoder for ResourceCollectionEnc {
                 None,
             ));
         }
+        deps.require_ref::<ResourceElementStateEnc>(*task)?;
         let caster = deps.require_dep::<GArgsCastEnc<crate::encoders::Pure>>(
             (!task.ty.specifics.is_param()).then_some(RustTyNormalized {
                 param: RustTyDecomposition::param(),
@@ -217,25 +235,7 @@ impl TaskEncoder for ResourceCollectionEnc {
                 }
             };
             let args = (sequence, start, params.ty_decls(), params.const_decls());
-            let in_bounds = vir::expr! { ((zero) <= (i)) && ((i) < (length)) };
-            let mut functions: Vec<_> = [false, true]
-                .into_iter()
-                .map(|group| {
-                    let expression = if group {
-                        conversion.grouped_generic_state(raw_element(i), i)
-                    } else {
-                        conversion.observe_indexed(element(i), i)
-                    };
-                    vcx.mk_function(
-                        if group { group_state } else { raw_state },
-                        args,
-                        vcx.alloc_slice(&[in_bounds, permission(group, i)]),
-                        &[],
-                        None,
-                        Some(expression),
-                    )
-                })
-                .collect();
+            let mut functions = Vec::new();
             let binder = vcx.mk_local_decl("conversion_index", vir::TYPE_INT);
             let j = vcx.mk_local_ex(binder);
             let variables = vcx.alloc_slice(&[binder.as_dyn()]);
@@ -444,6 +444,142 @@ impl TaskEncoder for ResourceCollectionEnc {
             }
             for method in methods {
                 program.add_method(method);
+            }
+        }
+    }
+}
+
+pub(crate) struct ResourceElementStateEnc;
+
+#[derive(Clone)]
+pub(crate) struct ResourceElementState<'vir> {
+    raw_state: vir::FunctionIdn<'vir, Arguments, vir::CSnap>,
+    params: GenericParams<'vir>,
+}
+
+impl<'vir> ResourceElementState<'vir> {
+    pub fn observe<Curr, Next>(
+        &self,
+        sequence: vir::ExprGenSeq<'vir, Curr, Next>,
+        index: vir::ExprGenInt<'vir, Curr, Next>,
+    ) -> vir::ExprGenCSnap<'vir, Curr, Next> {
+        vir::with_vcx(|vcx| {
+            self.raw_state.call()(
+                sequence,
+                index,
+                vcx.alloc_slice(
+                    &self
+                        .params
+                        .ty_exprs()
+                        .iter()
+                        .map(|e| e.lazy())
+                        .collect::<Vec<_>>(),
+                ),
+                vcx.alloc_slice(
+                    &self
+                        .params
+                        .const_exprs()
+                        .iter()
+                        .map(|e| e.lazy())
+                        .collect::<Vec<_>>(),
+                ),
+            )
+        })
+    }
+}
+
+impl TaskEncoder for ResourceElementStateEnc {
+    task_encoder::encoder_cache!(ResourceElementStateEnc);
+    const ENCODER_NAME: &'static str = "indexed resource element observer encoder";
+    type TaskDescription<'vir> = RustTyDecomposition<'vir>;
+    type OutputFullDependency<'vir> = ResourceElementState<'vir>;
+    type OutputFullLocal<'vir> = Vec<vir::Function<'vir>>;
+    type EncodingError = String;
+
+    fn task_to_key<'vir>(task: &Self::TaskDescription<'vir>) -> Self::TaskKey<'vir> {
+        ResourceCollectionEnc::task_to_key(task)
+    }
+    fn describe_error(error: String) -> String {
+        error
+    }
+
+    fn do_encode_full<'vir>(
+        task: &Self::TaskKey<'vir>,
+        deps: &mut TaskEncoderDependencies<'vir, Self>,
+    ) -> EncodeFullResult<'vir, Self> {
+        deps.emit_output_ref(*task, ())?;
+        let conversion = deps.require_dep::<ResourceConversionEnc>(*task)?;
+        if !conversion.supports_indexed_resources() {
+            return Err(task_encoder::EncodeFullError::EncodingError(
+                "nested collection resource observation is unsupported".into(),
+                None,
+            ));
+        }
+        let caster = deps.require_dep::<GArgsCastEnc<crate::encoders::Pure>>(
+            (!task.ty.specifics.is_param()).then_some(RustTyNormalized {
+                param: RustTyDecomposition::param(),
+                concrete: *task,
+            }),
+        )?;
+        let params = deps.require_dep::<GenericParamsEnc>(task.args.context())?;
+        vir::with_vcx(|vcx| {
+            let mut hash = std::collections::hash_map::DefaultHasher::new();
+            format!("{task:?}").hash(&mut hash);
+            let suffix = hash.finish();
+            let seq_ty = vcx.mk_ty_seq(vir::TYPE_PSNAP);
+            let sequence = vcx.mk_local_decl("conversion_elements", seq_ty);
+            let index = vcx.mk_local_decl("conversion_start", vir::TYPE_INT);
+            let seq = vcx.mk_local_ex(sequence);
+            let i = vcx.mk_local_ex(index);
+            let zero = vcx.mk_uint::<0>();
+            let length = vcx.mk_collection_len_expr(seq);
+            let raw = vcx.mk_seq_index_expr(seq, i).downcast_ty::<vir::PSnap>();
+            let value = caster.cast_to_caller_ctx(raw.upcast_ty::<vir::Snap>());
+            let arity = (seq_ty, vir::TYPE_INT, params.ty_args(), params.const_args());
+            let raw_state = vir::FunctionIdn::<Arguments, vir::CSnap>::new(
+                vir::vir_format_identifier!(vcx, "resource_raw_state_{suffix:x}"),
+                arity,
+                state_type(),
+            );
+            let group_state = vir::FunctionIdn::<Arguments, vir::CSnap>::new(
+                vir::vir_format_identifier!(vcx, "resource_group_state_{suffix:x}"),
+                arity,
+                state_type(),
+            );
+            let functions = [false, true]
+                .into_iter()
+                .map(|group| {
+                    let permission = if group {
+                        conversion.grouped_generic(raw, i)
+                    } else {
+                        conversion.indexed_resources(value, i)
+                    };
+                    let state = if group {
+                        conversion.grouped_generic_state(raw, i)
+                    } else {
+                        conversion.observe_indexed(value, i)
+                    };
+                    vcx.mk_function(
+                        if group { group_state } else { raw_state },
+                        (sequence, index, params.ty_decls(), params.const_decls()),
+                        vcx.alloc_slice(&[
+                            vir::expr! { ((zero) <= (i)) && ((i) < (length)) },
+                            permission,
+                        ]),
+                        &[],
+                        None,
+                        Some(state),
+                    )
+                })
+                .collect();
+            Ok((functions, ResourceElementState { raw_state, params }))
+        })
+    }
+
+    fn emit_outputs<'vir>(program: &mut task_encoder::Program<'vir>) {
+        for functions in Self::all_outputs_local_no_errors(program) {
+            for function in functions {
+                program.add_function(function);
             }
         }
     }

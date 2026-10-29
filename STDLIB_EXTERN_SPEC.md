@@ -1669,10 +1669,20 @@ unsupported frames, and full regression validation remain required. The PCG poin
 branch is `50e6a46`; the stable work branch retains the earlier pointer until
 the combined encoder passes its gates.
 
-The next value-frame step is to observe resource state through saved element
-snapshots, with permission checks, without rereading expired iterator storage.
-First expose a checked indexed state observation over a ghost sequence and
-pair valid, out-of-bounds, missing-permission, and executable-use cases. Extend
+The checked `sequence_resource_state(&sequence, index)` observer now reads an
+element's referent resources through its saved shallow snapshot. It requires
+both a valid index and permission to those resources; the saved sequence alone
+grants no heap access. The positive observes a write through a saved sequence;
+the false, stale-state, negative-index, upper-bound, missing-permission, and
+executable-use controls produce their intended diagnostics. All seven verifier
+cases, the Rust check, and the runtime exercise pass in the build-65 run
+(`target/stdlib-im4-observation65-iterator-spec-logs`). Observer declarations
+are independent of conversion helpers, so an observation does not introduce
+unneeded generic pack/unpack obligations. The existing symbolic-array positive
+also passes with its original solver bounds (128.37s).
+
+The next value-frame step uses these observations without rereading expired
+iterator storage. Extend
 expiry selection with `input[_]` for a unique opaque resource group; reject
 missing or ambiguous groups. Then state the native constructor and `next`
 resource frames at that group stage, using saved pre-call and post-call

@@ -157,6 +157,14 @@ pub fn resource_state<T>(_value: &T) -> ResourceState {
     panic!("resource_state is a specification-only observation")
 }
 
+/// Observe the current referent state of an element in a saved sequence.
+/// The snapshot identifies the element; permission to its indexed referent
+/// resources and a valid index are still required. No heap access is granted.
+#[pure]
+pub fn sequence_resource_state<T>(_values: &Seq<T>, _index: Int) -> ResourceState {
+    panic!("sequence_resource_state is a specification-only observation")
+}
+
 /// Observe one current referent value through an owned mutable slice.
 /// This specification-only operation checks the index and permission to both
 /// the slice and its selected referent. The returned snapshot grants no heap

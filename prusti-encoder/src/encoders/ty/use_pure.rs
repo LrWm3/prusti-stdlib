@@ -477,6 +477,10 @@ impl<'vir> TyUsePureRaw<'vir> {
 }
 
 impl<'vir> TyUsePureMutRef<'vir> {
+    pub(crate) fn generic_metadata(&self, snap: vir::ExprCSnap<'vir>) -> vir::ExprPSnap<'vir> {
+        self.pure.metadata_access.call()(snap)
+    }
+
     pub fn prim_to_snap<Curr, Next>(
         &self,
         ref_: vir::ExprGenRef<'vir, Curr, Next>,

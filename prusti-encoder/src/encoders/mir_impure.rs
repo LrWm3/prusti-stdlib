@@ -1221,6 +1221,17 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         label: &'vir str,
         already_unblocked: &[BorrowPcgEdge<'vir>],
     ) -> EncodeResult<'vir, Vec<vir::Stmt<'vir>>, E> {
+        self.pcs_package_script_filtered(borrows_state, rhs, label, already_unblocked, |_| true)
+    }
+
+    pub(crate) fn pcs_package_script_filtered<N: Into<BlockedNode<'vir>>>(
+        &mut self,
+        borrows_state: &BorrowsState<'_, 'vir>,
+        rhs: Vec<(N, Vec<vir::ExprBool<'vir>>)>,
+        label: &'vir str,
+        already_unblocked: &[BorrowPcgEdge<'vir>],
+        mut include: impl FnMut(&BorrowPcgEdge<'vir>) -> bool,
+    ) -> EncodeResult<'vir, Vec<vir::Stmt<'vir>>, E> {
         let mut parts = Vec::new();
         let mut unblock = Vec::new();
         for (node, resources) in rhs {
@@ -1230,7 +1241,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 .actions(self.pcg_ctxt())
                 .unwrap()
                 .into_iter()
-                .filter(|action| !already_unblocked.contains(action.edge()))
+                .filter(|action| !already_unblocked.contains(action.edge()) && include(action.edge()))
                 .collect::<Vec<_>>();
             let mut footprint = Footprint {
                 actions: &actions,

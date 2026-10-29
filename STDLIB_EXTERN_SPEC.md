@@ -1480,14 +1480,23 @@ the value frame. All six checks passed:
 `target/stdlib-im4-dependent-logs` (positive 43.77s during concurrent builds;
 the standalone positive previously passed in 9.45s).
 
-The Rust integration is in progress. A full build passes, and the generic
-identity/reborrow probes encode with opaque resources. The slice-head probe
-still fails its package obligation: the outer lifetime's historical graph
-root does not reconstruct the currently expanded slice. The next step is to
-restore physical storage independently, then restore its hidden resource group
-with the proved frame. Dependent wand selection, package scripts, concrete
-conversions, and cross-crate clients must all pass before integrating the PCG
-revision into a completed root milestone.
+The Rust integration is in progress on `stdlib/opaque-resource-encoder`.
+The full build and five focused generic-body checks pass: generic identity,
+reborrowing, returning a slice head, Rust/runtime checks, and exact rejection
+of false after extraction and a wrong generic identity postcondition. Logs
+are in `target/stdlib-im4-generic-controls-iterator-logs` (positive 43.58s).
+Outer storage restoration uses its physical graph root; opaque group actions
+are deferred to the later package, which frames the restored storage and its
+snapshot. Input resources are not returned twice when their outer storage
+remains borrowed. The generic method interface stays at its definition-site
+shape under substitution.
+
+This is a development checkpoint, not an IM4 acceptance result. Concrete
+call-site group conversions, value/state transport, native pledges across
+restoration stages, complete diagnostics for unsupported frames, and full
+regression validation remain required. The PCG pointer on this development
+branch is `f610569`; the stable work branch retains the earlier pointer until
+the combined encoder passes its gates.
 
 The first step is a prerequisite for the others: adding an abstract predicate
 only to call-site contracts would not establish that a generic implementation

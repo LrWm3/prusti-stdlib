@@ -121,6 +121,7 @@ pub fn test_entrypoint<'tcx>(
     program.header("predicates");
     crate::encoders::TyUseImpureEnc::emit_outputs(&mut program);
     crate::encoders::ty::indexed::IndexedPredicateEnc::emit_outputs(&mut program);
+    crate::encoders::ty::resources::ResourceGroupEnc::emit_outputs(&mut program);
 
     program.header("type constructors");
     TyConstructorEnc::emit_outputs(&mut program);

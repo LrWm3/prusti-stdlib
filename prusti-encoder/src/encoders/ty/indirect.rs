@@ -28,13 +28,23 @@ impl<'tcx> ExtractRegionsCtxt<'tcx, RustTyDecomposition<'tcx>, PcgRegion<'tcx>> 
         self,
         data: RustTyDecomposition<'tcx>,
     ) -> IndexVec<LifetimeProjectionIdx<Region>, PcgRegion<'tcx>> {
-        data.args
-            .args()
-            .iter()
-            .flat_map(|arg| arg.walk())
-            .filter_map(|arg| arg.as_region().map(PcgRegion::from))
-            .unique()
-            .collect()
+        vir::with_vcx(|vcx| {
+            data.args
+                .args()
+                .iter()
+                .flat_map(|arg| {
+                    if let Some(region) = arg.as_region() {
+                        vec![PcgRegion::from(region)]
+                    } else if let Some(ty) = arg.as_type() {
+                        let regions: IndexVec<_, PcgRegion<'tcx>> = vcx.tcx().extract_regions(ty);
+                        regions.into_iter().collect()
+                    } else {
+                        Vec::new()
+                    }
+                })
+                .unique()
+                .collect()
+        })
     }
 }
 
@@ -52,6 +62,7 @@ pub(crate) struct ExprInput<'vir> {
     pub guard: Option<vir::ExprBool<'vir>>,
     /// A slice's extent is supplied by its enclosing pointer metadata.
     pub extent: Option<vir::ExprInt<'vir>>,
+    pub metadata: Option<vir::ExprPSnap<'vir>>,
     pub binder_depth: usize,
     pub resource_path: &'vir [usize],
     pub indexed: Option<(&'vir IndexedResources<'vir>, vir::ExprInt<'vir>, bool)>,
@@ -65,6 +76,7 @@ impl<'vir> ExprInput<'vir> {
             bindings: None,
             guard: None,
             extent: None,
+            metadata: None,
             binder_depth: 0,
             indexed: None,
             resource_path: &[],
@@ -163,14 +175,23 @@ impl TaskEncoder for IndirectPredicatesEnc {
                 | TySpecifics::ImmRef(_)
                 | TySpecifics::Raw(_)
                 | TySpecifics::Builtin(_) => (),
-                // TODO: it's not valid to have nothing for these. We should fix
-                // this by using an opaque predicate to represent potential
-                // indirect stuff. For example:
-                // fn foo<'a, T: Trait<'a>>(x: T) -> &'a mut i32 { x.get() }
-                // Here, `T` could be instantiated as `&'a mut i32` in which
-                // case we would want a wand with `i32(result) --* opaque_behind_a(x)`.
-                // This is why we should return `opaque_behind_a(x)` here.
-                TySpecifics::Param(_) | TySpecifics::Opaque(_) => (),
+                TySpecifics::Param(_) | TySpecifics::Opaque(_) => {
+                    let resource = super::resources::ResourceUse::new(deps, ty)?;
+                    let unit = super::resources::unit_metadata(deps)?;
+                    predicate_applications.push(vcx.mk_lazy_expr(
+                        "opaque_indirect",
+                        vir::TYPE_BOOL,
+                        Box::new(move |_, input: ExprInput<'vir>| {
+                            let raw = resource.apply(input.snap, input.metadata.unwrap_or(unit));
+                            input
+                                .indexed
+                                .map_or(raw, |(indexed, index, _)| {
+                                    indexed.wrap(raw, index, input.resource_path)
+                                })
+                                .kind
+                        }),
+                    ));
+                }
                 TySpecifics::ArrayLike(data) => {
                     let element_ty = data.0.decompose_normalize(ty.args);
                     if let Some(proj) =
@@ -221,6 +242,7 @@ impl TaskEncoder for IndirectPredicatesEnc {
                                         // Index-dependent heap reads remain under this binder.
                                         bindings: None,
                                         extent: None,
+            metadata: None,
                                         binder_depth: input.binder_depth + 1,
                                         indexed: Some((vcx.alloc(indexed.clone()), index, false)),
                                         resource_path: &[],
@@ -347,6 +369,10 @@ impl TaskEncoder for IndirectPredicatesEnc {
                                                         .copied()
                                                         .chain([0])
                                                         .collect::<Vec<_>>(),
+                                                ),
+                                                metadata: Some(
+                                                    ref_domain
+                                                        .generic_metadata(input.snap.downcast_ty()),
                                                 ),
                                                 extent: slice_metadata.as_ref().map(|usize_ty| {
                                                     usize_ty
@@ -493,7 +519,7 @@ pub fn projection_for_generalized_idx<'tcx>(
     let lifetimes: IndexVec<_, GeneralizedLifetime<'tcx>> = tcx.extract_regions(ty);
     let region = match lifetimes.get(idx)? {
         GeneralizedLifetime::Region(r) => *r,
-        GeneralizedLifetime::RegionsIn(_) => return None,
+        GeneralizedLifetime::RegionsIn(ty) => PcgRegion::RegionsIn(*ty),
     };
     LifetimeProjection::new(decomp, region, None, PrustiPcgCtxt)
 }

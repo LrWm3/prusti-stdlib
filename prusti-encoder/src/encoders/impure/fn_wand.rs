@@ -16,8 +16,10 @@ use pcg::{
         FunctionData, FunctionShape, FunctionShapeInput, FunctionShapeNode, FunctionShapeOutput,
         GeneralizedLifetime, MakeFunctionShapeError,
         borrow_pcg_edge::{BlockedNode, BorrowPcgEdge},
+        edge::kind::BorrowPcgEdgeKind,
         region_projection::{ExtractRegionsCtxt, Generalized, LifetimeProjection, PcgRegion},
         state::BorrowsState,
+        unblock_graph::UnblockGraph,
     },
     utils::place::remote::RemotePlace,
 };
@@ -47,6 +49,14 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
     ) -> BlockedNode<'vir> {
         let local = input.mir_local();
         let node: FunctionShapeNode<Generalized> = input.into();
+        if input.region_idx().index() == 0
+            && matches!(
+                node.ty(self.wands.fn_sig(self.vcx, None)).kind(),
+                ty::TyKind::Ref(_, _, ty::Mutability::Mut)
+            )
+        {
+            return mir::Place::from(local).into();
+        }
         let generalized: IndexVec<_, GeneralizedLifetime<'vir>> = self
             .vcx
             .tcx()
@@ -54,17 +64,18 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
         let actual: IndexVec<_, PcgRegion<'vir>> = self
             .pcg_ctxt()
             .extract_regions(self.body.local_decls[local].ty);
-        // An explicit region preceding every opaque type has the
-        // same index in the MIR region list. Opaque types may
-        // introduce additional generalized lifetimes, so avoid
-        // mapping indices at or after the first opaque entry.
+        // Body and signature extraction now both retain opaque resource
+        // groups. Their ordered type traversal identifies corresponding roots.
         let index = input.region_idx().index();
-        if generalized
-            .iter()
-            .take(index + 1)
-            .all(|r| matches!(r, GeneralizedLifetime::Region(_)))
-            && index < generalized.len()
-            && index < actual.len()
+        if index < actual.len()
+            && generalized.len() == actual.len()
+            && generalized
+                .iter()
+                .zip(actual.iter())
+                .all(|(signature, body)| {
+                    matches!(signature, GeneralizedLifetime::RegionsIn(_))
+                        == matches!(body, PcgRegion::RegionsIn(_))
+                })
         {
             LifetimeProjection::from_index(
                 RemotePlace::new(local),
@@ -92,6 +103,41 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
         let args = PledgeExpr::pledge_args(result, args);
 
         for wand_data in self.wands.viper_wands() {
+            let ctxt = self.pcg_ctxt();
+            let opaque_action = |edge: &BorrowPcgEdge<'vir>| match edge.kind() {
+                BorrowPcgEdgeKind::BorrowPcgExpansion(expansion) => {
+                    matches!(expansion.base(), pcg::pcg::PcgNode::LifetimeProjection(lp) if matches!(lp.region(ctxt), PcgRegion::RegionsIn(_)))
+                }
+                BorrowPcgEdgeKind::BorrowFlow(flow) => {
+                    matches!(flow.long().region(ctxt), PcgRegion::RegionsIn(_))
+                }
+                _ => false,
+            };
+            let sig = self.wands.fn_sig(self.vcx, None);
+            let restores_opaque = wand_data.rhs.iter().any(|node| {
+                let node: FunctionShapeNode<Generalized> = (*node).into();
+                let regions: IndexVec<_, GeneralizedLifetime<'vir>> =
+                    self.vcx.tcx().extract_regions(node.ty(sig));
+                matches!(
+                    regions.get(node.region_idx()),
+                    Some(GeneralizedLifetime::RegionsIn(_))
+                )
+            });
+            let mut prior_edges = already_unblocked.to_vec();
+            // The antecedent supplies these already restored permissions.
+            // Replaying their physical folds would consume them a second time.
+            for frame in &wand_data.frames {
+                let root = self.input_resource_root(*frame);
+                let graph = UnblockGraph::for_node(root, final_borrow_state, self.pcg_ctxt());
+                prior_edges.extend(
+                    graph
+                        .actions(self.pcg_ctxt())
+                        .unwrap()
+                        .iter()
+                        .filter(|a| !opaque_action(a.edge()))
+                        .map(|a| a.edge().clone()),
+                );
+            }
             let Some(wand) = self.wands.mk_wand(
                 &wand_data,
                 args,
@@ -122,8 +168,13 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
                     (root, resources.into_iter().collect())
                 })
                 .collect();
-            let mut package_script =
-                self.pcs_package_script(final_borrow_state, rhs, label, already_unblocked)?;
+            let mut package_script = self.pcs_package_script_filtered(
+                final_borrow_state,
+                rhs,
+                label,
+                &prior_edges,
+                |edge| restores_opaque || !opaque_action(edge),
+            )?;
 
             for EncodedPledge {
                 expiry_postcondition,
@@ -227,8 +278,11 @@ impl<'vir> WandEncOutput<'vir> {
         g: FunctionShapeNode<Generalized>,
         call_ctx: WandCallContext<'vir>,
     ) -> Option<Vec<vir::ExprGenBool<'vir, ExprInput<'vir>, vir::ExprKind<'vir>>>> {
-        let arg_ty = g.ty(self.fn_sig(vcx, call_ctx));
-        let decomp = RustTyDecomposition::from_ty(arg_ty, self.g_params(vcx, call_ctx));
+        // Preserve the definition-site interface. Instantiating the Rust type
+        // first can turn one whole group into several concrete lifetime slots.
+        let _ = call_ctx;
+        let arg_ty = g.ty(self.fn_sig(vcx, None));
+        let decomp = RustTyDecomposition::from_ty(arg_ty, self.g_params(vcx, None));
         let region_proj =
             projection_for_generalized_idx(arg_ty, g.region_idx(), decomp, vcx.tcx())?;
         let predicates = deps
@@ -253,8 +307,23 @@ impl<'vir> WandEncOutput<'vir> {
         let predicates = self.predicates_for_function_shape_node(vcx, deps, g, call_ctx)?;
 
         let local = g.mir_local();
-        let local_snap = snap(local);
-        Some(
+        let mut local_snap = snap(local);
+        if let Some(args) = call_ctx {
+            let signature = RustSignature::new(self.function_data.def_id());
+            let source = if local == mir::RETURN_PLACE {
+                signature.output
+            } else {
+                signature.inputs[local.index() - 1]
+            };
+            let caster = deps
+                .require_dep::<GArgsCastEnc<Pure>>(
+                    source.decompose_compare_normalize(signature.gparams, args),
+                )
+                .unwrap();
+            local_snap = caster.cast_to_callee_ctx(local_snap);
+        }
+        let substitutions = self.generics_subst(call_ctx, vcx, deps);
+        Some(vcx.with_local_subst(substitutions, || {
             vcx.mk_conj(
                 &predicates
                     .iter()
@@ -267,6 +336,7 @@ impl<'vir> WandEncOutput<'vir> {
                                 bindings,
                                 guard: None,
                                 extent: None,
+                                metadata: None,
                                 binder_depth: 0,
                                 indexed: None,
                                 resource_path: &[],
@@ -274,8 +344,8 @@ impl<'vir> WandEncOutput<'vir> {
                         )
                     })
                     .collect::<Vec<_>>(),
-            ),
-        )
+            )
+        }))
     }
 
     pub fn indirect_pres<'a, E: TaskEncoder>(
@@ -474,50 +544,9 @@ impl<'vir> WandEncOutput<'vir> {
             .function_data
             .call_projection_map(argument_tys, result_ty, vcx.tcx())
             .map_err(|err| format!("cannot map function-call wand projections: {err:?}"))?;
-        let call_sig = self.fn_sig(vcx, Some(call_ctx));
-        let instantiated = self
-            .function_data
-            .call_projection_map(call_sig.inputs(), call_sig.output(), vcx.tcx())
-            .map_err(|err| format!("cannot map instantiated wand projections: {err:?}"))?;
-        // The current predicate builder consumes a single generalized index
-        // in the instantiated type. Check that it still denotes the signature
-        // projection. Substitution can shift or merge indices; selecting a
-        // correctly mapped edge must not mask a differently encoded resource.
-        for node in self.wands.iter().flat_map(|wand| {
-            wand.rhs
-                .iter()
-                .copied()
-                .map(FunctionShapeNode::from)
-                .chain(wand.lhs.iter().copied())
-        }) {
-            if self
-                .predicates_for_function_shape_node(vcx, deps, node, None)
-                .is_none()
-                && self
-                    .predicates_for_function_shape_node(vcx, deps, node, Some(call_ctx))
-                    .is_none()
-            {
-                continue;
-            }
-            let generalized: IndexVec<_, GeneralizedLifetime<'vir>> =
-                vcx.tcx().extract_regions(node.ty(call_sig));
-            let regions: IndexVec<_, PcgRegion<'vir>> =
-                vcx.tcx().extract_regions(node.ty(call_sig));
-            let precise = match (
-                instantiated.call_nodes(node),
-                generalized.get(node.region_idx()),
-            ) {
-                (Some([mapped]), Some(GeneralizedLifetime::Region(region))) => {
-                    regions.get(mapped.region_idx()) == Some(region)
-                }
-                _ => false,
-            };
-            if !precise {
-                return Err(format!(
-                    "function-call resource projection {node} changes under substitution"
-                ));
-            }
-        }
+        // Resource expressions use the definition-site group interface.
+        // The mapping below must cover every concrete component of a group;
+        // a partial edge cannot consume a whole-group restoration obligation.
         let mut selected = Vec::new();
         // Substitution can expose resources behind a generic parameter. Keep
         // both definition-site and instantiated resource anchors; an empty
@@ -557,7 +586,9 @@ impl<'vir> WandEncOutput<'vir> {
                 continue;
             }
             let targets = wand
-                .lhs
+                .flow_lhs
+                .as_ref()
+                .unwrap_or(&wand.lhs)
                 .iter()
                 .copied()
                 .filter(|node| pledge_only || has_resources(*node))
@@ -620,6 +651,25 @@ impl<'vir> WandEncOutput<'vir> {
             }
             None => pledge.expr(spec_args, capture),
         };
+        let frames = wand_data
+            .frames
+            .iter()
+            .filter_map(|g| {
+                self.encode_predicates_for_function_shape_node(
+                    vcx,
+                    deps,
+                    *g,
+                    call_ctx,
+                    Some(pledge_old_label.map_or(vir::OldLabel::None, vir::OldLabel::Label)),
+                    None,
+                    |i| pledge_args[i],
+                )
+            })
+            .collect::<Vec<_>>();
+        let frame_values = frames
+            .iter()
+            .map(|frame| physical_frame(vcx, *frame))
+            .collect::<Vec<_>>();
         let rhs = wand_data.rhs.iter().filter_map(|g| {
             self.encode_predicates_for_function_shape_node(
                 vcx,
@@ -632,6 +682,8 @@ impl<'vir> WandEncOutput<'vir> {
             )
         });
         let rhs = rhs
+            .chain(frames.iter().copied())
+            .chain(frame_values)
             .chain(
                 wand_data
                     .pledges
@@ -665,6 +717,7 @@ impl<'vir> WandEncOutput<'vir> {
             )
         });
         let lhs = lhs
+            .chain(frames)
             .chain(
                 wand_data
                     .pledges
@@ -707,6 +760,40 @@ impl<'vir> WandEncOutput<'vir> {
     }
 }
 
+/// A physical frame must preserve its stored snapshot as well as permission.
+/// Indirect mutable-reference leaves are represented by `p_Param`.
+fn physical_frame<'vir>(
+    vcx: &'vir vir::VirCtxt<'vir>,
+    resources: vir::ExprBool<'vir>,
+) -> vir::ExprBool<'vir> {
+    match resources.kind {
+        vir::ExprKindData::PredicateApp(app) => {
+            assert_eq!(
+                app.target, "p_Param",
+                "unsupported dependent resource frame"
+            );
+            assert_eq!(app.args.len(), 2);
+            let snap = vir::FunctionIdn::<(vir::Ref, vir::TyVal), vir::PSnap>::new(
+                vir::ViperIdent::new("p_Param_snap"),
+                (vir::TYPE_REF, vir::TYPE_TYVAL),
+                vir::TYPE_PSNAP,
+            )
+            .call()(app.args[0].downcast_ty(), app.args[1].downcast_ty());
+            vcx.mk_eq_expr(snap, vcx.mk_old_lhs_expr(snap))
+        }
+        vir::ExprKindData::BinOp(op) if op.kind == vir::BinOpKind::And => vcx.mk_conj(&[
+            physical_frame(vcx, op.lhs.downcast_ty()),
+            physical_frame(vcx, op.rhs.downcast_ty()),
+        ]),
+        vir::ExprKindData::BinOp(op) if op.kind == vir::BinOpKind::Implies => {
+            let frame = physical_frame(vcx, op.rhs.downcast_ty());
+            let guard = op.lhs.downcast_ty::<vir::Bool>();
+            vir::expr! { (guard) ==> (frame) }
+        }
+        _ => vcx.mk_bool::<true>(),
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct WandEncTask<'tcx> {
     pub data: FunctionData<'tcx>,
@@ -737,13 +824,23 @@ pub struct WandData<'vir> {
     /// non-empty.
     lhs: Vec<WandLhsKey>,
     pledges: EncodedPledges<'vir>,
+    /// Permissions restored by an earlier wand, consumed and returned unchanged.
+    frames: Vec<WandRhsKey>,
+    /// Original shape targets retained for checking PCG call-edge coverage.
+    flow_lhs: Option<Vec<WandLhsKey>>,
 }
 
 impl<'vir> WandData<'vir> {
     pub fn new(lhs: Vec<WandLhsKey>, rhs: Vec<WandRhsKey>, pledges: EncodedPledges<'vir>) -> Self {
         debug_assert!(!lhs.is_empty());
         debug_assert!(!rhs.is_empty());
-        Self { rhs, lhs, pledges }
+        Self {
+            rhs,
+            lhs,
+            pledges,
+            frames: Vec::new(),
+            flow_lhs: None,
+        }
     }
 }
 
@@ -854,6 +951,32 @@ impl<'vir> WandEncOutput<'vir> {
             self.predicates_for_function_shape_node(vcx, deps, g, None)
                 .is_some()
         };
+        let sig = self.fn_sig(vcx, None);
+        let visible = |node: WandLhsKey| {
+            if node.mir_local() == mir::RETURN_PLACE {
+                return true;
+            }
+            if !matches!(
+                node.ty(sig).kind(),
+                ty::TyKind::Ref(_, _, ty::Mutability::Mut)
+            ) {
+                return false;
+            }
+            // An input's nested resources cannot also be returned directly
+            // while its outer storage remains borrowed by the result.
+            !edges.iter().any(|(source, target)| {
+                source.mir_local() == node.mir_local()
+                    && source.region_idx().index() == 0
+                    && target.mir_local() == mir::RETURN_PLACE
+            })
+        };
+        let wands = wands
+            .into_iter()
+            .map(|mut wand| {
+                wand.lhs.retain(|node| visible(*node));
+                wand
+            })
+            .collect::<Vec<_>>();
         // A resource-free LHS without an expiry obligation encodes as `true`.
         // Return its resources directly: `true --* P` can be applied immediately,
         // but keeping P inside the wand prevents functional postconditions from
@@ -871,35 +994,97 @@ impl<'vir> WandEncOutput<'vir> {
             .collect::<Vec<_>>();
         // A wand is only needed if it gives back a resource, or to carry the
         // pledges if none does (e.g. for shared references).
-        let (mut wands, resourceless): (Vec<_>, Vec<_>) = wands
+        let (wands, resourceless): (Vec<_>, Vec<_>) = wands
             .into_iter()
             .partition(|wand_data| wand_data.rhs.iter().any(|g| has_resources((*g).into())));
         // A wand gives back its sources only once all of its targets have
         // expired. That matches the signature only if each source with
         // resources flows into each target with resources.
-        for wand_data in &wands {
+        let mut stratified = Vec::new();
+        for wand_data in wands {
             let sources = wand_data
                 .rhs
                 .iter()
-                .filter(|g| has_resources((**g).into()))
+                .copied()
+                .filter(|g| has_resources((*g).into()))
                 .collect::<Vec<_>>();
             let targets = wand_data
                 .lhs
                 .iter()
-                .filter(|g| has_resources(**g))
+                .copied()
+                .filter(|g| has_resources(*g))
                 .collect::<Vec<_>>();
-            let precise = sources.iter().all(|source| {
-                let mut targets = targets.iter();
-                targets.all(|target| edges.contains(&(**source, **target)))
-            });
-            if !precise {
-                return Err(WandEncError::Unsupported(
-                    "borrows in the result that expire separately but depend on a common \
-                     argument are not supported"
-                        .to_string(),
-                ));
+            if sources.iter().all(|source| {
+                targets
+                    .iter()
+                    .all(|target| edges.contains(&(*source, *target)))
+            }) {
+                stratified.push(wand_data);
+                continue;
+            }
+            // Nested target sets admit an ordered restoration: replace the
+            // targets restored earlier with their source permissions, and
+            // frame those permissions through the later wand.
+            let mut groups: Vec<(Vec<WandLhsKey>, Vec<WandRhsKey>)> = Vec::new();
+            for source in sources {
+                let mut targets = targets
+                    .iter()
+                    .copied()
+                    .filter(|target| edges.contains(&(source, *target)))
+                    .collect::<Vec<_>>();
+                targets.sort();
+                if let Some((_, sources)) =
+                    groups.iter_mut().find(|(existing, _)| *existing == targets)
+                {
+                    sources.push(source);
+                } else {
+                    groups.push((targets, vec![source]));
+                }
+            }
+            groups.sort_by_key(|(targets, _)| targets.len());
+            let mut previous: Vec<(Vec<WandLhsKey>, Vec<WandRhsKey>)> = Vec::new();
+            let group_count = groups.len();
+            for (group_index, (original, sources)) in groups.into_iter().enumerate() {
+                let mut targets = original.clone();
+                let mut frames = Vec::new();
+                for (earlier_targets, earlier_sources) in &previous {
+                    let overlap = earlier_targets
+                        .iter()
+                        .any(|target| original.contains(target));
+                    if overlap
+                        && !earlier_targets
+                            .iter()
+                            .all(|target| original.contains(target))
+                    {
+                        return Err(WandEncError::Unsupported(
+                            "overlapping resource restoration dependencies are not nested".into(),
+                        ));
+                    }
+                    if overlap {
+                        targets.retain(|target| !earlier_targets.contains(target));
+                        frames.extend(earlier_sources.iter().copied());
+                    }
+                }
+                if targets.is_empty() {
+                    return Err(WandEncError::Unsupported(
+                        "empty dependent resource restoration".into(),
+                    ));
+                }
+                previous.push((original.clone(), sources.clone()));
+                // Pledge placement across distinct expiry stages is checked
+                // separately; initially keep it on the final stage.
+                let pledges = if group_index + 1 == group_count {
+                    wand_data.pledges.clone()
+                } else {
+                    Vec::new()
+                };
+                let mut wand = WandData::new(targets, sources, pledges);
+                wand.frames = frames;
+                wand.flow_lhs = Some(original);
+                stratified.push(wand);
             }
         }
+        let mut wands = stratified;
         if has_pledges {
             if wands.is_empty() {
                 wands.extend(resourceless.into_iter().take(1));

@@ -8,9 +8,14 @@ From the repository root, after building Prusti:
     ./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite borrow
     ./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite iterator
     ./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite hash
+
+For a focused client regression, add --case 'name_*' --skip-library.
+CARGO_TARGET_DIR selects the directory containing the built Prusti executable;
+each run still uses a fresh temporary Cargo target for the fixtures.
 """
 
 import argparse
+import fnmatch
 import json
 import os
 from pathlib import Path
@@ -24,15 +29,22 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--release", action="store_true", help="use release Prusti binaries")
     parser.add_argument("--suite", choices=("extern", "sequence", "vec", "collections", "borrow", "iterator", "hash"), default="extern")
+    parser.add_argument("--case", action="append", help="select binary names by glob; may be repeated")
+    parser.add_argument("--skip-library", action="store_true", help="verify selected clients without separately verifying the spec library")
     args = parser.parse_args()
     root = Path(__file__).resolve().parent.parent
     sequence = args.suite == "sequence"
     fixture = root / "prusti-tests/tests/cargo_verify" / ("stdlib_" + args.suite + "_spec")
     profile = "release" if args.release else "debug"
     executable = "cargo-prusti.exe" if os.name == "nt" else "cargo-prusti"
-    prusti = root / "target" / profile / executable
+    prusti = Path(os.environ.get("CARGO_TARGET_DIR", root / "target")).resolve() / profile / executable
     if not prusti.is_file():
         parser.error("build Prusti first with ./x.py build --all (and --release if selected)")
+    sources = sorted((fixture / "src/bin").glob("*.rs"))
+    if args.case:
+        sources = [source for source in sources if any(fnmatch.fnmatchcase(source.stem, pattern) for pattern in args.case)]
+        if not sources:
+            parser.error("no binaries match the selected --case patterns")
 
     toolchain = re.search(r'channel\s*=\s*"([^"]+)"', (root / "rust-toolchain").read_text())[1]
     log_dir = root / "target" / ("stdlib-" + args.suite + "-spec-logs")
@@ -110,12 +122,12 @@ def main():
                 run("rust-core-only", ["cargo", "check", "-p", "stdlib_core_only"], env)
                 run("core-only", [str(prusti), "-p", "stdlib_core_only"], env)
             library = {"extern": "stdlib_specs", "sequence": "sequence_specs", "vec": "vec_specs", "collections": "collection_specs", "borrow": "borrow_specs", "iterator": "iterator_specs", "hash": "key_specs"}[args.suite]
-            run("spec-library", [str(prusti), "-p", library], env)
-            sources = fixture / "src/bin"
-            positive = sorted(p for p in sources.glob("*.rs") if p.stem == "pass" or p.stem.endswith("_pass"))
+            if not args.skip_library:
+                run("spec-library", [str(prusti), "-p", library], env)
+            positive = [p for p in sources if p.stem == "pass" or p.stem.endswith("_pass")]
             for source in positive:
                 run("runtime-" + source.stem, ["cargo", "run", "--bin", source.stem], env)
-            for source in positive + sorted(set(sources.glob("*.rs")) - set(positive)):
+            for source in positive + sorted(set(sources) - set(positive)):
                 annotations = [
                     (i, match[1], match[2])
                     for i, line in enumerate(source.read_text().splitlines(), 1)
@@ -142,7 +154,7 @@ def main():
                     program.unlink(missing_ok=True)
                 run(source.stem, [str(prusti), "--bin", source.stem], case_env, expected, location, notes)
 
-            if sequence:
+            if sequence and any(source.stem == "triggers_pass" for source in positive):
                 program = log_dir / "verifier/triggers_pass/viper_program/program-check.vpr"
                 viper = program.read_text() if program.is_file() else ""
                 for quantifier in ("forall", "exists"):
@@ -155,10 +167,11 @@ def main():
                     results.append({"case": "viper-trigger-" + quantifier, "passed": passed, "seconds": 0})
                     print("Viper {} trigger: {} ({})".format(quantifier, "PASS" if passed else "FAIL", program), flush=True)
 
-    (log_dir / "results.json").write_text(json.dumps({"toolchain": toolchain, "cases": results}, indent=2) + "\n")
+    (log_dir / "results.json").write_text(json.dumps({"toolchain": toolchain, "case_patterns": args.case, "spec_library_selected": not args.skip_library, "cases": results}, indent=2) + "\n")
     if not all(result["passed"] for result in results):
         raise SystemExit(1)
-    print("All stdlib {} cases passed ({} checks).".format(args.suite, len(results)))
+    scope = "Selected" if args.case or args.skip_library else "All"
+    print("{} stdlib {} cases passed ({} checks).".format(scope, args.suite, len(results)))
 
 
 if __name__ == "__main__":

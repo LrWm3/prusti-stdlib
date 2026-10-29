@@ -1710,11 +1710,23 @@ restoration probes before extending the prefix-loop summary. Keep the physical
 slot identity relation and heap-dependent referent state as separate checked
 obligations. No frame may simply be assumed for a verified helper.
 
-The full iterator library run also remains an open regression gate. With the
-experimental time bounds, build 58 reports two scalar suffix-framing failures
-and six generic shared/Vec conversion failures. Recheck the former with the
-original bounds; diagnose the latter from their emitted conversions. Focused
-client checks do not establish that the whole library passes.
+The destructor control exposed a separate trait-refinement problem with nested
+mutable resources: the checker havoced an outer resource before consuming an
+inner permission addressed through its old snapshot. The refinement check now
+consumes the complete old resource conjunction before inhaling the new one.
+The control's destructor body verifies without trust and its stale-value claim
+is rejected. The existing mutable-frame positive and wrong-postcondition/state
+controls pass. Two other cases in that test run still fail on the preceding
+build as well: generic iterator conversion and `replace_owned` restoration.
+Logs: `target/stdlib-im4-refinement69-extern-spec-logs`,
+`target/stdlib-im4-refinement68-baseline-extern-spec-logs`, and
+`target/stdlib-im4-drop69b-iterator-spec-logs`.
+
+The full iterator library run also remains an open regression gate. Build 65
+reproduces the two scalar suffix failures with the original solver bounds;
+they are not explained by the experimental time-bound setting. Six generic
+shared/Vec conversion failures also remain. Focused client checks do not
+establish that the whole library passes.
 
 The first step is a prerequisite for the others: adding an abstract predicate
 only to call-site contracts would not establish that a generic implementation

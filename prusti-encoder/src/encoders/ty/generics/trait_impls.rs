@@ -189,9 +189,14 @@ impl TaskEncoder for TraitImplEnc {
                 // implementation is allowed to mutate it. `old` still refers
                 // to the state at entry to this proof method.
                 let mut stmts = bounds;
-                for &resource in &indirect_pres {
-                    stmts.push(vcx.mk_exhale_stmt(resource));
-                    stmts.push(vcx.mk_inhale_stmt(resource));
+                if !indirect_pres.is_empty() {
+                    // Nested permissions can use snapshots of earlier
+                    // resources. Consume the whole pre-state before creating
+                    // a new one, so a changed outer snapshot is never used to
+                    // locate an inner permission from the old state.
+                    let resources = vcx.mk_conj(&indirect_pres);
+                    stmts.push(vcx.mk_exhale_stmt(resources));
+                    stmts.push(vcx.mk_inhale_stmt(resources));
                 }
                 for post in impl_item_spec.post_exprs() {
                     stmts.push(vcx.mk_inhale_stmt(post));

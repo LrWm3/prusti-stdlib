@@ -81,3 +81,7 @@ Quick example
 4. Run Prusti. Now the `bisect` function verifies.
 
 Congratulations! You just proved absence of panics and integer overflows in the `bisect` function. To additionally prove that the result is correct (i.e. such that `f(x) == target`), see [this example](https://github.com/prusti/prusti/blob/main/prusti-tests/tests/verify_overflow/pass/overflow/bisect.rs).
+
+### Native backend development builds
+
+The dev profile compiles the three Ferrum crates at optimization level 1 to reduce stack use during verification. Debug assertions and unwinding remain enabled. Some iterator programs overflow the verification thread stack when these crates are built without optimization; this setting mitigates those observed cases and does not establish a general stack bound.

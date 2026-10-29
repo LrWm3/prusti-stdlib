@@ -160,14 +160,23 @@ pub fn analyze(
     let mut line = String::new();
     let mut prev_line = String::new();
     let mut line_number = 0;
-    assert!(reader.read_line(&mut prev_line)? > 0);
+    if reader.read_line(&mut prev_line)? == 0 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "empty SMT trace",
+        ));
+    }
     while reader.read_line(&mut line)? > 0 {
         // We use this `prev_line` to avoid processing the last line, which is
         // very likely to be invalid because Silicon kills Z3.
         std::mem::swap(&mut line, &mut prev_line);
         line_number += 1;
-        process_line(&settings, &mut state, &line)
-            .unwrap_or_else(|error| panic!("Error {error} on line {line_number}"));
+        process_line(&settings, &mut state, &line).map_err(|error| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Error {error} on line {line_number}"),
+            )
+        })?;
         line.clear();
     }
     let scopes_left = state.active_scopes_count();
@@ -189,4 +198,36 @@ pub fn analyze(
         settings.unique_triggers_bound_total,
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod fallible_trace_tests {
+    use super::*;
+    #[test]
+    fn malformed_and_empty_traces_return_errors() {
+        let path =
+            std::env::temp_dir().join(format!("prusti-invalid-smt-trace-{}", std::process::id()));
+        let settings = || Settings {
+            write_statistics: false,
+            quantifier_instantiations_ignore_builtin: false,
+            quantifier_instantiations_bound_global_kind: None,
+            quantifier_instantiations_bound_trace: None,
+            quantifier_instantiations_bound_trace_kind: None,
+            unique_triggers_bound: None,
+            unique_triggers_bound_total: None,
+            check_active_scopes_count: None,
+            pop_scopes_by_one: false,
+            trace_quantifier_triggers: None,
+        };
+        std::fs::write(&path, "[new-match] invalid #1\nignored-last-line\n").unwrap();
+        let error = analyze(&path, settings()).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("line 1"));
+        std::fs::write(&path, "").unwrap();
+        assert_eq!(
+            analyze(&path, settings()).unwrap_err().kind(),
+            std::io::ErrorKind::InvalidData
+        );
+        std::fs::remove_file(path).unwrap();
+    }
 }

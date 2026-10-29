@@ -69,7 +69,8 @@ impl<'a> Parser<'a> {
     }
 
     fn position(&mut self) -> usize {
-        self.peek_with_position().unwrap().0
+        self.peek_with_position()
+            .map_or(self.line.len(), |(position, _)| position)
     }
 
     fn try_consume_predicate(&mut self, predicate: impl Fn(char) -> bool) -> bool {
@@ -222,14 +223,13 @@ impl<'a> Parser<'a> {
 
     pub(crate) fn parse_hex_number(&mut self) -> Result<Fingerprint, Error> {
         self.skip_whitespace();
-        self.consume('0')?;
-        let mut number = 0;
-        if self.try_consume('x') {
-            number =
-                u64::from_str_radix(self.consume_while_predicate(|c| c.is_ascii_hexdigit()), 16)
-                    .unwrap();
-        }
-        Ok(number)
+        let text = self.consume_while_predicate(|c| c.is_ascii_alphanumeric());
+        let parsed = if let Some(hex) = text.strip_prefix("0x") {
+            u64::from_str_radix(hex, 16)
+        } else {
+            text.parse::<u64>()
+        };
+        parsed.map_err(|_| self.error(ErrorKind::ConsumeFailed))
     }
 
     pub(crate) fn parse_number(&mut self) -> Result<u32, Error> {
@@ -243,6 +243,29 @@ impl<'a> Parser<'a> {
                 eprintln!("line: {}", self.line);
                 panic!();
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod fingerprint_tests {
+    use super::Parser;
+    #[test]
+    fn accepts_legacy_hex_and_z3_decimal_fingerprints() {
+        for (text, expected) in [
+            ("0", 0),
+            ("0xdeadbeef", 0xdeadbeef),
+            ("1999671347", 1999671347),
+        ] {
+            let mut parser = Parser::from_line(text);
+            assert_eq!(parser.parse_hex_number().unwrap(), expected);
+            parser.check_eof().unwrap();
+        }
+        for text in ["", "0x", "0xno", "18446744073709551616"] {
+            assert!(
+                Parser::from_line(text).parse_hex_number().is_err(),
+                "{text}"
+            );
         }
     }
 }

@@ -8,6 +8,8 @@ members = [
     "prusti-tests",
     "prusti-utils",
     "prusti-viper",
+    "prusti-ferrum",
+    "prusti-backend-types",
     "tracing",
     #"mir-ssa-analysis",
     "pcg",
@@ -33,6 +35,16 @@ resolver = "2"
 
 [profile.dev]
 debug = 1
+
+# These recursive verification crates use smaller stack frames with optimization.
+[profile.dev.package.ferrum]
+opt-level = 1
+
+[profile.dev.package.ferrum-silicon]
+opt-level = 1
+
+[profile.dev.package.ferrum-silver]
+opt-level = 1
 
 [profile.test]
 debug = 1

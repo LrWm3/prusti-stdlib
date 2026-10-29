@@ -8,6 +8,7 @@ members = [
     "prusti-tests",
     "prusti-utils",
     "prusti-viper",
+    "prusti-ferrum",
     "tracing",
     #"mir-ssa-analysis",
     "pcg",

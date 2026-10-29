@@ -1,0 +1,12 @@
+[package]
+name = "prusti-ferrum"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+
+[dependencies]
+vir = { path = "../vir" }
+ferrum-silver = { git = "https://github.com/LrWm3/ferrum.git", rev = "b1cef50146acbe8493fe2b9274328c7d7e694e76" }
+ferrum-silicon = { git = "https://github.com/LrWm3/ferrum.git", rev = "b1cef50146acbe8493fe2b9274328c7d7e694e76" }
+ferrum = { git = "https://github.com/LrWm3/ferrum.git", rev = "b1cef50146acbe8493fe2b9274328c7d7e694e76" }
+num-bigint = "=0.4.6"

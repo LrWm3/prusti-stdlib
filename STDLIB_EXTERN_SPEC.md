@@ -1491,7 +1491,7 @@ snapshot. Input resources are not returned twice when their outer storage
 remains borrowed. The generic method interface stays at its definition-site
 shape under substitution.
 
-The next development chunk adds checked concrete/group conversions for finite
+The development branch now implements checked concrete/group conversions for finite
 mutable-reference, nested-reference, struct/tuple, and enum shapes at whole
 parameter boundaries. Calls pack their input resources, unpack their returned
 resources, and repeat the inverse conversions around restoration-wand
@@ -1515,6 +1515,29 @@ nine exact negative diagnostics, and a Rust check. The controls cover false
 claims, wrong values, a mutation violating a state frame, missing permissions,
 and executable misuse of the observer. Logs are in
 `target/stdlib-im4-finite-iterator-logs`; the full build also passed.
+
+The separate `stdlib_resources_spec` fixture now verifies a `no_std`
+`resource_specs` library containing generic identity and a twice-composed
+identity. Clients use its exported snapshot, resource-state, and expiry
+contracts for mutable references, nested mutable references, a public wrapper
+with two independent lifetimes, a non-`Copy` owned struct, and shared references.
+All four positive clients verify and run. Three negative controls reject a
+wrong restored value, a wrong nested value, and `false` after returning to the
+owner. Library verification, the Rust check, runtime executions, and these
+clients make 13 checks. Run them with
+`./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite resources`;
+logs are in `target/stdlib-resources-spec-logs`. This establishes the finite
+whole-parameter interface across crate boundaries; associated types,
+parameters nested in argument constructors, and collection views remain open.
+
+Array literals now retain their complete generic element snapshots through
+the existing sequence constructor. Equating only the concrete projection had
+lost the element type tag needed to justify a collection resource group.
+The concrete array/index/replacement regression subset passes all ten checks,
+including wrong-value and consistency controls. The finite-reference subset
+also continues to pass all 22 checks. Symbolic collection conversion and its
+value framing remain separate acceptance work; literal construction alone
+does not supply the typing facts for an arbitrary incoming array.
 
 This is a development checkpoint, not an IM4 acceptance result. Symbolic
 collection conversion, generic parameters nested in argument type constructors,

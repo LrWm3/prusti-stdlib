@@ -8,6 +8,7 @@ From the repository root, after building Prusti:
     ./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite borrow
     ./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite iterator
     ./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite hash
+    ./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite resources
 
 For a focused client regression, add --case 'name_*' --skip-library.
 CARGO_TARGET_DIR selects the directory containing the built Prusti executable;
@@ -28,10 +29,14 @@ import time
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--release", action="store_true", help="use release Prusti binaries")
-    parser.add_argument("--suite", choices=("extern", "sequence", "vec", "collections", "borrow", "iterator", "hash"), default="extern")
+    parser.add_argument("--suite", choices=("extern", "sequence", "vec", "collections", "borrow", "iterator", "hash", "resources"), default="extern")
     parser.add_argument("--case", action="append", help="select binary names by glob; may be repeated")
     parser.add_argument("--skip-library", action="store_true", help="verify selected clients without separately verifying the spec library")
+    parser.add_argument("--timeout", type=int, default=180, help="verification time limit per generated program in seconds (default: 180)")
     args = parser.parse_args()
+    if args.timeout <= 0:
+        parser.error("--timeout must be positive")
+    command_timeout = max(300, args.timeout + 120)
     root = Path(__file__).resolve().parent.parent
     sequence = args.suite == "sequence"
     fixture = root / "prusti-tests/tests/cargo_verify" / ("stdlib_" + args.suite + "_spec")
@@ -57,7 +62,7 @@ def main():
         try:
             result = subprocess.run(
                 command, cwd=fixture, env=env, text=True,
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=300,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=command_timeout,
             )
             output = result.stdout
             errors = re.findall(r"^error(?:\[[^\]]+\])?: (.+)$", output, re.MULTILINE)
@@ -82,7 +87,7 @@ def main():
             output = error.stdout or b""
             if isinstance(output, bytes):
                 output = output.decode(errors="replace")
-            output += "\nTest command exceeded 300 seconds.\n"
+            output += "\nTest command exceeded {} seconds.\n".format(command_timeout)
             passed = False
         elapsed = round(time.monotonic() - start, 2)
         log_path = log_dir / (name + ".log")
@@ -113,7 +118,7 @@ def main():
             "PRUSTI_ENABLE_CACHE": "false",
             # The timeout covers the whole generated program, including
             # generic conversion methods and the untrusted iterator body.
-            "PRUSTI_EXTRA_VERIFIER_ARGS": "--timeout=180 --numberOfParallelVerifiers 1",
+            "PRUSTI_EXTRA_VERIFIER_ARGS": "--timeout={} --numberOfParallelVerifiers 1".format(args.timeout),
             "PRUSTI_LOG_DIR": str(log_dir / "verifier"),
         })
         compiled = run("rust-check", ["cargo", "check", "--bins"], env)
@@ -121,7 +126,7 @@ def main():
             if args.suite == "extern":
                 run("rust-core-only", ["cargo", "check", "-p", "stdlib_core_only"], env)
                 run("core-only", [str(prusti), "-p", "stdlib_core_only"], env)
-            library = {"extern": "stdlib_specs", "sequence": "sequence_specs", "vec": "vec_specs", "collections": "collection_specs", "borrow": "borrow_specs", "iterator": "iterator_specs", "hash": "key_specs"}[args.suite]
+            library = {"extern": "stdlib_specs", "sequence": "sequence_specs", "vec": "vec_specs", "collections": "collection_specs", "borrow": "borrow_specs", "iterator": "iterator_specs", "hash": "key_specs", "resources": "resource_specs"}[args.suite]
             if not args.skip_library:
                 run("spec-library", [str(prusti), "-p", library], env)
             positive = [p for p in sources if p.stem == "pass" or p.stem.endswith("_pass")]
@@ -167,7 +172,7 @@ def main():
                     results.append({"case": "viper-trigger-" + quantifier, "passed": passed, "seconds": 0})
                     print("Viper {} trigger: {} ({})".format(quantifier, "PASS" if passed else "FAIL", program), flush=True)
 
-    (log_dir / "results.json").write_text(json.dumps({"toolchain": toolchain, "case_patterns": args.case, "spec_library_selected": not args.skip_library, "cases": results}, indent=2) + "\n")
+    (log_dir / "results.json").write_text(json.dumps({"toolchain": toolchain, "case_patterns": args.case, "spec_library_selected": not args.skip_library, "verifier_timeout": args.timeout, "cases": results}, indent=2) + "\n")
     if not all(result["passed"] for result in results):
         raise SystemExit(1)
     scope = "Selected" if args.case or args.skip_library else "All"

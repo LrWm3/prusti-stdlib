@@ -1911,6 +1911,28 @@ obligation diagnostic also reported a generated unpack helper's type-preservatio
 failure; it is not counted as a successful negative proof. The smaller
 whole-value diagnostic isolates obligation retention and passes in 3.95s.
 
+Explicit quantifier triggers now expand their capture projections before
+snapshot normalization, while retaining capture evaluation outside the
+quantifier. Previously a trigger went through a tuple local while the body
+used the captured sequence directly. Silicon could not associate the
+heap-dependent trigger with the function evaluation in the quantified body.
+All 12 canonical element-state triggers in the native holder experiment now
+match their body expressions. The 10 sequence trigger checks and 14 quantified
+borrow checks pass, as do the untrusted generic sequence-state expiry positive,
+wrong pledge, Rust check, and runtime exercise after adding explicit triggers.
+Logs: `target/stdlib-im4-triggers97-sequence-spec-logs`,
+`target/stdlib-im4-triggers97-borrow-spec-logs`, and
+`target/stdlib-im4-pledges98-iterator-spec-logs` (same solver configuration).
+
+Native reference-value restoration remains open. The holder caller alone now
+fails only its final value assertion (3m15s), and its generated conversion
+helpers verify separately (2m28s), using the pinned backend and the experimental
+contracts in `/tmp/prusti-im4-native95-contracts`. The full native run reports
+a generated observer permission failure; neither isolated result replaces the
+full gate. The universally quantified concrete wrong-value caller also exceeds
+600 seconds on build 94. These are unresolved proof/solver-encoding cases,
+not successful negative controls or accepted native frames.
+
 The first step is a prerequisite for the others: adding an abstract predicate
 only to call-site contracts would not establish that a generic implementation
 actually preserves it.

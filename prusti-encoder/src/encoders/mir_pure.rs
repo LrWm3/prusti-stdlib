@@ -1779,10 +1779,13 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                 let (qvars, body) =
                     self.encode_spec_closure(name, arg_tys[2].expect_ty(), encoded_args[1])?;
                 let body = body.downcast_ty::<vir::Bool>();
-                // Keep the trigger closures' captures outside the quantifier.
-                // If their tuple construction occurs only inside a trigger,
-                // the solver cannot reduce its projections before matching it
-                // against terms built from the captured values.
+                // Evaluate trigger captures outside the quantifier, but expand
+                // their projections in the trigger itself. The restricted
+                // snapshot normalizer cancels those constructor/projection
+                // pairs, including inside wands. A trigger through the local
+                // tuple instead has a different expression from the body;
+                // Silicon cannot associate its heap-dependent function call
+                // with the snapshot obtained while evaluating the body.
                 let trigger_snap = encoded_args[0];
                 let trigger_decl = self.vcx.mk_local_decl(
                     vir::vir_format!(self.vcx, "_trigger_capture_{}", self.encoding_depth),
@@ -1791,7 +1794,7 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                 let triggers = self.encode_trigger_sets(
                     name,
                     arg_tys[0].expect_ty(),
-                    self.vcx.mk_local_ex(trigger_decl).lift(),
+                    trigger_snap,
                     qvars,
                 )?;
                 let res = if builtin == SpecBuiltin::Forall {

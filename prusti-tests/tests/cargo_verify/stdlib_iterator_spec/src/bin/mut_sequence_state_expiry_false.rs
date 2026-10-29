@@ -8,7 +8,8 @@ use prusti_contracts::*;
     false && forall(move |j: Int|
         (Int::from(0) <= j && j < source.len()) ==>
         sequence_resource_state(&source, j)
-            == before_expiry(sequence_resource_state(&returned, j))
+            == before_expiry(sequence_resource_state(&returned, j)),
+        triggers = [(sequence_resource_state(&source, j),)]
     )
 })]
 fn relay<T>(values: &mut [T]) -> &mut [T] { values }

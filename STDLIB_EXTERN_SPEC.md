@@ -1765,6 +1765,14 @@ inductive proof fact needed by the specialized collection-state observer.
 All 14 simplifier unit tests pass, including four reveal-placement controls
 (`/tmp/prusti-im4-simplify73.log`).
 
+Generic `replace_owned` now verifies as well. Sources with no resource-bearing
+output dependency return directly when there is no expiry pledge. Packaging a
+restoration for several inputs also shares the consumed-call set across their
+unblocking graphs, so a single call wand is neither required nor applied twice.
+The core-only crate, existing mutable trait positive, and both wrong replace
+postconditions pass (seven checks,
+`target/stdlib-im4-refinement77-extern-spec-logs`).
+
 The first step is a prerequisite for the others: adding an abstract predicate
 only to call-site contracts would not establish that a generic implementation
 actually preserves it.

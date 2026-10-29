@@ -1196,8 +1196,8 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         &mut self,
         borrows_state: &BorrowsState<'_, 'vir>,
         footprint: &mut Footprint<'_, 'vir>,
+        to_skip: &mut Vec<(mir::BasicBlock, usize, ValidityConditions)>,
     ) -> EncodeResult<'vir, (), E> {
-        let mut to_skip = Vec::new();
         let actions = footprint.actions;
         for action in actions {
             self.pcs_handle_edge(
@@ -1205,7 +1205,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 action.edge(),
                 EdgeAction::Remove,
                 false,
-                &mut to_skip,
+                to_skip,
                 Some(footprint),
             )?;
         }
@@ -1242,6 +1242,9 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
     ) -> EncodeResult<'vir, Vec<vir::Stmt<'vir>>, E> {
         let mut parts = Vec::new();
         let mut unblock = Vec::new();
+        // Several restored inputs can depend on the same call obligation.
+        // Consume it once for this complete package, across all input graphs.
+        let mut to_skip = Vec::new();
         for (node, resources) in rhs {
             let node = node.into();
             let ug = UnblockGraph::for_node(node, borrows_state, self.pcg_ctxt());
@@ -1264,9 +1267,9 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 let part = self.unless_unblocked(&footprint, node, None, resources);
                 footprint.parts.extend(part);
             }
-            unblock.extend(
-                self.block(|visitor| visitor.pcs_unblock_actions(borrows_state, &mut footprint))?,
-            );
+            unblock.extend(self.block(|visitor| {
+                visitor.pcs_unblock_actions(borrows_state, &mut footprint, &mut to_skip)
+            })?);
             parts.extend(footprint.parts);
         }
         let mut script = Vec::new();

@@ -1175,6 +1175,13 @@ impl<'vir> WandEncOutput<'vir> {
             groups.sort_by_key(|(targets, _)| targets.len());
             let mut previous: Vec<(Vec<WandLhsKey>, Vec<WandRhsKey>)> = Vec::new();
             for (original, sources) in groups {
+                // This source has no resource-bearing output dependency. With
+                // no expiry pledge to anchor, return it directly through
+                // indirect_posts instead of inventing an empty restoration
+                // stage (e.g. the destination storage of mem::replace<T>).
+                if original.is_empty() && pledges.is_empty() {
+                    continue;
+                }
                 let mut targets = original.clone();
                 let mut frames = Vec::new();
                 for (earlier_targets, earlier_sources) in &previous {

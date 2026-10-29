@@ -13,7 +13,10 @@ use pcg::{
             kind::BorrowPcgEdgeKind,
         },
         edge_data::EdgeData,
-        region_projection::{LifetimeProjection, PcgLifetimeProjectionBaseLike, PlaceOrConst},
+        region_projection::{
+            LifetimeProjection, LifetimeProjectionLabel, PcgLifetimeProjectionBaseLike,
+            PlaceOrConst,
+        },
         state::BorrowsState,
         unblock_graph::{BorrowPcgUnblockAction, UnblockGraph},
         validity_conditions::{BranchChoices, ValidityConditions},
@@ -52,7 +55,7 @@ use crate::encoders::{
     pure::spec::{MirSpecEncMode, PledgeExpr},
     ty::{
         RustFieldAddress, RustTyDecomposition, RustTySpecial,
-        generics::{GArgs, GParams},
+        generics::{GArgs, GArgsCastEnc, GParams},
         use_impure::TyUseImpure,
         use_pure::{TyUsePure, TyUsePureEnc},
     },
@@ -209,6 +212,9 @@ pub(crate) struct LoopRestorationFrame<'vir> {
     pub iterator: mir::Local,
     pub restoration: super::mir_pure::MirPureEncOutput<'vir>,
     pub saved: FxHashMap<mir::Local, vir::ExprSnap<'vir>>,
+    /// Reference-bearing loops currently preserve the unyielded slot
+    /// identities. These are separate from mutable referent values.
+    pub saved_tail: Option<vir::ExprSeq<'vir>>,
 }
 
 /// Represents the translation of a MIR place. If the place crosses a shared
@@ -1006,20 +1012,15 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     self.stmts(after);
                 }
             }
-            BorrowPcgEdgeKind::Coupled(edge)
-                if let Some(head) = edge.loop_head()
-                    && let Some((_, span)) = self
-                        .spec_blocks
-                        .loop_specs
-                        .values()
-                        .find(|spec| spec.original_head_block == head)
-                        .and_then(|spec| spec.restorations.first()) =>
-            {
-                return Err(self.unsupported_rvalue(
-                    "body_restore_prefix requires a singleton iterator restoration edge"
-                        .to_string(),
-                    *span,
-                ));
+            BorrowPcgEdgeKind::Coupled(edge) if edge.loop_head().is_some() => {
+                self.pcs_handle_wand(
+                    borrows_state,
+                    edge_action.is_add(),
+                    edge,
+                    label,
+                    edge_to_loop,
+                    footprint,
+                )?;
             }
             BorrowPcgEdgeKind::Abstraction(at @ AbstractionEdge::Loop(_)) => {
                 self.pcs_handle_wand(
@@ -1248,41 +1249,60 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         already_unblocked: &[BorrowPcgEdge<'vir>],
         mut include: impl FnMut(&BorrowPcgEdge<'vir>) -> bool,
     ) -> EncodeResult<'vir, Vec<vir::Stmt<'vir>>, E> {
-        let mut parts = Vec::new();
-        let mut unblock = Vec::new();
-        // Several restored inputs can depend on the same call obligation.
-        // Consume it once for this complete package, across all input graphs.
-        let mut to_skip = Vec::new();
+        let rhs = rhs
+            .into_iter()
+            .map(|(node, resources)| (node.into(), resources))
+            .collect::<Vec<(BlockedNode<'vir>, _)>>();
+        let restored_storage = rhs
+            .iter()
+            .filter_map(|(node, _)| match node {
+                PcgNode::Place(MaybeLabelledPlace::Current(place)) => Some(*place),
+                _ => None,
+            })
+            .collect::<FxHashSet<_>>();
+        // Restore all inputs through one dependency graph. A joint loop edge
+        // can unblock several inputs; separate scripts would consume the same
+        // wand more than once and lose ordering between their dependencies.
+        let actions = UnblockGraph::for_nodes(
+            rhs.iter().map(|(node, _)| *node),
+            borrows_state,
+            self.pcg_ctxt(),
+        )
+        .actions(self.pcg_ctxt())
+        .unwrap()
+        .into_iter()
+        .filter(|action| !already_unblocked.contains(action.edge()) && include(action.edge()))
+        .collect::<Vec<_>>();
+        let mut footprint = Footprint {
+            actions: &actions,
+            label,
+            parts: Vec::new(),
+        };
         for (node, resources) in rhs {
-            let node = node.into();
-            let ug = UnblockGraph::for_node(node, borrows_state, self.pcg_ctxt());
-            let actions = ug
-                .actions(self.pcg_ctxt())
-                .unwrap()
-                .into_iter()
-                .filter(|action| {
-                    !already_unblocked.contains(action.edge()) && include(action.edge())
-                })
-                .collect::<Vec<_>>();
-            let mut footprint = Footprint {
-                actions: &actions,
-                label,
-                parts: Vec::new(),
-            };
-            // Where nothing unblocks the node, it is given back as it is.
-            if !resources.is_empty() {
+            // Resource keys behind co-restored loop storage become readable
+            // only after that storage is restored by the script. Do not try
+            // to import those consequent resources in the initial footprint.
+            // Their complete permission formula is still checked in the wand
+            // consequent; all action/wand footprints below are retained.
+            let reads_restored_storage = matches!(node,
+                PcgNode::LifetimeProjection(projection)
+                    if matches!(projection.label(), Some(LifetimeProjectionLabel::Location(SnapshotLocation::Loop(_))))
+                    && matches!(projection.base().to_pcg_lifetime_projection_base(),
+                        PlaceOrConst::Place(MaybeRemotePlace::Local(place))
+                            if restored_storage.iter().any(|source| *source == place.place())));
+            // Where nothing unblocks an independent node, it is returned as-is.
+            if !resources.is_empty() && !reads_restored_storage {
                 let resources = self.vcx.mk_conj(&resources);
                 let part = self.unless_unblocked(&footprint, node, None, resources);
                 footprint.parts.extend(part);
             }
-            unblock.extend(self.block(|visitor| {
-                visitor.pcs_unblock_actions(borrows_state, &mut footprint, &mut to_skip)
-            })?);
-            parts.extend(footprint.parts);
         }
+        let unblock = self.block(|visitor| {
+            visitor.pcs_unblock_actions(borrows_state, &mut footprint, &mut Vec::new())
+        })?;
         let mut script = Vec::new();
-        if !parts.is_empty() {
-            script.push(self.vcx.mk_assert_stmt(self.vcx.mk_conj(&parts)));
+        if !footprint.parts.is_empty() {
+            script.push(self.vcx.mk_assert_stmt(self.vcx.mk_conj(&footprint.parts)));
         }
         script.extend(unblock);
         Ok(script)
@@ -2393,7 +2413,61 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         Ok(())
     }
 
-    /// Identify the single loop edge described by a restoration annotation.
+    /// Identify one source slice and its jointly restored element resources.
+    /// Every output must belong to the selected iterator; a second owner or
+    /// another live borrow requires a different restoration summary.
+    fn restoration_source_for_edge(
+        &self,
+        edge: &PcgCoupledEdgeKind<'vir>,
+        iterator: mir::Local,
+    ) -> Option<Place<'vir>> {
+        let outputs = edge.outputs();
+        if outputs.is_empty()
+            || !outputs.iter().all(|output| {
+                let PcgNode::LifetimeProjection(output) = **output else {
+                    return false;
+                };
+                matches!(output.base().to_pcg_lifetime_projection_base(),
+                PlaceOrConst::Place(MaybeRemotePlace::Local(place))
+                    if place.place() == iterator.into())
+            })
+        {
+            return None;
+        }
+        let inputs = edge.inputs(self.pcg_ctxt());
+        let storage = inputs
+            .iter()
+            .filter_map(|input| match **input {
+                PcgNode::Place(MaybeLabelledPlace::Current(source)) => Some(source),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        let [source] = storage.as_slice() else {
+            return None;
+        };
+        if !matches!(source.projection.as_ref(), [mir::ProjectionElem::Deref])
+            || !matches!(source.ty(self.pcg_ctxt()).ty.kind(), TyKind::Slice(_))
+            || !matches!(
+                self.body.local_decls[source.local].ty.kind(),
+                TyKind::Ref(_, _, ty::Mutability::Mut)
+            )
+        {
+            return None;
+        }
+        inputs
+            .iter()
+            .all(|input| match **input {
+                PcgNode::Place(MaybeLabelledPlace::Current(place)) => place == *source,
+                PcgNode::LifetimeProjection(input) => {
+                    matches!(input.base().to_pcg_lifetime_projection_base(),
+                PlaceOrConst::Place(MaybeRemotePlace::Local(place)) if *source == place.place())
+                }
+                _ => false,
+            })
+            .then_some(*source)
+    }
+
+    /// Identify the loop obligation described by a restoration annotation.
     /// This depends only on the loop-head PCG state, so the same selection can
     /// later be used when encoding entry packages as well as the loop invariant.
     pub(crate) fn select_restoration_edge(
@@ -2437,35 +2511,29 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         }
         let iterator = iterator_locals[0];
         let state = &cfpcs.statements[0].states[EvalStmtPhase::PreOperands];
-        let matched_edges = state
+        let loop_edges = state
             .borrow_pcg()
             .graph()
             .edges()
             .filter_map(|edge| {
-                let (edge, singleton) = match edge.kind() {
+                let edge = match edge.kind() {
                     BorrowPcgEdgeKind::Abstraction(edge @ AbstractionEdge::Loop(_)) => {
-                        (edge.clone().into_singleton_coupled_edge(), true)
+                        edge.clone().into_singleton_coupled_edge()
                     }
-                    BorrowPcgEdgeKind::Coupled(edge) => (edge.clone(), false),
+                    BorrowPcgEdgeKind::Coupled(edge) => edge.clone(),
                     _ => return None,
                 };
                 if edge.loop_head() != Some(original_head) {
                     return None;
                 }
-                let outputs = edge.outputs();
-                let mentions_iterator = outputs.iter().any(|output| {
-                    let PcgNode::LifetimeProjection(output) = **output else {
-                        return false;
-                    };
-                    match output.base().to_pcg_lifetime_projection_base() {
-                        PlaceOrConst::Place(MaybeRemotePlace::Local(place)) => {
-                            let place = place.place();
-                            place.local == iterator && place.projection.is_empty()
-                        }
-                        _ => false,
-                    }
-                });
-                mentions_iterator.then_some((edge, singleton))
+                Some(edge)
+            })
+            .collect::<Vec<_>>();
+        let matched_edges = loop_edges
+            .iter()
+            .filter_map(|edge| {
+                self.restoration_source_for_edge(edge, iterator)
+                    .map(|source| (edge.clone(), source))
             })
             .collect::<Vec<_>>();
         if matched_edges.len() != 1 {
@@ -2475,38 +2543,29 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 span,
             ));
         }
-        if !matched_edges[0].1 {
-            return Err(self.unsupported_rvalue(
-                "body_restore_prefix requires a singleton iterator restoration edge".to_string(),
-                span,
-            ));
-        }
-        let inputs = matched_edges[0].0.inputs(self.pcg_ctxt());
-        let outputs = matched_edges[0].0.outputs();
-        let source = if inputs.len() == 1 && outputs.len() == 1 {
-            match *inputs[0] {
-                PcgNode::Place(MaybeLabelledPlace::Current(source))
-                    if matches!(source.projection.as_ref(), [mir::ProjectionElem::Deref])
-                        && matches!(source.ty(self.pcg_ctxt()).ty.kind(), TyKind::Slice(_))
-                        && matches!(
-                            self.body.local_decls[source.local].ty.kind(),
-                            TyKind::Ref(_, _, ty::Mutability::Mut)
-                        ) =>
-                {
-                    Some(source)
-                }
-                _ => None,
-            }
-        } else {
-            None
-        };
-        let Some(source) = source else {
+        let source = matched_edges[0].1;
+        // Separate loop edges can retain another live borrower of this owner.
+        // Selecting only its iterator edge would silently ignore that overlap.
+        let overlaps = loop_edges.iter().any(|edge| {
+            edge != &matched_edges[0].0
+                && edge
+                    .inputs(self.pcg_ctxt())
+                    .iter()
+                    .any(|input| match **input {
+                        PcgNode::Place(place) => place.place().is_prefix_of(source),
+                        PcgNode::LifetimeProjection(input) => matches!(
+                        input.base(),
+                        PlaceOrConst::Place(MaybeRemotePlace::Local(place))
+                            if place.place().is_prefix_of(source)),
+                    })
+        });
+        if overlaps {
             return Err(self.unsupported_rvalue(
                 "body_restore_prefix requires a unique matching iterator restoration edge"
                     .to_string(),
                 span,
             ));
-        };
+        }
         let slice_ty = source.ty(self.pcg_ctxt()).ty;
         let iterator_ty = self.body.local_decls[iterator].ty;
         let TyKind::Adt(_, iterator_args) = iterator_ty.kind() else {
@@ -2515,7 +2574,13 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         let TyKind::Slice(element_ty) = slice_ty.kind() else {
             unreachable!()
         };
-        if *element_ty != iterator_args.type_at(1) {
+        // A reborrow gives references inside the iterator fresh MIR regions.
+        // The PCG edges retain those lifetime obligations separately; this
+        // check compares only the element representation used by the summary.
+        let tcx = self.vcx.tcx();
+        if tcx.erase_and_anonymize_regions(*element_ty)
+            != tcx.erase_and_anonymize_regions(iterator_args.type_at(1))
+        {
             return Err(self.unsupported_rvalue(
                 "body_restore_prefix requires matching source and iterator element types"
                     .to_string(),
@@ -2614,6 +2679,20 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             self.stmt(self.vcx.mk_local_decl_stmt(decl, None));
             saved.insert(local, self.vcx.mk_local_ex(decl));
         }
+        let saved_tail = if edge
+            .inputs(self.pcg_ctxt())
+            .iter()
+            .any(|input| matches!(**input, PcgNode::LifetimeProjection(_)))
+        {
+            let name = vir::vir_format!(self.vcx, "_loop_restore{}_tail", original_head.index());
+            let decl = self
+                .vcx
+                .mk_local_decl(name, self.vcx.mk_ty_seq(vir::TYPE_PSNAP));
+            self.stmt(self.vcx.mk_local_decl_stmt(decl, None));
+            Some(self.vcx.mk_local_ex(decl))
+        } else {
+            None
+        };
         let frame = LoopRestorationFrame {
             loop_id,
             span,
@@ -2622,6 +2701,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             iterator,
             restoration,
             saved,
+            saved_tail,
         };
         self.loop_restoration_frames
             .insert(original_head, frame.clone());
@@ -2636,7 +2716,62 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             let current = self.encode_place_with_snap((*local).into())?.1;
             self.stmt(self.vcx.mk_pure_assign_stmt(*saved, current));
         }
+        if let Some(saved) = frame.saved_tail {
+            let current = self.restoration_tail_contents(
+                frame.source,
+                frame.iterator,
+                frame.saved[&frame.iterator],
+            )?;
+            self.stmt(self.vcx.mk_pure_assign_stmt(saved, current));
+        }
         Ok(())
+    }
+
+    fn restoration_tail_contents(
+        &mut self,
+        source: Place<'vir>,
+        iterator: mir::Local,
+        snapshot: vir::ExprSnap<'vir>,
+    ) -> EncodeResult<'vir, vir::ExprSeq<'vir>, E> {
+        let slice_ty = source.ty(self.pcg_ctxt()).ty;
+        let iterator_ty = self.body.local_decls[iterator].ty;
+        let TyKind::Adt(_, iterator_args) = iterator_ty.kind() else {
+            unreachable!()
+        };
+        let tail = self
+            .ty_use_pure(iterator_ty)
+            .expect_structlike()
+            .fields
+            .last()
+            .unwrap()
+            .read(snapshot.downcast_ty());
+        let tail_ty = ty::Ty::new_mut_ref(self.vcx.tcx(), iterator_args.region_at(0), slice_ty);
+        let tail_task = RustTyDecomposition::from_ty(tail_ty, self.def_id);
+        let tail_use = self.ty_use_pure(tail_ty);
+        let tail_ref = tail_use.expect_mutref();
+        let address = tail_ref.deref_access(tail.downcast_ty());
+        let metadata = tail_ref.metadata_access(tail.downcast_ty());
+        let length = self
+            .ty_use_pure(self.vcx.tcx().types.usize)
+            .expect_primitive()
+            .snap_to_prim(metadata.downcast_ty())
+            .downcast_ty::<vir::Int>();
+        let inner = tail_task.ty.expect_mutref();
+        let normalized = inner
+            .referent
+            .decompose_compare_normalize(tail_task.ty.params, tail_task.args);
+        let caster = self
+            .deps
+            .require_dep::<GArgsCastEnc<encoders::Pure>>(normalized)?;
+        let inner_task = inner
+            .referent
+            .decompose_context(tail_task.ty.params, tail_task.args);
+        let inner_impure = self.deps.require_dep::<TyUseImpureEnc>(inner_task)?;
+        let contents = caster.cast_to_caller_ctx(inner_impure.ref_to_snap(address));
+        Ok(self
+            .ty_use_pure(slice_ty)
+            .expect_array()
+            .to_seq(contents.downcast_ty(), length))
     }
 
     fn restoration_frame_for_edge(
@@ -2694,28 +2829,27 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         if !mentions_iterator {
             return Ok(None);
         }
-        let inputs = edge.inputs(self.pcg_ctxt());
-        if inputs.len() != 1 || outputs.len() != 1 || selected_outputs.len() != 1 {
-            return Err(self.unsupported_rvalue(
-                "body_restore_prefix requires a stable matching iterator restoration edge"
-                    .to_string(),
-                span,
-            ));
-        }
-        let PcgNode::Place(MaybeLabelledPlace::Current(source)) = *inputs[0] else {
-            return Err(self.unsupported_rvalue(
-                "body_restore_prefix requires a stable matching iterator restoration edge"
-                    .to_string(),
-                span,
-            ));
+        let input_regions = |edge: &PcgCoupledEdgeKind<'vir>| {
+            edge.inputs(self.pcg_ctxt())
+                .iter()
+                .filter_map(|input| match **input {
+                    PcgNode::LifetimeProjection(input) => Some(input.region_idx()),
+                    _ => None,
+                })
+                .collect::<FxHashSet<_>>()
         };
-        let PcgNode::LifetimeProjection(output) = *outputs[0] else {
-            unreachable!()
-        };
-        let PcgNode::LifetimeProjection(selected) = *selected_outputs[0] else {
-            unreachable!()
-        };
-        if source != frame.source || output.region_idx() != selected.region_idx() {
+        let output_regions = outputs
+            .iter()
+            .map(|output| output.expect_lifetime_projection().region_idx())
+            .collect::<FxHashSet<_>>();
+        let selected_regions = selected_outputs
+            .iter()
+            .map(|output| output.expect_lifetime_projection().region_idx())
+            .collect::<FxHashSet<_>>();
+        if self.restoration_source_for_edge(edge, frame.iterator) != Some(frame.source)
+            || input_regions(edge) != input_regions(&frame.edge)
+            || output_regions != selected_regions
+        {
             return Err(self.unsupported_rvalue(
                 "body_restore_prefix requires a stable matching iterator restoration edge"
                     .to_string(),
@@ -2762,6 +2896,22 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             }
             locals
         };
+        let tail_identity = if let Some(saved_tail) = frame.saved_tail {
+            let contents = self.restoration_tail_contents(
+                frame.source,
+                frame.iterator,
+                locals[&frame.iterator],
+            )?;
+            let frozen = if use_saved {
+                saved_tail
+            } else {
+                self.mk_wand_outer(contents.upcast_ty::<vir::Snap>(), old_outer)
+                    .downcast_ty()
+            };
+            Some(self.vcx.mk_eq_expr(contents, frozen))
+        } else {
+            None
+        };
         let relation = self.encode_restoration_relation(
             &frame.restoration,
             frame.source,
@@ -2774,16 +2924,25 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             // `None`. Its expiry pledge restores the pre-call resource, so
             // apply the loop-head wand to the saved tail rather than the
             // iterator snapshot at the later drop or backedge.
-            let output = edge.outputs()[0].expect_lifetime_projection();
-            let resources = self.encode_lifetime_projection_with_snapshot(
-                output,
-                old_outer,
-                Some(frame.saved[&frame.iterator]),
-            )?;
+            let mut resources = Vec::new();
+            let mut outputs = edge.outputs();
+            outputs.sort_by_key(|output| output.expect_lifetime_projection().region_idx());
+            for output in outputs {
+                let output = output.expect_lifetime_projection();
+                // The saved iterator fixes the loop-head tail. Its resources
+                // are supplied by the wand's current antecedent heap, not by
+                // a later PCG label attached while advancing the iterator.
+                resources.extend(self.encode_lifetime_projection_with_snapshot(
+                    LifetimeProjection::from_index(output.base(), output.region_idx()),
+                    old_outer,
+                    Some(frame.saved[&frame.iterator]),
+                )?);
+            }
             self.vcx.mk_conj(&resources)
         } else {
             wand.lhs
         };
+        let lhs = tail_identity.map_or(lhs, |identity| self.vcx.mk_conj(&[lhs, identity]));
         Ok(self
             .vcx
             .mk_wand(lhs, self.vcx.mk_conj(&[wand.rhs, relation])))

@@ -1,4 +1,17 @@
-use pcg::{borrow_pcg::state::BorrowsState, coupling::PcgCoupledEdgeKind, pcg::PcgNode};
+use pcg::{
+    borrow_pcg::{
+        region_projection::{
+            LifetimeProjection, LifetimeProjectionLabel, PcgLifetimeProjectionBaseLike,
+            PlaceOrConst,
+        },
+        state::BorrowsState,
+    },
+    coupling::PcgCoupledEdgeKind,
+    pcg::PcgNode,
+    utils::{
+        HasPlace, SnapshotLocation, maybe_old::MaybeLabelledPlace, maybe_remote::MaybeRemotePlace,
+    },
+};
 use prusti_interface::PrustiError;
 use task_encoder::TaskEncoder;
 
@@ -103,12 +116,55 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         edge: &PcgCoupledEdgeKind<'vir>,
         old_outer: &mut WandOldOuter<'vir>,
     ) -> EncodeResult<'vir, (vir::Wand<'vir>, Resources<'vir>), E> {
-        let inputs = edge.inputs(self.pcg_ctxt());
-        let outputs = edge.outputs();
+        let mut inputs = edge.inputs(self.pcg_ctxt());
+        // Storage precedes observations of the resources owned by its value.
+        // The consequent can then read the storage it has just restored.
+        inputs.sort_by_key(|input| !matches!(**input, PcgNode::Place(_)));
+        let storage = inputs
+            .iter()
+            .filter_map(|input| match **input {
+                PcgNode::Place(MaybeLabelledPlace::Current(place)) => Some(place),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        let mut outputs = edge.outputs();
+        // The iterator's outer lifetime provides its tail storage. Keep that
+        // permission before the inner lifetime's heap-dependent resource keys.
+        outputs.sort_by_key(|output| output.expect_lifetime_projection().region_idx());
         let mut rhs = Vec::new();
         for i in inputs {
             let mut resources = Vec::new();
-            self.encode_pcg_node(&*i, &mut resources, old_outer)?;
+            let restored = match *i {
+                PcgNode::LifetimeProjection(projection)
+                    if matches!(projection.label(), Some(LifetimeProjectionLabel::Location(SnapshotLocation::Loop(head)))
+                        if Some(head) == edge.loop_head()) =>
+                {
+                    match projection.base().to_pcg_lifetime_projection_base() {
+                        PlaceOrConst::Place(MaybeRemotePlace::Local(place)) => storage
+                            .iter()
+                            .find(|source| **source == place.place())
+                            .map(|source| (*source, projection)),
+                        _ => None,
+                    }
+                }
+                _ => None,
+            };
+            if let Some((source, projection)) = restored {
+                let (place, _, _, ty) = self.encode_place_with_snap(source)?;
+                let address = self.configure_old(
+                    MaybeLabelledPlace::Current(source).into(),
+                    place.expr.expect_predicate(),
+                    old_outer,
+                );
+                let snapshot = ty.ref_to_snap(address);
+                resources.extend(self.encode_lifetime_projection_with_snapshot(
+                    LifetimeProjection::from_index(projection.base(), projection.region_idx()),
+                    old_outer,
+                    Some(snapshot),
+                )?);
+            } else {
+                self.encode_pcg_node(&*i, &mut resources, old_outer)?;
+            }
             rhs.push((*i, resources));
         }
         let wand_rhs = rhs

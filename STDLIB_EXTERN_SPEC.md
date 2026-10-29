@@ -2096,6 +2096,14 @@ resource-state loops, reference-bearing Vec views, and the outstanding array
 negative rerun remain open. An array consistency control exceeded 600 seconds
 in the resource-bound batch; its timeout is not counted as rejection.
 
+The array regression batch is now covered: all four positive proof cases and
+five remaining negative controls passed in build 137's aggregate run. The
+timed-out consistency control produces its exact intended assertion rejection
+in a fresh build-141 run (468.56s), using a 900-second program limit and the
+original resource bounds (`target/stdlib-im4-array147-iterator-spec-logs`).
+Together these runs cover all ten selected array proof cases, plus Rust/runtime
+checking; the original batch itself still contains the recorded timeout.
+
 The first step is a prerequisite for the others: adding an abstract predicate
 only to call-site contracts would not establish that a generic implementation
 actually preserves it.
@@ -2186,6 +2194,93 @@ The next implementation steps are:
 4. Verify symbolic full and partial traversals, untouched suffixes, empty
    inputs, incorrect prefix/suffix states, and a false-after-traversal control
    before combining wrappers, separate crates, and Vec views.
+
+The first combined encoding experiment identifies a prerequisite to step 1.
+The native-reference loop has three overlapping edges: source storage to the
+iterator's outer lifetime, source element resources to that same lifetime,
+and source element resources to the iterator's element lifetime. Selecting
+only the storage edge gets past the original guard, and comparing element
+representations after erasing MIR regions handles reborrowed references.
+However, retaining the other two edges as independent wands is insufficient:
+their first entry package reads a source snapshot at a loop-head label that
+has not yet been reached. The full identity-only probe reports
+`assert.failed:labelled.state.not.reached` (build 154,
+`target/stdlib-im5-loop151-iterator-spec-logs`); it is not a successful proof.
+
+PCG now groups overlapping loop edges only when their inputs are one owner's
+storage and its lifetime resources, and all outputs belong to one blocking
+value. It preserves path conditions and every input/output. An initial broader
+connected-component grouping changed unrelated loop capabilities (including a
+panic in `209_rfmig_demos`); that experiment was narrowed before acceptance.
+The final PCG change (`c18a518`, pushed to `LrWm3/pcg`) passes the numbered
+corpus, eight function-shape tests, four call-projection tests, and the new
+joint graph/entry-action regression (`/tmp/prusti-im5-pcg162.log`).
+
+This replaces the planned independent loop stages with one joint obligation
+for these co-owned resources; native call stages remain explicit inside its
+checked package. The Prusti integration is still under investigation. Where
+storage and its element resources are restored together, the consequent
+observes that restored storage, rather than an unavailable pre-loop label.
+The package defers its initial referent footprint until the storage can be
+read; all action footprints and the final resource consequent remain checked.
+The reference and generic identity probes initially failed to establish their
+entry invariant with build 161: the package could capture real referents when
+its hypothetical tail allowed different slot identities. The antecedent now
+freezes the tail's shallow identities. This permits referent updates but does
+not yet support replacing unprocessed references. Dependent outer captures
+must be scoped in creation order, and applying the saved loop wand must use
+its antecedent heap, rather than a later PCG projection label. Finally, all
+restored inputs use one unblock graph: separate scripts would consume the
+same joint wand twice. All resource consequents remain checked.
+
+With those changes, build 166 passes the generic identity loop (155.14 seconds)
+and the concrete reference-update identity loop (206.96 seconds). The latter
+also rejects `false` and an incorrect traversal count after restoration
+(48.89 and 73.45 seconds). Both include empty/two-element runtime checks where
+applicable; the concrete probe is promoted as `mut_native_resource_loop_identity_*`.
+Logs are `target/stdlib-im5-generic166-iterator-spec-logs` (three checks) and
+`target/stdlib-im5-loop166-iterator-spec-logs` (five checks). These establish
+ownership, identities, and traversal, not the final referent-value theorem.
+
+The build-169 regression run passes native resource framing (228.47 seconds),
+its wrong-frame control (212.49), scalar whole-prefix restoration (91.38),
+false after scalar traversal (43.77), and the after-next/no-edge/wrong-type
+rejections. Its overlapping-owner case is rejected with the later stable-edge
+diagnostic instead of the expected unique-edge diagnostic; this remains an
+diagnostic gate in that run. Including lifetime projections on a prefix of
+the source place restores the early ambiguity check. Build 172 passes the
+exact overlapping-owner rejection (11.08 seconds) and reruns the generic loop
+successfully (161.70 seconds), with Rust/runtime checks in
+`target/stdlib-im5-guard172-iterator-spec-logs`.
+
+The four-argument summary prototype takes a separate `Seq<ResourceState>`.
+It checks matching prefix lengths and restores each source element's state
+from either that completed prefix or the tail's state in the wand antecedent.
+Build 171 compiles, but its first full value probe exposes an unordered wand
+antecedent: it reads the tail snapshot before listing that storage's permission.
+Build 173 sorts the output projections so the iterator's outer storage comes
+first. Its promoted identity positive failed once on `next` permission, while
+both controls passed; a fresh complete rerun passed (77.05 seconds, build 173,
+`target/stdlib-im5-identity174-iterator-spec-logs`). Comparing generated code
+also exposed varying loop-permission and saved-snapshot order. Build 175 makes
+that order stable and passes all ten checks in one fresh batch:
+`target/stdlib-im5-identity175-iterator-spec-logs`. The reference identity,
+scalar whole-prefix value, and generic identity positives take 78.53, 32.63,
+and 39.68 seconds; scalar false, reference false, and reference wrong-count
+controls take 35.07, 60.26, and 123.81 seconds. This is the accepted joint
+ownership/identity checkpoint; the earlier failed run remains recorded.
+
+The separate state-prefix positive still fails its restoration annotation
+(628.46 seconds, `target/stdlib-im5-state173-iterator-spec-logs`). A deliberately
+incorrect recorded-state control is rejected there (422.19 seconds), which
+alone does not validate the extension. An isolated diagnostic inserts a failing
+assertion after the checked entry package and verifies only `m_visit`; it times
+out at 180 seconds before that assertion (`/tmp/prusti-im5-entry176.log`). It is
+not acceptance evidence. The next step splits the quantified prefix/tail state
+relation to avoid conditional heap observations inside one quantifier. No saved
+prefix resource-state proof is accepted yet. All these focused verifier runs
+use fresh targets, disabled caching, overflow/panic checks, a 600-second whole
+program limit and 30-second solver time bounds; helpers are verified too.
 
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification

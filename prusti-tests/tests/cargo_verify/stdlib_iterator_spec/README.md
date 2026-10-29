@@ -42,8 +42,12 @@ straight-line iteration now also restores mutable-reference elements and
 reference-bearing holders, including initial and untouched referent values,
 empty/exhausted cases, and mutable-slice `IntoIterator`. The
 `mut_native_{holder,mut_ref}_restoration_*` and `mut_native_resource_*` cases
-exercise these resource contracts. Whole-prefix loops over reference-bearing
-elements and their Vec views remain incomplete. Solver configuration and
+exercise these resource contracts. The `mut_native_resource_loop_identity_*`
+cases additionally verify joint source/referent ownership restoration and
+unchanged slot identities after a symbolic reference-update loop, with false
+and incorrect-count controls. The three-argument prefix summary records
+shallow identities; whole-prefix referent-value proofs and their Vec views
+remain incomplete. Solver configuration and
 the fresh-run `IntoIterator` result are recorded in `STDLIB_EXTERN_SPEC.md`;
 the complete native batch has not yet passed consistently.
 

@@ -691,7 +691,13 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             }
         }
 
-        for (place, capability) in loop_invariant_place_capabilities.iter() {
+        // PCG maps are unordered. Keep permission and snapshot declarations
+        // stable across runs.
+        let place_order =
+            |place: Place<'vir>| (place.local.index(), format!("{:?}", place.projection));
+        let mut invariant_places = loop_invariant_place_capabilities.iter().collect::<Vec<_>>();
+        invariant_places.sort_by_cached_key(|(place, _)| place_order(**place));
+        for &(place, capability) in &invariant_places {
             if capability.is_write() {
                 continue; // No permissions are encoded for places with write capabilities currently
             }
@@ -805,7 +811,7 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         // Keep the snapshot stored in an unchanged ghost local. Its predicate
         // alone would otherwise allow the verifier to forget the value at the
         // loop boundary. This does not add resources behind that value.
-        for (place, capability) in &loop_invariant_place_capabilities {
+        for &(place, capability) in &invariant_places {
             if capability.is_write() || !place.projection.is_empty() {
                 continue;
             }
@@ -832,6 +838,8 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             inv.push(self.vcx.mk_eq_expr(snap, saved));
             snapshots.push((saved, snap));
         }
+        let mut reference_frames = reference_frames.into_iter().collect::<Vec<_>>();
+        reference_frames.sort_by_cached_key(|place| place_order(*place));
         for place in reference_frames {
             let (encoded, snap, _, _) = self.encode_place_with_snap(place)?;
             let task = RustTyDecomposition::from_ty(place.ty(ctxt).ty, self.def_id);
@@ -893,7 +901,9 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             let WandOldOuter::LetBind(let_bind) = let_bind else {
                 unreachable!()
             };
-            for lb in let_bind {
+            // Later captures may use earlier ones, so the first binding must
+            // be the outermost let expression.
+            for lb in let_bind.into_iter().rev() {
                 wand = lb.map_or_else(
                     |(d, e)| self.vcx.mk_let_expr(d, e, wand),
                     |(d, e)| self.vcx.mk_let_expr(d, e, wand),
@@ -1157,7 +1167,7 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         Ok((place_snap, ty, ty_out))
     }
 
-    fn configure_old<T: SnapOrRef>(
+    pub(super) fn configure_old<T: SnapOrRef>(
         &mut self,
         place: MaybeRemotePlace,
         expr: vir::Expr<'vir, T>,

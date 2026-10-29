@@ -403,12 +403,12 @@ impl<'vir> TyUseImpureData<'vir> {
     }
 
     /// Constructs the Viper predicate application.
-    pub fn ref_to_pred_app(
+    pub fn ref_to_pred_app<Curr, Next>(
         &self,
-        self_ref: vir::ExprRef<'vir>,
-        perm: Option<vir::ExprPerm<'vir>>,
-    ) -> vir::PredicateApp<'vir> {
-        (self.impure.ref_to_pred)(self_ref, self.args.get_ty(), self.args.get_const())(perm)
+        self_ref: vir::ExprGenRef<'vir, Curr, Next>,
+        perm: Option<vir::ExprGenPerm<'vir, Curr, Next>>,
+    ) -> vir::PredicateAppGen<'vir, Curr, Next> {
+        self.impure.ref_to_pred.call()(self_ref, self.args.get_ty(), self.args.get_const())(perm)
     }
 
     /// Calls the predicate (heap) dependent snapshot construction function.

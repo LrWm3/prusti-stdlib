@@ -145,6 +145,15 @@ pub fn mut_slice_contents<T>(slice: &&mut [T]) -> Seq<T> {
     Seq::from_slice(&**slice)
 }
 
+/// Observe one current referent value through an owned mutable slice.
+/// This specification-only operation checks the index and permission to both
+/// the slice and its selected referent. The returned snapshot grants no heap
+/// access of its own, including when `T` contains another reference.
+#[pure]
+pub fn mut_slice_referent_value<T>(_slice: &&mut [&mut T], _index: Int) -> Ghost<T> {
+    panic!("mut_slice_referent_value is a specification-only observation")
+}
+
 /// Observe the logical tail reference of a mutable slice iterator in a
 /// specification. This snapshot grants no permission to read its elements;
 /// `mut_slice_contents` checks that permission separately. The reference is

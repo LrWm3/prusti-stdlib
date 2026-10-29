@@ -1360,8 +1360,9 @@ Logs are in `target/stdlib-im3-loop-full-iterator-logs` and
 
 This still does not close IM3: native mutable-reference yields and the
 untrusted explicit-tail control require generic resource transport. The indexed
-loop establishes permission restoration and shallow identities; whole-prefix
-referent value observations and proofs remain part of IM5.
+loop establishes permission restoration and shallow identities. The anchored
+whole-prefix value proof described under IM5 now passes for direct indexing;
+its generic/native-iterator counterparts remain open.
 
 The executable [element-resource model](prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/element_resources.vpr)
 now validates indexed resource wrappers. A direct quantifier over referent
@@ -1440,6 +1441,17 @@ implemented interface):
    owned/shared/mutable-reference elements, two-lifetime wrappers, and associated
    types. Preserve negative tests for missing resources and incomplete maps.
 
+The PCG body prerequisite is implemented on the isolated
+`stdlib/opaque-resource-groups` branch at `f610569` (pushed to
+`git@github.com:LrWm3/pcg.git`). Opaque groups survive body projections and
+moves, use compiler-derived type outlives bounds, and exclude function-item
+and raw-pointer type arguments from owned resources. A short container borrow
+does not become a lifetime bound on its generic element. Relabeling collapses
+identity borrow flows. Validation passed all 250 numbered corpus files, four
+projection tests, eight shape tests, and six body tests. The root submodule
+remains at `dbb94c8` until its encoder supports the same group interface;
+these PCG results alone do not close IM4.
+
 The first step is a prerequisite for the others: adding an abstract predicate
 only to call-site contracts would not establish that a generic implementation
 actually preserves it.
@@ -1480,6 +1492,29 @@ references and referents. Cover slices, Vec views, reference-bearing wrappers,
 and separate library/client crates, with matching wrong-value and wrong-frame
 cases. Include empty and zero-sized cases and a negative consistency check
 after traversal.
+
+The preliminary direct-indexing value gate now passes. The specification-only
+`mut_slice_referent_value(&values, index)` observes a shallow referent snapshot
+through the current owned slice, checking bounds, slice permission, and indexed
+referent permission. It supports `old` without granting access through the
+returned snapshot. `mut_element_prefix_pass` verifies a symbolic prefix update
+to 7, unchanged slot identities, and unchanged suffix referent values, with
+empty, zero/full, and partial-prefix runtime cases. Its loop explicitly frames
+the scalar limit as `limit == old(limit)`.
+
+The full build and initial ten-check observation run passed, as did thirteen
+focused regressions for nested/replaced references, loop restoration, native
+owned-element iteration, and invalid heap observations. After forbidding the
+new observation in executable code, the rerun passed all previous cases; the
+new rejection passed a focused two-check rerun after its annotation was
+corrected to include the method-body diagnostic prefix. Negative cases reject
+wrong prefix/suffix values, false after traversal, both invalid index bounds,
+missing owner permission, and executable observation. Logs are in
+`target/stdlib-im5-observer-iterator-logs`,
+`target/stdlib-im5-observer-regressions-iterator-logs`,
+`target/stdlib-im5-observer-final-iterator-logs`, and
+`target/stdlib-im5-observer-executable-iterator-logs`. The remaining IM5 gate
+still requires generic/native loops, Vec views, and reference-bearing wrappers.
 
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification

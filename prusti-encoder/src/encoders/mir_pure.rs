@@ -1049,20 +1049,18 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                                 // beyond the snapshot reads in its operands.
                                 // Temporal operators must select that heap as
                                 // well as the reference snapshot.
-                                if builtin == PrustiBuiltin::MutSliceContents
+                                if builtin.reads_heap()
                                     && (self.rel0_mode
                                         || self.rel1_mode
                                         || self.after_call_mode
                                         || (self.old_mode && self.before_expiry_mode))
                                 {
                                     return Err(self.unsupported_rvalue(
-                                        "mutable slice contents in a relational, after_call, or nested temporal expression".to_string(),
+                                        "mutable slice heap observation in a relational, after_call, or nested temporal expression".to_string(),
                                         self.current_span(),
                                     ));
                                 }
-                                let expr = if builtin == PrustiBuiltin::MutSliceContents
-                                    && self.old_mode
-                                {
+                                let expr = if builtin.reads_heap() && self.old_mode {
                                     self.vcx.mk_lazy_expr(
                                         "old_mut_slice_contents",
                                         expr.ty(),
@@ -1071,9 +1069,7 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                                             vcx.mk_old(expr.reify(vcx, lctx), lctx.2).kind
                                         }),
                                     )
-                                } else if builtin == PrustiBuiltin::MutSliceContents
-                                    && self.before_expiry_mode
-                                {
+                                } else if builtin.reads_heap() && self.before_expiry_mode {
                                     self.vcx.mk_old_lhs_expr(expr)
                                 } else {
                                     expr

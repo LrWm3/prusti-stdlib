@@ -145,6 +145,7 @@ pub enum PrustiBuiltin {
     MutRefSharedSameAddress,
     MutSliceLen,
     MutSliceContents,
+    MutSliceReferentValue,
     Seq(SeqOp),
     /// An operation on `Set` (`multiset: false`) or `Multiset` (`true`).
     AnySet {
@@ -158,6 +159,10 @@ pub enum PrustiBuiltin {
 }
 
 impl PrustiBuiltin {
+    pub fn reads_heap(self) -> bool {
+        matches!(self, Self::MutSliceContents | Self::MutSliceReferentValue)
+    }
+
     /// Classifies the call to `def_id`. Returns `None` iff the called function
     /// does not belong to the `prusti_contracts` crate (a trait method call is
     /// attributed to the crate of the `impl` it relies on, e.g. `PartialOrd::le`
@@ -250,6 +255,7 @@ impl PrustiBuiltin {
                     "mut_ref_shared_same_address" => Self::MutRefSharedSameAddress,
                     "mut_slice_len" => Self::MutSliceLen,
                     "mut_slice_contents" => Self::MutSliceContents,
+                    "mut_slice_referent_value" => Self::MutSliceReferentValue,
                     "old_start" => Self::Spec(SpecBuiltin::ModeStart(Mode::Old)),
                     "old_end" => Self::Spec(SpecBuiltin::ModeEnd(Mode::Old)),
                     "rel_start" => Self::Spec(SpecBuiltin::ModeStart(Mode::Rel(rel_index()))),
@@ -318,7 +324,7 @@ impl PrustiBuiltin {
     /// These are forbidden in impure code, and should return an error.
     pub fn is_spec_only(&self) -> bool {
         match self {
-            Self::Spec(_) | Self::SnapEq | Self::SnapNe => true,
+            Self::Spec(_) | Self::SnapEq | Self::SnapNe | Self::MutSliceReferentValue => true,
             // `Call`/`Erased` are legitimate only inside a `ghost!` block's
             // dead arm, which is exempt from the spec-only rejection: a stray
             // executable `ghost_call` (i.e. not from a `ghost!` block) would
@@ -515,10 +521,7 @@ impl PrustiBuiltinEnc {
             is_pure,
             span,
         } = *task_key;
-        assert_eq!(
-            span.is_some(),
-            !is_pure || builtin == PrustiBuiltin::MutSliceContents
-        );
+        assert_eq!(span.is_some(), !is_pure || builtin.reads_heap());
         let tcx = vcx.tcx();
         let sig = tcx
             .fn_sig(def_id)
@@ -585,7 +588,7 @@ impl PrustiBuiltinEnc {
                     .metadata_access(slice)
                     .upcast_ty()
             }
-            PrustiBuiltin::MutSliceContents => {
+            PrustiBuiltin::MutSliceContents | PrustiBuiltin::MutSliceReferentValue => {
                 if let Some(span) = ctxt.span {
                     ctxt.handle_partial_op_error(
                         "application.precondition:insufficient.permission",
@@ -616,10 +619,63 @@ impl PrustiBuiltinEnc {
                 let impure = ctxt.deps.require_dep::<TyUseImpureEnc>(referent)?;
                 let contents =
                     ref_domain.cast_to_caller_ctx(impure.ref_to_snap(address).downcast_ty());
-                ctxt.encode_ty(slice_ty)?
-                    .expect_array()
-                    .to_seq(contents.downcast_ty(), len)
-                    .upcast_ty()
+                let array = ctxt.encode_ty(slice_ty)?.expect_array();
+                if builtin == PrustiBuiltin::MutSliceContents {
+                    array.to_seq(contents.downcast_ty(), len).upcast_ty()
+                } else {
+                    if let Some(span) = ctxt.span {
+                        for kind in [
+                            "call.failed:seq.index.length",
+                            "call.failed:seq.index.negative",
+                        ] {
+                            ctxt.handle_partial_op_error(
+                                kind,
+                                "the referent observation index may be out of bounds",
+                                span,
+                            );
+                        }
+                        ctxt.handle_partial_op_error(
+                            "unfolding.failed:insufficient.permission",
+                            "insufficient permission to observe mutable slice referent",
+                            span,
+                        );
+                    }
+                    let index = ctxt.index_to_int(ctxt.operands[1], ctxt.sig.inputs()[1])?;
+                    let element_snap = array.checked_index(contents.downcast_ty(), len, index);
+                    let ty::TyKind::Slice(element_ty) = slice_ty.kind() else {
+                        unreachable!()
+                    };
+                    let element_ty = RustTyDecomposition::from_ty(*element_ty, ctxt.args.context());
+                    let element_pure = ctxt.deps.require_dep::<TyUsePureEnc>(element_ty)?;
+                    let TySpecifics::MutRef((data, reference)) =
+                        element_ty.ty.zip(element_pure).specifics
+                    else {
+                        unreachable!()
+                    };
+                    let inner = data
+                        .referent
+                        .decompose_context(element_ty.ty.params, element_ty.args);
+                    let inner = ctxt.deps.require_dep::<TyUseImpureEnc>(inner)?;
+                    let dummy =
+                        vcx.mk_local_ex(vcx.mk_local_decl("_observed_referent", vir::TYPE_REF));
+                    let indexed = crate::encoders::ty::indexed::IndexedResources::new(
+                        ctxt.deps,
+                        inner.ref_to_pred(vcx, dummy, None),
+                    )?;
+                    let address = reference.deref_access(element_snap.downcast_ty());
+                    let snapshot = indexed.read_snapshot(
+                        inner.ref_to_pred_app(address, None),
+                        inner.ref_to_snap(address),
+                        index,
+                        false,
+                        &[],
+                    );
+                    let value = reference.cast_to_caller_ctx(snapshot.downcast_ty());
+                    ctxt.e_output()?
+                        .expect_structlike()
+                        .field_snaps_to_snap(vec![value])
+                        .upcast_ty()
+                }
             }
             PrustiBuiltin::Seq(op) => ctxt.encode_seq(op)?,
             PrustiBuiltin::AnySet { multiset, op } => ctxt.encode_any_set(multiset, op)?,

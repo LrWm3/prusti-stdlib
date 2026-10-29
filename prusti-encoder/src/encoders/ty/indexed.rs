@@ -269,14 +269,14 @@ impl<'vir> IndexedResources<'vir> {
         Ok(Self { names })
     }
 
-    fn application(
+    fn application<Curr, Next>(
         &self,
-        index: vir::ExprInt<'vir>,
+        index: vir::ExprGenInt<'vir, Curr, Next>,
         path: &'vir [usize],
-        app: vir::PredicateApp<'vir>,
-    ) -> vir::PredicateApp<'vir> {
+        app: vir::PredicateAppGen<'vir, Curr, Next>,
+    ) -> vir::PredicateAppGen<'vir, Curr, Next> {
         vir::with_vcx(|vcx| {
-            vcx.alloc(vir::PredicateAppData {
+            vcx.alloc(vir::PredicateAppGenData {
                 target: self.names[app.target],
                 args: vcx.alloc_slice(
                     &[
@@ -321,14 +321,14 @@ impl<'vir> IndexedResources<'vir> {
     /// Read through a resource in either its exposed or indexed form. The
     /// unfolding expression preserves the wrapper while establishing the
     /// snapshot function's permission precondition.
-    pub fn read_snapshot(
+    pub fn read_snapshot<Curr, Next>(
         &self,
-        app: vir::PredicateApp<'vir>,
-        snapshot: vir::ExprSnap<'vir>,
-        index: vir::ExprInt<'vir>,
+        app: vir::PredicateAppGen<'vir, Curr, Next>,
+        snapshot: vir::ExprGenSnap<'vir, Curr, Next>,
+        index: vir::ExprGenInt<'vir, Curr, Next>,
         inspect_permissions: bool,
         path: &'vir [usize],
-    ) -> vir::ExprSnap<'vir> {
+    ) -> vir::ExprGenSnap<'vir, Curr, Next> {
         if !self.names.contains_key(app.target) {
             return snapshot;
         }
@@ -340,8 +340,15 @@ impl<'vir> IndexedResources<'vir> {
                 return wrapped;
             }
             let held = vcx.mk_predicate_perm_expr(app);
-            let none = vcx.mk_no_perm();
-            vcx.mk_ternary_expr(vir::expr! { (none) < (held) }, snapshot, wrapped)
+            let none = vcx
+                .mk_const_expr(vir::ConstData::NoPerm)
+                .downcast_ty::<vir::Perm>();
+            vcx.mk_ternary_expr(
+                vcx.mk_bin_op_expr(vir::BinOpKind::CmpLt, none, held)
+                    .downcast_ty(),
+                snapshot,
+                wrapped,
+            )
         })
     }
 

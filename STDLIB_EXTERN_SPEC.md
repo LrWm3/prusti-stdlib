@@ -2059,6 +2059,26 @@ The complete cross-crate resource suite passes all 23 checks, including its
 library, associated types, constructors, nested references, and wrong-state
 controls (`target/stdlib-im4-resources138-resources-spec-logs`).
 
+Native resource pledges exposed an overly conservative empty-group check for
+owned structs and zero-sized tuples. The check now follows finite struct and
+enum fields recursively, while keeping arrays, unknown types, and raw-pointer
+representations conservative. It does not classify Vec/RawBuf ownership as
+empty merely because pointer and PhantomData fields carry no explicit referent
+permission. Caller expiry obligations are still retained: the new owned-struct
+`assert_on_expiry` control receives the intended unsupported diagnostic rather
+than silently dropping its false obligation.
+
+The previously rejected owned-token update/restoration positive and its
+wrong-value control pass (188.33s and 207.33s), as do zero-sized iteration,
+wrong physical-address distinctness, and false-after-traversal controls
+(`target/stdlib-im4-owned141-iterator-spec-logs`). The full iterator library also
+passes with its original resource-bound configuration (545.21s, build 141,
+`target/stdlib-im4-library144-iterator-spec-logs`). A 30-second time-bound run
+failed a shared-iterator postcondition that passes in isolation; the original
+settings remain required for this library gate. The full symbolic-array
+positive likewise passes under resource bounds (341.07s, build 137) but fails
+under time bounds; this proof-configuration limitation remains documented.
+
 The first step is a prerequisite for the others: adding an abstract predicate
 only to call-site contracts would not establish that a generic implementation
 actually preserves it.

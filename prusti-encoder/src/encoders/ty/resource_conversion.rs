@@ -23,6 +23,7 @@ pub(crate) struct ResourceConversion<'vir> {
     resource: ResourceUse<'vir>,
     unit: vir::ExprPSnap<'vir>,
     kind: ConversionKind<'vir>,
+    trivial_resources: bool,
     indexed: IndexedResources<'vir>,
 }
 
@@ -55,10 +56,11 @@ enum ConversionKind<'vir> {
 
 impl<'vir> ResourceConversion<'vir> {
     /// A deliberately conservative test for an empty instantiated group.
-    /// Unknown types and collection ownership must not be inferred empty from
-    /// an absent concrete lifetime projection.
+    /// Finite owned fields can establish emptiness recursively. Unknown types,
+    /// arrays, and raw-pointer-backed ownership cannot establish it merely
+    /// through an absent concrete lifetime projection.
     pub fn has_trivial_resources(&self) -> bool {
-        matches!(self.kind, ConversionKind::Empty)
+        self.trivial_resources
     }
 
     pub fn supports_indexed_resources(&self) -> bool {
@@ -604,6 +606,21 @@ impl TaskEncoder for ResourceConversionEnc {
                 }
             }
         };
+        let trivial_resources = match &kind {
+            // A raw pointer does not itself grant referent permission, but
+            // using that fact to classify its enclosing owner would mistake
+            // Vec/RawBuf/PhantomData representations for empty ownership.
+            ConversionKind::Empty => !matches!(task.ty.specifics, TySpecifics::Raw(_)),
+            ConversionKind::Struct(fields) => fields
+                .iter()
+                .all(|(_, child)| child.has_trivial_resources()),
+            ConversionKind::Enum { variants, .. } => variants.iter().all(|(_, fields)| {
+                fields
+                    .iter()
+                    .all(|(_, child)| child.has_trivial_resources())
+            }),
+            _ => false,
+        };
         let indexed = vir::with_vcx(|vcx| {
             let snap =
                 vcx.mk_local_ex(vcx.mk_local_decl("conversion_snapshot", physical.snapshot()));
@@ -624,6 +641,7 @@ impl TaskEncoder for ResourceConversionEnc {
                 resource,
                 unit,
                 kind,
+                trivial_resources,
                 indexed,
             },
         ))

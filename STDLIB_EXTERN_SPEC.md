@@ -1746,6 +1746,25 @@ and shared iterator bodies pass. Logs: `/tmp/prusti-im4-library70-full.log` and
 `target/stdlib-im4-refinement70-extern-spec-logs`. The independent
 `replace_owned` restoration diagnostic remains open.
 
+Output conversion now follows the opaque groups actually exported by the
+definition-site contract. A structural walk had additionally tried to unpack
+an allocator group hidden inside `IntoIter`'s `MaybeDangling` field. The existing
+owned iterator positive and three false controls now pass (six checks), as do
+the constructor/reference/identity controls (13 checks), in
+`target/stdlib-im4-owned72-iterator-spec-logs` and
+`target/stdlib-im4-output72-iterator-spec-logs`. The full library advances past
+all four conversion failures, exposing three loop invariants with an
+unavailable old-state label and one missing loop wand. These are still open;
+the successful scalar/shared cases do not establish generic Vec element
+ownership or complete the library regression gate.
+
+The expression simplifier now retains a checked function reveal at its original
+evaluation point, including when its value is unused or used only in one
+conditional branch. Moving the reveal into that branch had removed the
+inductive proof fact needed by the specialized collection-state observer.
+All 14 simplifier unit tests pass, including four reveal-placement controls
+(`/tmp/prusti-im4-simplify73.log`).
+
 The first step is a prerequisite for the others: adding an abstract predicate
 only to call-site contracts would not establish that a generic implementation
 actually preserves it.

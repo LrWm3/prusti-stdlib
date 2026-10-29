@@ -30,7 +30,7 @@ pub struct MethodCallEncOutput<'vir> {
     inputs: Vec<GArgCaster<'vir, Impure>>,
     output: GArgCaster<'vir, Impure>,
     input_resources: Vec<Option<ResourceBoundary<'vir>>>,
-    output_resources: Option<ResourceBoundary<'vir>>,
+    output_resources: Vec<ResourceBoundary<'vir>>,
     // The flag distinguishes retained post-call resources from resources
     // restored at their original input snapshots.
     returned_inputs: Vec<Vec<(ResourceBoundary<'vir>, bool)>>,
@@ -91,7 +91,7 @@ impl<'vir> MethodCallEncOutput<'vir> {
         if let Some(result) = result {
             stmts.push(result);
         }
-        if let Some(conversion) = &self.output_resources {
+        for conversion in &self.output_resources {
             stmts.extend(conversion.at_storage(ret, false));
         }
         stmts
@@ -136,12 +136,40 @@ impl TaskEncoder for MethodCallEnc {
             .output
             .decompose_compare_normalize(signature.gparams, task_key.gargs);
         let output = deps.require_dep::<GArgsCastEnc<Impure>>(normalized)?;
-        let output_resources = deps.require_dep::<ResourceBoundaryEnc>(ResourceBoundaryTask {
-            definition: signature.output.decompose(signature.gparams),
-            actual: signature.output.decompose_normalize(task_key.gargs),
-            selected: None,
+        let wands = deps.require_dep::<WandEnc>(WandEncTask {
+            data: FunctionData::new(callee_def_id),
         })?;
-        let output_resources = (!output_resources.is_empty()).then_some(output_resources);
+        let outputs = vir::with_vcx(|vcx| wands.output_resource_nodes(vcx));
+        let mut output_resources = Vec::new();
+        let mut output_groups = Vec::new();
+        for node in outputs
+            .iter()
+            .filter(|node| node.mir_local() == mir::RETURN_PLACE)
+        {
+            let selected = vir::with_vcx(|vcx| {
+                wands.predicates_for_function_shape_node(vcx, deps, *node, None)?;
+                let regions: IndexVec<_, GeneralizedLifetime<'vir>> =
+                    vcx.tcx().extract_regions(node.ty(wands.fn_sig(vcx, None)));
+                match regions.get(node.region_idx()) {
+                    Some(GeneralizedLifetime::RegionsIn(opaque)) => Some(opaque.ty(vcx.tcx())),
+                    _ => None,
+                }
+            });
+            if let Some(selected) = selected.filter(|selected| !output_groups.contains(selected)) {
+                output_groups.push(selected);
+                // Match the groups actually exported by the definition-site
+                // contract. A structural walk alone can find parameters in
+                // fields that do not carry a returned lifetime resource.
+                let boundary = deps.require_dep::<ResourceBoundaryEnc>(ResourceBoundaryTask {
+                    definition: signature.output.decompose(signature.gparams),
+                    actual: signature.output.decompose_normalize(task_key.gargs),
+                    selected: Some(selected),
+                })?;
+                if !boundary.is_empty() {
+                    output_resources.push(boundary);
+                }
+            }
+        }
         let input_resources = signature
             .inputs
             .iter()
@@ -155,11 +183,7 @@ impl TaskEncoder for MethodCallEnc {
             })
             .collect::<Result<Vec<_>, _>>()?;
         let returned_inputs = if input_resources.iter().any(Option::is_some) {
-            let wands = deps.require_dep::<WandEnc>(WandEncTask {
-                data: FunctionData::new(callee_def_id),
-            })?;
             let blocked = wands.blocked_inputs();
-            let outputs = vir::with_vcx(|vcx| wands.output_resource_nodes(vcx));
             let mut returned = vec![Vec::new(); input_resources.len()];
             for input in wands.inputs().filter(|node| {
                 !blocked.contains(node) || outputs.contains(&node.to_function_shape_node())

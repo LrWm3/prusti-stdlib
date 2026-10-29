@@ -273,7 +273,7 @@ impl<'vir> WandEncOutput<'vir> {
     /// The (unreified) predicates associated with the given node, or `None` if
     /// there are no resources associated with it.
     #[allow(clippy::type_complexity)]
-    fn predicates_for_function_shape_node(
+    pub(crate) fn predicates_for_function_shape_node(
         &self,
         vcx: &'vir vir::VirCtxt<'vir>,
         deps: &mut TaskEncoderDependencies<'vir, impl TaskEncoder>,

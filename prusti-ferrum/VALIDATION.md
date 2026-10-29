@@ -36,20 +36,26 @@ smoke ran four independent service starts and eight requests with caching off;
 all completed and emitted the opt-in phase events. It ran on a loaded host and
 does not establish a speedup or a detailed solver-time split.
 
-The adapter now pins Ferrum `afdf24ddba1516a7987a17d43e5090b8725b6980` and passes
+The adapter now pins Ferrum `f4a070c1bb34a733af09eb78d86ef3ec69d34435` and passes
 `--logLevel ERROR` to both native Ferrum and JVM Silicon. This checkpoint adds
-owned Let, strict-operator, field, domain/backend and CurrentPerm argument returns,
-fixes mask-alias declaration replay between workers, and preserves warning
-categories, occurrence timing and positions. It rejects options that disable the
-global declarations required by branch replay. The lockfile updates libc from
-0.2.176 to the Ferrum Unix logger's required 0.2.191; other registry versions stay
-unchanged.
+owned CFG and loop guards, composed expression inputs and returns, generic
+production/consumption receivers, and wand/Applying stages. Distinct evaluation,
+quantified and loop-phase collectors retain their identities across worker
+transfers. The shared wand completion helpers are included in this revision.
+Registry dependency versions, including libc 0.2.191, remain unchanged.
 
-Both the native-only `prusti-server` check and the full `prusti --features ferrum`
-check (native and JVM adapters together) pass on nightly-2026-08-15. Ferrum's
-checkpoint passes 215 library tests (nine ignored), 18 real-Z3 CLI continuation
-regressions and focused warning/configuration checks. The cooperative restoration
-regression and one/two-worker mask fixtures through stdio and linked Z3 4.16 also
-pass. These are build and backend compatibility checks. The iterator results above
-remain the recorded earlier checkpoint; this pin change does not claim a fresh
-full Rust iterator matrix or a measured verification speedup.
+Both locked checks pass on nightly-2026-08-15: native-only `prusti-server` with
+`--no-default-features --features ferrum`, and `prusti --features ferrum` with
+native and JVM adapters together. Ferrum's production-profile all-target check
+with `native-z3` passes. Its workspace test run passes 690 regular tests (142
+ignored), including 309 Silicon library tests (nine ignored), using test-only
+optimization overrides. An explicit real-Z3 pass adds 60 CLI continuation tests,
+11 warning tests, mask-alias replay and the cooperative collector-restoration
+regression. The mask fixtures also pass linked Z3 4.16 with one and two workers.
+
+The continuation documentation records source-disabled branches, borrowed API
+boundaries, quantified/join cardinality limits and the internal active-logger
+fallback. These are build and backend compatibility checks. The iterator matrix
+above remains the earlier recorded checkpoint; this pin change does not claim a
+fresh full Rust iterator matrix, complete Viper compatibility or a measured
+verification speedup.

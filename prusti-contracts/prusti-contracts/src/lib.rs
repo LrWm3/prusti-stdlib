@@ -147,7 +147,7 @@ pub fn mut_slice_contents<T>(slice: &&mut [T]) -> Seq<T> {
 
 /// A permission-checked snapshot of the mutable referents owned by a value.
 /// This specification-only value does not grant access to the observed heap.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct ResourceState(());
 
 /// Observe the current state of all mutable referents owned by `value`.

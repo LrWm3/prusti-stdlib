@@ -1516,6 +1516,15 @@ claims, wrong values, a mutation violating a state frame, missing permissions,
 and executable misuse of the observer. Logs are in
 `target/stdlib-im4-finite-iterator-logs`; the full build also passed.
 
+`ResourceState` also supports direct `==` and `!=` in specifications. The
+encoder compares logical states, including observed referent values. A
+focused positive client compares equal states, changes one referent, and
+then proves the states unequal; a negative client rejects equality between
+referents containing 1 and 2. Verification, runtime execution, and the Rust
+check pass all four checks (`--case 'mut_resource_state_eq_*'`, logs in
+`target/stdlib-iterator-spec-logs`). This does not by itself settle symbolic
+collection expiry framing.
+
 The separate `stdlib_resources_spec` fixture now verifies a `no_std`
 `resource_specs` library containing generic identity, a twice-composed
 identity, and identity over a trait's associated type. Clients use its exported snapshot, resource-state, and expiry

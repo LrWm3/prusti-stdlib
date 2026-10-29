@@ -1560,6 +1560,28 @@ also continues to pass all 22 checks. Symbolic collection conversion and its
 value framing remain separate acceptance work; literal construction alone
 does not supply the typing facts for an arbitrary incoming array.
 
+The array boundary now has checked recursive pack/unpack methods for finite
+element shapes. A checked typing traversal establishes the concrete element
+representation from an incoming physical array; the resource conversions
+preserve an aggregate sequence of referent states and expose individual
+observations for indexed clients. These helper proofs use a symbolic sequence
+length. Three literal-array clients verify direct use, a generic identity call,
+and state/value preservation through that call and expiry. Four negative
+controls reject `false`, a wrong element value, and a wrong restored value at
+the intended assertion. Together with runtime executions and the Rust check,
+all 11 checks pass with the existing pledge encoding:
+`--suite iterator --skip-library --case 'mut_generic_array*' --timeout 600`.
+The slowest case took 237 seconds; these checks need the longer limit.
+Logs are in `target/stdlib-array38-iterator-spec-logs` (the final baseline run
+used build 41; the directory name is retained from the initial experiment).
+
+A symbolic-length caller still cannot prove its aggregate expiry frame after
+unpacking. The smaller standalone proof was not reproducible, and the pledge
+simplification experiments have been removed. The remaining reproduction is
+[im4_array_symbolic_frame.rs](prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/im4_array_symbolic_frame.rs).
+It must pass with wrong-frame and `false` controls before claiming arbitrary
+array value framing. Nested collections and Vec ownership remain open.
+
 This is a development checkpoint, not an IM4 acceptance result. Symbolic
 collection conversion, generic parameters nested in argument type constructors,
 collection state transport, native pledges across restoration stages, complete

@@ -24,24 +24,25 @@ pub(crate) struct ResourceCase<'vir> {
     guard: vir::ExprBool<'vir>,
     body: vir::ExprBool<'vir>,
     state: Option<vir::ExprCSnap<'vir>>,
+    sequence: Option<(IndexedResources<'vir>, vir::ExprPSnap<'vir>)>,
 }
 
-pub(crate) fn group<'vir>(
-    snap: vir::ExprPSnap<'vir>,
-    ty: vir::ExprTyVal<'vir>,
-    metadata: vir::ExprPSnap<'vir>,
-) -> vir::ExprBool<'vir> {
+pub(crate) fn group<'vir, Curr, Next>(
+    snap: vir::ExprGenPSnap<'vir, Curr, Next>,
+    ty: vir::ExprGenTyVal<'vir, Curr, Next>,
+    metadata: vir::ExprGenPSnap<'vir, Curr, Next>,
+) -> vir::ExprGenBool<'vir, Curr, Next> {
     application("indirect_resources", snap, ty, metadata)
 }
 
-fn application<'vir>(
+fn application<'vir, Curr, Next>(
     name: &'vir str,
-    snap: vir::ExprPSnap<'vir>,
-    ty: vir::ExprTyVal<'vir>,
-    metadata: vir::ExprPSnap<'vir>,
-) -> vir::ExprBool<'vir> {
+    snap: vir::ExprGenPSnap<'vir, Curr, Next>,
+    ty: vir::ExprGenTyVal<'vir, Curr, Next>,
+    metadata: vir::ExprGenPSnap<'vir, Curr, Next>,
+) -> vir::ExprGenBool<'vir, Curr, Next> {
     vir::with_vcx(|vcx| {
-        vcx.mk_predicate_app_expr(vcx.alloc(vir::PredicateAppData {
+        vcx.mk_predicate_app_expr(vcx.alloc(vir::PredicateAppGenData {
             target: name,
             args: vcx.alloc_slice(&[snap.as_dyn(), ty.as_dyn(), metadata.as_dyn()]),
             perm: None,
@@ -85,6 +86,27 @@ impl<'vir> ResourceUse<'vir> {
             ty: deps.require_dep::<TyExprEnc>(ty)?,
         })
     }
+    pub fn apply_generic<Curr, Next>(
+        self,
+        snapshot: vir::ExprGenPSnap<'vir, Curr, Next>,
+        metadata: vir::ExprGenPSnap<'vir, Curr, Next>,
+    ) -> vir::ExprGenBool<'vir, Curr, Next> {
+        group(snapshot, self.ty.lazy(), metadata)
+    }
+    pub fn state_generic<Curr, Next>(
+        self,
+        snapshot: vir::ExprGenPSnap<'vir, Curr, Next>,
+        metadata: vir::ExprGenPSnap<'vir, Curr, Next>,
+    ) -> vir::ExprGenCSnap<'vir, Curr, Next> {
+        state_function("indirect_resource_state").call()(snapshot, self.ty.lazy(), metadata)
+    }
+    pub fn sequence_state<Curr, Next>(
+        self,
+        sequence: vir::ExprGenSeq<'vir, Curr, Next>,
+        start: vir::ExprGenInt<'vir, Curr, Next>,
+    ) -> vir::ExprGenSeq<'vir, Curr, Next> {
+        sequence_state_function().call()(sequence, self.ty.lazy(), start)
+    }
     pub fn state<Curr, Next>(
         self,
         snap: vir::ExprGenSnap<'vir, Curr, Next>,
@@ -96,14 +118,14 @@ impl<'vir> ResourceUse<'vir> {
             metadata,
         )
     }
-    pub fn apply(
+    pub fn apply<Curr, Next>(
         self,
-        snap: vir::ExprSnap<'vir>,
-        metadata: vir::ExprPSnap<'vir>,
-    ) -> vir::ExprBool<'vir> {
+        snap: vir::ExprGenSnap<'vir, Curr, Next>,
+        metadata: vir::ExprGenPSnap<'vir, Curr, Next>,
+    ) -> vir::ExprGenBool<'vir, Curr, Next> {
         group(
             self.caster.cast_to_callee_ctx(snap).downcast_ty(),
-            self.ty,
+            self.ty.lazy(),
             metadata,
         )
     }
@@ -165,6 +187,7 @@ impl TaskEncoder for ResourceGroupEnc {
             let typ = deps.require_dep::<ParamTypEnc>(())?.typ;
             let mut resources = vec![vcx.mk_eq_expr(typ(vcx.mk_local_ex(s)), ty_expr)];
             let mut state = Some(empty_state());
+            let mut sequence = None;
             match combined.specifics {
                 TySpecifics::Primitive(_)
                 | TySpecifics::ImmRef(_)
@@ -226,8 +249,6 @@ impl TaskEncoder for ResourceGroupEnc {
                     }
                 }
                 TySpecifics::ArrayLike(data) => {
-                    // Collection state remains opaque until the checked indexed conversion is available.
-                    state = None;
                     let element = data.0.decompose(task.params);
                     let resource = ResourceUse::new(deps, element)?;
                     let usize_ty = RustTyDecomposition::from_prim_ty(vcx.tcx().types.usize);
@@ -250,11 +271,19 @@ impl TaskEncoder for ResourceGroupEnc {
                         .downcast_ty::<vir::Int>();
                     let index_decl = vcx.mk_local_decl("resource_index", vir::TYPE_INT);
                     let index = vcx.mk_local_ex(index_decl);
-                    let raw =
-                        resource.apply(pure.expect_array().index(snap.downcast_ty(), index), unit);
+                    let elements = pure.expect_array().to_seq(snap.downcast_ty(), extent);
+                    // Share the canonical sequence representation with checked
+                    // collection conversions and the state observer.
+                    let raw = resource
+                        .apply_generic(vcx.mk_seq_index_expr(elements, index).downcast_ty(), unit);
                     let indexed = IndexedResources::new(deps, raw)?;
                     let wrapped = indexed.wrap(raw, index, &[]);
                     let zero = vcx.mk_uint::<0>();
+                    state = Some(fields_sequence_state(
+                        resource.sequence_state(elements, zero),
+                    ));
+                    sequence = Some((indexed.clone(), unit));
+                    resources.push(vir::expr! { (zero) <= (extent) });
                     resources.push(quantify_resources(
                         vcx,
                         vcx.alloc_slice(&[index_decl.as_dyn()]),
@@ -303,7 +332,15 @@ impl TaskEncoder for ResourceGroupEnc {
                 .fold_with(&mut Substitute(&substitutions))
                 .unwrap_or(body);
             let state = state.map(|s| s.fold_with(&mut Substitute(&substitutions)).unwrap_or(s));
-            Ok((Some(ResourceCase { guard, body, state }), ()))
+            Ok((
+                Some(ResourceCase {
+                    guard,
+                    body,
+                    state,
+                    sequence,
+                }),
+                (),
+            ))
         })
     }
 
@@ -315,6 +352,9 @@ impl TaskEncoder for ResourceGroupEnc {
             .collect::<Vec<_>>();
         if cases.is_empty() && Self::all_outputs_local_no_errors(program).is_empty() {
             return;
+        }
+        if let Some((indexed, unit)) = cases.iter().find_map(|case| case.sequence.as_ref()) {
+            emit_sequence_state(program, indexed, *unit);
         }
         vir::with_vcx(|vcx| {
             let (s, t, m) = declarations();
@@ -440,6 +480,98 @@ fn emit_state_adt<'vir>(program: &mut task_encoder::Program<'vir>) {
             vir::ViperIdent::new("s_ResourceState"),
             &[],
             vcx.alloc_slice(&[empty, reference, fields, opaque]),
+        ));
+    });
+}
+
+fn sequence_state_function<'vir>()
+-> vir::FunctionIdn<'vir, (vir::Seq, vir::TyVal, vir::Int), vir::Seq> {
+    vir::with_vcx(|vcx| {
+        vir::FunctionIdn::new(
+            vir::ViperIdent::new("indirect_sequence_state"),
+            (
+                vcx.mk_ty_seq(vir::TYPE_PSNAP),
+                vir::TYPE_TYVAL,
+                vir::TYPE_INT,
+            ),
+            vcx.mk_ty_seq(state_type()),
+        )
+    })
+}
+pub(crate) fn fields_sequence_state<'vir, Curr, Next>(
+    sequence: vir::ExprGenSeq<'vir, Curr, Next>,
+) -> vir::ExprGenCSnap<'vir, Curr, Next> {
+    vir::with_vcx(|vcx| {
+        vir::FunctionIdn::<vir::Seq, vir::CSnap>::new(
+            vir::ViperIdent::new("ResourceFields"),
+            vcx.mk_ty_seq(state_type()),
+            state_type(),
+        )
+        .call()(sequence)
+    })
+}
+fn emit_sequence_state<'vir>(
+    program: &mut task_encoder::Program<'vir>,
+    indexed: &IndexedResources<'vir>,
+    unit: vir::ExprPSnap<'vir>,
+) {
+    vir::with_vcx(|vcx| {
+        let sequence = vcx.mk_local_decl("state_sequence", vcx.mk_ty_seq(vir::TYPE_PSNAP));
+        let ty = vcx.mk_local_decl("state_element_type", vir::TYPE_TYVAL);
+        let start = vcx.mk_local_decl("state_start", vir::TYPE_INT);
+        let (seq, t, i) = (
+            vcx.mk_local_ex(sequence),
+            vcx.mk_local_ex(ty),
+            vcx.mk_local_ex(start),
+        );
+        let length = vcx.mk_collection_len_expr(seq);
+        let zero = vcx.mk_uint::<0>();
+        let j_decl = vcx.mk_local_decl("state_index", vir::TYPE_INT);
+        let j = vcx.mk_local_ex(j_decl);
+        let element = |index| {
+            vcx.mk_seq_index_expr(seq, index)
+                .downcast_ty::<vir::PSnap>()
+        };
+        let pre = quantify_resources(
+            vcx,
+            vcx.alloc_slice(&[j_decl.as_dyn()]),
+            &[],
+            vir::expr! { ((i) <= (j)) && ((j) < (length)) },
+            indexed.wrap(group(element(j), t, unit), j, &[]),
+        );
+        let vir::ExprKindData::PredicateApp(app) = group(element(i), t, unit).kind else {
+            unreachable!()
+        };
+        let head = indexed
+            .read_snapshot(
+                app,
+                state_function("indirect_resource_state").call()(element(i), t, unit).upcast_ty(),
+                i,
+                false,
+                &[],
+            )
+            .downcast_ty::<vir::CSnap>();
+        let next = (vir::expr! { (i) + ([vcx.mk_uint::<1>()]) }).downcast_ty();
+        let recursive = sequence_state_function().call()(seq, t, next);
+        let body = vcx.mk_ternary_expr(
+            vcx.mk_eq_expr(i, length),
+            vcx.mk_seq_literal_expr(&[], state_type()),
+            vcx.mk_seq_concat_expr(
+                vcx.mk_seq_literal_expr(vcx.alloc_slice(&[head]), state_type()),
+                recursive,
+            ),
+        );
+        program.add_function(vcx.mk_function(
+            sequence_state_function(),
+            (sequence, ty, start),
+            vcx.alloc_slice(&[vir::expr! { ((zero) <= (i)) && ((i) <= (length)) }, pre]),
+            vcx.alloc_slice(&[vcx.mk_eq_expr(
+                vcx.mk_collection_len_expr(vcx.mk_result(vcx.mk_ty_seq(state_type()))),
+                vcx.mk_bin_op_expr(vir::BinOpKind::Sub, length, i)
+                    .downcast_ty::<vir::Int>(),
+            )]),
+            None,
+            Some(body),
         ));
     });
 }

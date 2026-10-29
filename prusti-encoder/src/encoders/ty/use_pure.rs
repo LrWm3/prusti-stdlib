@@ -557,8 +557,21 @@ impl<'vir> TyUsePureArray<'vir> {
         snap: vir::ExprGenCSnap<'vir, Curr, Next>,
         index: vir::ExprGenInt<'vir, Curr, Next>,
     ) -> vir::ExprGenSnap<'vir, Curr, Next> {
-        let res = self.pure.index_access.call()(snap, index);
+        let res = super::indexed::observe_element(self.pure.index_access.call()(snap, index), index);
         self.caster.cast_to_caller_ctx(res.upcast_ty())
+    }
+
+    /// Select from the canonical sequence used by quantified element resources.
+    pub fn sequence_index<Curr, Next>(
+        &self,
+        sequence: vir::ExprGenSeq<'vir, Curr, Next>,
+        index: vir::ExprGenInt<'vir, Curr, Next>,
+    ) -> vir::ExprGenSnap<'vir, Curr, Next> {
+        vir::with_vcx(|vcx| {
+            self.caster.cast_to_caller_ctx(
+                vcx.mk_seq_index_expr(sequence, index).downcast_ty::<vir::PSnap>().upcast_ty(),
+            )
+        })
     }
 
     /// Heap observations require an in-bounds element, even in specifications.
@@ -569,7 +582,10 @@ impl<'vir> TyUsePureArray<'vir> {
         index: vir::ExprGenInt<'vir, Curr, Next>,
     ) -> vir::ExprGenSnap<'vir, Curr, Next> {
         vir::with_vcx(|vcx| {
-            let element = vcx.mk_seq_index_expr(self.to_seq(snap, len), index);
+            let element = super::indexed::observe_element(
+                vcx.mk_seq_index_expr(self.to_seq(snap, len), index).downcast_ty(),
+                index,
+            );
             self.caster
                 .cast_to_caller_ctx(element.downcast_ty::<vir::PSnap>().upcast_ty())
         })
@@ -584,7 +600,7 @@ impl<'vir> TyUsePureArray<'vir> {
         snap: vir::ExprGenCSnap<'vir, Curr, Next>,
         index: vir::ExprGenInt<'vir, Curr, Next>,
     ) -> vir::ExprGenSnap<'vir, Curr, Next> {
-        self.pure.index_access.call()(snap, index).upcast_ty()
+        super::indexed::observe_element(self.pure.index_access.call()(snap, index), index).upcast_ty()
     }
 
     /// The array-like with the given elements (`[a, b, c]`).

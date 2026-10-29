@@ -236,7 +236,8 @@ impl TaskEncoder for IndirectPredicatesEnc {
                                     let extent = fixed_extent.or(input.extent).expect("slice resource extent");
                                     let index_decl = vcx.mk_local_decl(vir::vir_format!(vcx, "_resource_index{}", input.binder_depth), vir::TYPE_INT);
                                     let index = vcx.mk_local_ex(index_decl);
-                                    let snap = array.index(input.snap.downcast_ty(), index);
+                                    let elements = array.to_seq(input.snap.downcast_ty(), extent);
+                                    let snap = array.sequence_index(elements, index);
                                     let exprs = element.predicate_applications.iter().map(|expr| expr.reify(vcx, ExprInput {
                                         snap,
                                         // Index-dependent heap reads remain under this binder.

@@ -4,6 +4,23 @@ use rustc_hash::FxHashMap;
 use task_encoder::{EncodeFullError, EncodeFullResult, TaskEncoder, TaskEncoderDependencies};
 use vir::{CastType, Foldable, Folder};
 
+fn observation_function<'vir>() -> vir::FunctionIdn<'vir, (vir::PSnap, vir::Int), vir::PSnap> {
+    vir::FunctionIdn::new(
+        vir::ViperIdent::new("indexed_resource_observation"),
+        (vir::TYPE_PSNAP, vir::TYPE_INT),
+        vir::TYPE_PSNAP,
+    )
+}
+
+/// Identity on snapshots, marking an actual indexed access for quantified
+/// state frames. This function neither reads the heap nor grants permissions.
+pub(crate) fn observe_element<'vir, Curr, Next>(
+    element: vir::ExprGenPSnap<'vir, Curr, Next>,
+    index: vir::ExprGenInt<'vir, Curr, Next>,
+) -> vir::ExprGenPSnap<'vir, Curr, Next> {
+    observation_function().call()(element, index)
+}
+
 /// Silicon's API expects quantified resources in atomic form. Its parser
 /// performs this distribution, but Prusti constructs the Viper AST directly.
 pub(crate) fn quantify_resources<'vir>(
@@ -127,6 +144,18 @@ impl TaskEncoder for IndexedPredicateEnc {
     }
 
     fn emit_outputs<'vir>(program: &mut task_encoder::Program<'vir>) {
+        vir::with_vcx(|vcx| {
+            let element = vcx.mk_local_decl("element", vir::TYPE_PSNAP);
+            let index = vcx.mk_local_decl("index", vir::TYPE_INT);
+            program.add_function(vcx.mk_function(
+                observation_function(),
+                (element, index),
+                &[],
+                &[],
+                None,
+                Some(vcx.mk_local_ex(element)),
+            ));
+        });
         for predicate in Self::all_outputs_local_no_errors(program) {
             program.add_predicate(predicate);
         }

@@ -1,13 +1,18 @@
 //! Checked conversions at polymorphic resource boundaries.
 //! All operations are folds/unfolds of the actual predicate bodies.
-use task_encoder::{EncodeFullError, EncodeFullResult, TaskEncoder, TaskEncoderDependencies};
+use task_encoder::{EncodeFullResult, TaskEncoder, TaskEncoderDependencies};
 use vir::CastType;
 
 use super::{
-    RustTyDecomposition, TySpecifics,
+    RustTyDecomposition, RustTyNormalized, TySpecifics,
+    array_typing::{ArrayTyping, ArrayTypingEnc},
+    generics::{GArgCaster, GArgsCastEnc, GArgsTyEnc},
+    indexed::IndexedResources,
+    resource_array::{ResourceArray, ResourceArrayEnc},
+    resource_collection::{ResourceCollection, ResourceCollectionEnc},
     resources::{ResourceUse, unit_metadata},
     use_impure::{TyUseImpure, TyUseImpureEnc},
-    use_pure::{TyUsePureEnc, TyUsePureField, TyUsePureMutRef},
+    use_pure::{TyUsePure, TyUsePureArray, TyUsePureEnc, TyUsePureField, TyUsePureMutRef},
 };
 
 pub(crate) struct ResourceConversionEnc;
@@ -18,6 +23,7 @@ pub(crate) struct ResourceConversion<'vir> {
     resource: ResourceUse<'vir>,
     unit: vir::ExprPSnap<'vir>,
     kind: ConversionKind<'vir>,
+    indexed: IndexedResources<'vir>,
 }
 
 type Fields<'vir> = Vec<(TyUsePureField<'vir>, &'vir ResourceConversion<'vir>)>;
@@ -26,6 +32,15 @@ type Fields<'vir> = Vec<(TyUsePureField<'vir>, &'vir ResourceConversion<'vir>)>;
 enum ConversionKind<'vir> {
     Opaque,
     Empty,
+    Array {
+        array: TyUsePureArray<'vir>,
+        extent: Option<vir::ExprInt<'vir>>,
+        usize_ty: TyUsePure<'vir>,
+        metadata: GArgCaster<'vir, crate::encoders::Pure>,
+        conversion: ResourceCollection<'vir>,
+        typing: Option<ArrayTyping<'vir>>,
+        boundary: ResourceArray<'vir>,
+    },
     Struct(Fields<'vir>),
     Enum {
         discriminant: vir::FunctionIdn<'vir, vir::CSnap, vir::CSnap>,
@@ -39,17 +54,43 @@ enum ConversionKind<'vir> {
 }
 
 impl<'vir> ResourceConversion<'vir> {
+    pub fn supports_indexed_resources(&self) -> bool {
+        match &self.kind {
+            ConversionKind::Array { .. } => false,
+            ConversionKind::Struct(fields) => fields
+                .iter()
+                .all(|(_, child)| child.supports_indexed_resources()),
+            ConversionKind::Enum { variants, .. } => variants.iter().all(|(_, fields)| {
+                fields
+                    .iter()
+                    .all(|(_, child)| child.supports_indexed_resources())
+            }),
+            ConversionKind::Mutable { nested, .. } => nested.supports_indexed_resources(),
+            _ => true,
+        }
+    }
+
     pub fn observe<Curr, Next>(
         &self,
         snapshot: vir::ExprGenSnap<'vir, Curr, Next>,
     ) -> vir::ExprGenCSnap<'vir, Curr, Next> {
-        self.observe_with_metadata(snapshot, self.unit.lazy())
+        self.observe_at(snapshot, self.unit.lazy(), None, &[])
     }
 
-    fn observe_with_metadata<Curr, Next>(
+    pub fn observe_indexed<Curr, Next>(
+        &self,
+        snapshot: vir::ExprGenSnap<'vir, Curr, Next>,
+        index: vir::ExprGenInt<'vir, Curr, Next>,
+    ) -> vir::ExprGenCSnap<'vir, Curr, Next> {
+        self.observe_at(snapshot, self.unit.lazy(), Some(index), &[])
+    }
+
+    fn observe_at<Curr, Next>(
         &self,
         snapshot: vir::ExprGenSnap<'vir, Curr, Next>,
         metadata: vir::ExprGenPSnap<'vir, Curr, Next>,
+        index: Option<vir::ExprGenInt<'vir, Curr, Next>>,
+        path: &'vir [usize],
     ) -> vir::ExprGenCSnap<'vir, Curr, Next> {
         use super::resources::{empty_state, fields_state, reference_state};
         vir::with_vcx(|vcx| {
@@ -57,26 +98,80 @@ impl<'vir> ResourceConversion<'vir> {
                 fields_state(
                     &fields
                         .iter()
-                        .map(|(field, nested)| nested.observe(field.read(snapshot.downcast_ty())))
+                        .enumerate()
+                        .map(|(i, (field, nested))| {
+                            nested.observe_at(
+                                field.read(snapshot.downcast_ty()),
+                                self.unit.lazy(),
+                                index,
+                                child_path(path, i),
+                            )
+                        })
                         .collect::<Vec<_>>(),
                 )
             };
             match &self.kind {
-                ConversionKind::Opaque => self.resource.state(snapshot, metadata),
+                ConversionKind::Array {
+                    array,
+                    extent,
+                    usize_ty,
+                    metadata: caster,
+                    conversion,
+                    ..
+                } => {
+                    let length = extent.map(|e| e.lazy()).unwrap_or_else(|| {
+                        usize_ty
+                            .expect_primitive()
+                            .snap_to_prim(
+                                caster
+                                    .cast_to_caller_ctx(metadata.upcast_ty())
+                                    .downcast_ty(),
+                            )
+                            .downcast_ty()
+                    });
+                    conversion.observe(array.to_seq(snapshot.downcast_ty(), length))
+                }
+                ConversionKind::Opaque => {
+                    let state = self.resource.state(snapshot, metadata);
+                    if let Some(index) = index {
+                        let vir::ExprKindGenData::PredicateApp(app) =
+                            self.resource.apply(snapshot, metadata).kind
+                        else {
+                            unreachable!()
+                        };
+                        self.indexed
+                            .read_snapshot(app, state.upcast_ty(), index, false, path)
+                            .downcast_ty()
+                    } else {
+                        state
+                    }
+                }
                 ConversionKind::Empty => empty_state(),
                 ConversionKind::Mutable {
                     reference,
                     physical,
                     nested,
                 } => {
-                    let stored = physical
-                        .ref_to_snap(reference.deref_access(snapshot.downcast_ty()))
+                    let address = reference.deref_access(snapshot.downcast_ty());
+                    let stored = physical.ref_to_snap(address);
+                    let stored = index
+                        .map_or(stored, |index| {
+                            self.indexed.read_snapshot(
+                                physical.ref_to_pred_app(address, None),
+                                stored,
+                                index,
+                                false,
+                                path,
+                            )
+                        })
                         .downcast_ty();
                     reference_state(
                         stored,
-                        nested.observe_with_metadata(
+                        nested.observe_at(
                             reference.cast_to_caller_ctx(stored),
                             reference.generic_metadata(snapshot.downcast_ty()),
+                            index,
+                            child_path(path, 0),
                         ),
                     )
                 }
@@ -98,12 +193,146 @@ impl<'vir> ResourceConversion<'vir> {
         })
     }
 
+    pub fn grouped(
+        &self,
+        snapshot: vir::ExprSnap<'vir>,
+        index: vir::ExprInt<'vir>,
+    ) -> vir::ExprBool<'vir> {
+        self.indexed
+            .wrap(self.resource.apply(snapshot, self.unit), index, &[])
+    }
+
+    pub fn grouped_generic(
+        &self,
+        snapshot: vir::ExprPSnap<'vir>,
+        index: vir::ExprInt<'vir>,
+    ) -> vir::ExprBool<'vir> {
+        self.indexed
+            .wrap(self.resource.apply_generic(snapshot, self.unit), index, &[])
+    }
+
+    pub fn grouped_generic_state(
+        &self,
+        snapshot: vir::ExprPSnap<'vir>,
+        index: vir::ExprInt<'vir>,
+    ) -> vir::ExprCSnap<'vir> {
+        let vir::ExprKindData::PredicateApp(app) =
+            self.resource.apply_generic(snapshot, self.unit).kind
+        else {
+            unreachable!()
+        };
+        self.indexed
+            .read_snapshot(
+                app,
+                self.resource.state_generic(snapshot, self.unit).upcast_ty(),
+                index,
+                false,
+                &[],
+            )
+            .downcast_ty()
+    }
+
+    /// Concrete resources in the same structural paths used by indexed PCG expansions.
+    pub fn indexed_resources(
+        &self,
+        snapshot: vir::ExprSnap<'vir>,
+        index: vir::ExprInt<'vir>,
+    ) -> vir::ExprBool<'vir> {
+        self.resources_at(snapshot, self.unit, index, &[])
+    }
+
+    fn resources_at(
+        &self,
+        snapshot: vir::ExprSnap<'vir>,
+        metadata: vir::ExprPSnap<'vir>,
+        index: vir::ExprInt<'vir>,
+        path: &'vir [usize],
+    ) -> vir::ExprBool<'vir> {
+        vir::with_vcx(|vcx| {
+            let fields = |fields: &Fields<'vir>| {
+                vcx.mk_conj(
+                    &fields
+                        .iter()
+                        .enumerate()
+                        .map(|(i, (field, nested))| {
+                            nested.resources_at(
+                                field.read(snapshot.downcast_ty()),
+                                self.unit,
+                                index,
+                                child_path(path, i),
+                            )
+                        })
+                        .collect::<Vec<_>>(),
+                )
+            };
+            match &self.kind {
+                ConversionKind::Array { .. } => unreachable!(
+                    "nested collection resources were rejected by the collection encoder"
+                ),
+                ConversionKind::Opaque => {
+                    self.indexed
+                        .wrap(self.resource.apply(snapshot, metadata), index, path)
+                }
+                ConversionKind::Empty => vcx.mk_bool::<true>(),
+                ConversionKind::Mutable {
+                    reference,
+                    physical,
+                    nested,
+                } => {
+                    let address = reference.deref_access(snapshot.downcast_ty());
+                    let raw = physical.ref_to_pred(vcx, address, None);
+                    let stored = self.indexed.read_snapshot(
+                        physical.ref_to_pred_app(address, None),
+                        physical.ref_to_snap(address),
+                        index,
+                        false,
+                        path,
+                    );
+                    vcx.mk_conj(&[
+                        self.indexed.wrap(raw, index, path),
+                        nested.resources_at(
+                            reference.cast_to_caller_ctx(stored.downcast_ty()),
+                            reference.generic_metadata(snapshot.downcast_ty()),
+                            index,
+                            child_path(path, 0),
+                        ),
+                    ])
+                }
+                ConversionKind::Struct(data) => fields(data),
+                ConversionKind::Enum {
+                    discriminant,
+                    variants,
+                } => vcx.mk_conj(
+                    &variants
+                        .iter()
+                        .map(|(discr, data)| {
+                            let guard =
+                                vcx.mk_eq_expr(discriminant.call()(snapshot.downcast_ty()), *discr);
+                            let body = fields(data);
+                            vir::expr! { (guard) ==> (body) }
+                        })
+                        .collect::<Vec<_>>(),
+                ),
+            }
+        })
+    }
+
     pub fn at_snapshot(&self, snapshot: vir::ExprSnap<'vir>, pack: bool) -> Vec<vir::Stmt<'vir>> {
         self.statements(snapshot, self.unit, pack)
     }
 
     pub fn at_storage(&self, storage: vir::ExprRef<'vir>, pack: bool) -> Vec<vir::Stmt<'vir>> {
-        self.statements(self.physical.ref_to_snap(storage), self.unit, pack)
+        let mut statements = Vec::new();
+        if pack
+            && let ConversionKind::Array {
+                typing: Some(typing),
+                ..
+            } = &self.kind
+        {
+            statements.push(typing.establish(storage));
+        }
+        statements.extend(self.statements(self.physical.ref_to_snap(storage), self.unit, pack));
+        statements
     }
 
     pub fn statements(
@@ -112,14 +341,65 @@ impl<'vir> ResourceConversion<'vir> {
         metadata: vir::ExprPSnap<'vir>,
         pack: bool,
     ) -> Vec<vir::Stmt<'vir>> {
-        if matches!(self.kind, ConversionKind::Opaque) {
-            return Vec::new();
-        }
+        self.statements_at(snapshot, metadata, pack, None, &[])
+    }
+
+    pub fn indexed_statements(
+        &self,
+        snapshot: vir::ExprSnap<'vir>,
+        index: vir::ExprInt<'vir>,
+        pack: bool,
+    ) -> Vec<vir::Stmt<'vir>> {
         vir::with_vcx(|vcx| {
+            let vir::ExprKindData::PredicateApp(group) = self.grouped(snapshot, index).kind else {
+                unreachable!()
+            };
+            let mut result = Vec::new();
+            if !pack {
+                result.push(vcx.mk_unfold_stmt(group));
+            }
+            result.extend(self.statements_at(snapshot, self.unit, pack, Some(index), &[]));
+            if pack {
+                result.push(vcx.mk_fold_stmt(group));
+            }
+            result
+        })
+    }
+
+    fn statements_at(
+        &self,
+        snapshot: vir::ExprSnap<'vir>,
+        metadata: vir::ExprPSnap<'vir>,
+        pack: bool,
+        index: Option<vir::ExprInt<'vir>>,
+        path: &'vir [usize],
+    ) -> Vec<vir::Stmt<'vir>> {
+        vir::with_vcx(|vcx| {
+            if let ConversionKind::Array { boundary, .. } = &self.kind {
+                assert!(
+                    index.is_none(),
+                    "nested indexed collections are unsupported"
+                );
+                return vec![boundary.statement(snapshot.downcast_ty(), metadata, pack)];
+            }
             let resource = self.resource.apply(snapshot, metadata);
             let vir::ExprKindData::PredicateApp(app) = resource.kind else {
                 unreachable!()
             };
+            if matches!(self.kind, ConversionKind::Opaque) {
+                return index.map_or_else(Vec::new, |index| {
+                    let vir::ExprKindData::PredicateApp(app) =
+                        self.indexed.wrap(resource, index, path).kind
+                    else {
+                        unreachable!()
+                    };
+                    vec![if pack {
+                        vcx.mk_unfold_stmt(app)
+                    } else {
+                        vcx.mk_fold_stmt(app)
+                    }]
+                });
+            }
             let mut statements = Vec::new();
             if !pack {
                 statements.push(vcx.mk_unfold_stmt(app));
@@ -127,8 +407,15 @@ impl<'vir> ResourceConversion<'vir> {
             let fields = |fields: &Fields<'vir>| {
                 fields
                     .iter()
-                    .flat_map(|(field, nested)| {
-                        nested.statements(field.read(snapshot.downcast_ty()), self.unit, pack)
+                    .enumerate()
+                    .flat_map(|(i, (field, nested))| {
+                        nested.statements_at(
+                            field.read(snapshot.downcast_ty()),
+                            self.unit,
+                            pack,
+                            index,
+                            child_path(path, i),
+                        )
                     })
                     .collect::<Vec<_>>()
             };
@@ -139,15 +426,40 @@ impl<'vir> ResourceConversion<'vir> {
                     nested,
                 } => {
                     let address = reference.deref_access(snapshot.downcast_ty());
+                    let wrapped = index.map(|index| {
+                        let vir::ExprKindData::PredicateApp(app) = self
+                            .indexed
+                            .wrap(
+                                vcx.mk_predicate_app_expr(physical.ref_to_pred_app(address, None)),
+                                index,
+                                path,
+                            )
+                            .kind
+                        else {
+                            unreachable!()
+                        };
+                        app
+                    });
+                    if let Some(wrapped) = wrapped.filter(|_| pack) {
+                        statements.push(vcx.mk_unfold_stmt(wrapped));
+                    }
                     statements.push(vcx.mk_assert_stmt(physical.ref_to_pred(vcx, address, None)));
                     let current =
                         reference.cast_to_caller_ctx(physical.ref_to_snap(address).downcast_ty());
-                    statements.extend(nested.statements(
+                    statements.extend(nested.statements_at(
                         current,
                         reference.generic_metadata(snapshot.downcast_ty()),
                         pack,
+                        index,
+                        child_path(path, 0),
                     ));
+                    if let Some(wrapped) = wrapped.filter(|_| !pack) {
+                        statements.push(vcx.mk_fold_stmt(wrapped));
+                    }
                 }
+                ConversionKind::Array { .. } => unreachable!(
+                    "whole-array conversions are dispatched through their checked boundary"
+                ),
                 ConversionKind::Struct(data) => statements.extend(fields(data)),
                 ConversionKind::Enum {
                     discriminant,
@@ -170,6 +482,10 @@ impl<'vir> ResourceConversion<'vir> {
             statements
         })
     }
+}
+
+fn child_path<'vir>(path: &[usize], child: usize) -> &'vir [usize] {
+    vir::with_vcx(|vcx| vcx.alloc_slice(&path.iter().copied().chain([child]).collect::<Vec<_>>()))
 }
 
 impl TaskEncoder for ResourceConversionEnc {
@@ -241,13 +557,56 @@ impl TaskEncoder for ResourceConversionEnc {
                     variants,
                 }
             }
-            TySpecifics::ArrayLike(_) => {
-                return Err(EncodeFullError::EncodingError(
-                    "checked collection resource conversion is not implemented yet".into(),
+            TySpecifics::ArrayLike(data) => {
+                let element = data.0.decompose_normalize(task.args);
+                let conversion = deps.require_dep::<ResourceCollectionEnc>(element)?;
+                let usize_decomp =
+                    vir::with_vcx(|vcx| RustTyDecomposition::from_prim_ty(vcx.tcx().types.usize));
+                let usize_ty = deps.require_dep::<TyUsePureEnc>(usize_decomp)?;
+                let metadata = deps.require_dep::<GArgsCastEnc<crate::encoders::Pure>>(Some(
+                    RustTyNormalized {
+                        param: RustTyDecomposition::param(),
+                        concrete: usize_decomp,
+                    },
+                ))?;
+                let extent = if data.slice {
+                    None
+                } else {
+                    Some(
+                        usize_ty
+                            .expect_primitive()
+                            .snap_to_prim(deps.require_dep::<GArgsTyEnc>(task.args)?.get_const()[0])
+                            .downcast_ty(),
+                    )
+                };
+                ConversionKind::Array {
+                    array: pure.expect_array().clone(),
+                    extent,
+                    usize_ty,
+                    metadata,
+                    conversion,
+                    typing: if data.slice {
+                        None
+                    } else {
+                        Some(deps.require_dep::<ArrayTypingEnc>(*task)?)
+                    },
+                    boundary: deps.require_dep::<ResourceArrayEnc>(*task)?,
+                }
+            }
+        };
+        let indexed = vir::with_vcx(|vcx| {
+            let snap =
+                vcx.mk_local_ex(vcx.mk_local_decl("conversion_snapshot", physical.snapshot()));
+            let mut resources = vec![resource.apply(snap, unit)];
+            if let ConversionKind::Mutable { physical, .. } = &kind {
+                resources.push(physical.ref_to_pred(
+                    vcx,
+                    vcx.mk_local_ex(vcx.mk_local_decl("conversion_address", vir::TYPE_REF)),
                     None,
                 ));
             }
-        };
+            IndexedResources::new(deps, vcx.mk_conj(&resources))
+        })?;
         Ok((
             (),
             ResourceConversion {
@@ -255,6 +614,7 @@ impl TaskEncoder for ResourceConversionEnc {
                 resource,
                 unit,
                 kind,
+                indexed,
             },
         ))
     }

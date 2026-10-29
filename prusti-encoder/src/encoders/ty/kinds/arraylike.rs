@@ -144,7 +144,10 @@ pub(crate) fn ty_impure<'vir>(
     let element_pred = element_ty_out.ref_to_pred(builder.vcx, index_ref, None);
 
     let array_snap = vir::expr! { [builder.ref_to_snap](ref_self, [..[builder.params.ty_exprs()]], [..[builder.params.const_exprs()]]) }.downcast_ty();
-    let array_index = data.1.index_access.call()(array_snap, index);
+    let array_index = crate::encoders::ty::indexed::observe_element(
+        data.1.index_access.call()(array_snap, index),
+        index,
+    );
     let method_fold = builder
         .inner
         .method::<(vir::Int, vir::Ref, vir::ManyTyVal, vir::ManyCSnap)>(
@@ -175,6 +178,13 @@ pub(crate) fn ty_impure<'vir>(
                             ? ([builder.vcx.mk_old_expr(element_ty_out.ref_to_snap(index_ref).downcast_ty())])
                             : (old([data.1.index_access](([index_frame](ref_self, index, [..[builder.params.ty_exprs()]], [..[builder.params.const_exprs()]])), idx)))
                         )
+                },
+                // Reassembling an unchanged element leaves the whole value
+                // unchanged, including its snapshot identity.
+                vir::expr! {
+                    (([builder.vcx.mk_old_expr(element_ty_out.ref_to_snap(index_ref).downcast_ty::<vir::PSnap>())])
+                        == (old([data.1.index_access](([index_frame](ref_self, index, [..[builder.params.ty_exprs()]], [..[builder.params.const_exprs()]])), index))))
+                    ==> ((array_snap) == (old([index_frame](ref_self, index, [..[builder.params.ty_exprs()]], [..[builder.params.const_exprs()]]))))
                 },
             ],
         );

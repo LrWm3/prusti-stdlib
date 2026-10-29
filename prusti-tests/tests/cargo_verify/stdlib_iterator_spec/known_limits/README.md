@@ -453,3 +453,23 @@ native resource contracts (build 123). The regular suite now checks these
 contracts together with initial/untouched referent framing, empty/exhausted
 iteration, and `IntoIterator`. Combined whole-prefix resource-state loops
 remain separate acceptance work; see `STDLIB_EXTERN_SPEC.md`.
+
+
+### IM5 joint storage and referent restoration model
+
+[`joint_resource_wand.vpr`](joint_resource_wand.vpr) checks the constructor
+stage of a combined storage/referent obligation. It preserves a symbolic
+sequence of referent values through two checked constituent wands and a joint
+package. The real iterator tail and all referent permissions remain available
+after packaging. It contains no added axioms or assumptions.
+
+Run its positive, wrong-state, and reachable-false controls with:
+
+```sh
+./x.py exec python3 scripts/test_stdlib_iterator_resource_wand.py
+```
+
+All three pass; logs and exact diagnostics are retained under
+`target/stdlib-im5-joint-resource-wand-logs`. This isolates a valid composition
+in Viper. It does not establish the generated Rust state-prefix loop, which
+still has an unresolved entry-package proof, or close the IM5 gate.

@@ -1,0 +1,55 @@
+// Constructor-stage model of joint storage/referent restoration.
+// Every wand is packaged with a checked body. No axioms or assumptions are
+// added. The final assertions check that packaging preserves the real tail
+// and its referent resources. This does not model a complete Rust loop.
+
+field slots: Seq[Ref]
+field value: Int
+predicate Source(p: Ref) { acc(p.slots) }
+predicate Tail(p: Ref) { acc(p.slots) }
+predicate Element(index: Int, p: Ref) { acc(p.value) }
+function source_contents(p: Ref): Seq[Ref]
+  requires acc(Source(p))
+{ unfolding acc(Source(p)) in p.slots }
+function tail_contents(p: Ref): Seq[Ref]
+  requires acc(Tail(p))
+{ unfolding acc(Tail(p)) in p.slots }
+function state(xs: Seq[Ref], j: Int): Int
+  requires 0 <= j && j < |xs|
+  requires acc(Element(j, xs[j]))
+{ unfolding acc(Element(j, xs[j])) in xs[j].value }
+method entry(owner: Ref, initial: Seq[Ref])
+  requires acc(Source(owner))
+  requires source_contents(owner) == initial
+  requires forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> acc(Element(j, initial[j]))
+{
+  unfold acc(Source(owner));
+  fold acc(Tail(owner));
+  package acc(Tail(owner)) --* (acc(Source(owner)) && source_contents(owner) == old[lhs](tail_contents(owner))) {
+    unfold acc(Tail(owner));
+    fold acc(Source(owner));
+  }
+  package (forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> acc(Element(j, initial[j]))) --*
+    ((forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> acc(Element(j, initial[j]))) &&
+     (forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> state(initial,j) == old[lhs](state(initial,j)))) {}
+  assert acc(Tail(owner)) && tail_contents(owner) == initial;
+  assert forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> acc(Element(j, initial[j]));
+  package (acc(Tail(owner)) && tail_contents(owner) == initial &&
+    (forall j: Int :: {tail_contents(owner)[j]} 0 <= j && j < |tail_contents(owner)| ==> acc(Element(j, tail_contents(owner)[j])))) --*
+    (acc(Source(owner)) &&
+     (forall j: Int :: {source_contents(owner)[j]} 0 <= j && j < |source_contents(owner)| ==> acc(Element(j, source_contents(owner)[j]))) &&
+     (forall j: Int :: {source_contents(owner)[j]} 0 <= j && j < |source_contents(owner)| ==> state(source_contents(owner),j) == old[lhs](state(tail_contents(owner),j)) + 0)) {
+    assert acc(Tail(owner)) --* (acc(Source(owner)) && source_contents(owner) == old[lhs](tail_contents(owner)));
+    assert (forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> acc(Element(j, initial[j]))) --*
+      ((forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> acc(Element(j, initial[j]))) &&
+       (forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> state(initial,j) == old[lhs](state(initial,j))));
+    apply acc(Tail(owner)) --* (acc(Source(owner)) && source_contents(owner) == old[lhs](tail_contents(owner)));
+    assert forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> acc(Element(j, initial[j]));
+    apply (forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> acc(Element(j, initial[j]))) --*
+      ((forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> acc(Element(j, initial[j]))) &&
+       (forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> state(initial,j) == old[lhs](state(initial,j))));
+  }
+  assert acc(Tail(owner));
+  assert forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> acc(Element(j, initial[j]));
+  // CONSISTENCY_CHECK
+}

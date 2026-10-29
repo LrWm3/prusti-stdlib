@@ -2282,6 +2282,40 @@ prefix resource-state proof is accepted yet. All these focused verifier runs
 use fresh targets, disabled caching, overflow/panic checks, a 600-second whole
 program limit and 30-second solver time bounds; helpers are verified too.
 
+
+Splitting the prefix/tail quantifiers does not resolve the value proof: build
+177 fails with an internal `application.precondition:insufficient.permission`
+at the restoration annotation (461.23 seconds). Build 179 captures the restored
+storage and the two shallow sequences in `let` bindings, but the full value
+probe reaches the runner's 720-second deadline. Neither is accepted. The
+identity positive and false control still pass with build 179 (295.14 and
+148.06 seconds, plus Rust/runtime checks). Its broader iterator spec-library
+and retained owned-expiry rejection also pass (322.23 and 33.98 seconds,
+`target/stdlib-im5-library180-iterator-spec-logs`), using the existing default
+solver resource bounds and a 900-second program limit.
+
+The checked [joint resource wand model](prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/joint_resource_wand.vpr)
+is a smaller constructor-stage diagnostic. It packages storage and referent
+identity wands, composes them into one obligation with an antecedent-state
+relation, and verifies that the real tail and its referent permissions remain
+available afterward. All bodies are checked, with no added axioms or
+assumptions. The [runner](scripts/test_stdlib_iterator_resource_wand.py) verifies
+the positive and rejects both an incorrect state increment and `false` after
+packaging. All three pass in one fresh run (12.75, 12.81, and 11.32 seconds,
+`target/stdlib-im5-joint-resource-wand-logs`; Silicon `6b540aa4`, 180-second
+program limit, 30-second solver time bounds). Reproduce with
+`./x.py exec python3 scripts/test_stdlib_iterator_resource_wand.py`. This
+establishes the small composition, not a complete Rust loop or IM5 acceptance.
+
+Capturing outer iterator/ghost snapshots in the emitted Rust proof still
+fails to complete its first package within a 240-second diagnostic limit
+(`/tmp/prusti-im5-capture183.log` and `/tmp/prusti-im5-capture184.log`). Those
+experiments verify only `m_visit` and are not acceptance runs. Build 185 instead
+captures the checked aggregate resource-state observers before comparing
+prefix and suffix sequences, so the quantified relation itself reads no heap.
+Its full Rust value probe is pending; do not promote the four-argument summary
+or final-reference-value support until that positive and its controls pass.
+
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification
 suites at acceptance. Run PCG shape tests and the numbered corpus whenever

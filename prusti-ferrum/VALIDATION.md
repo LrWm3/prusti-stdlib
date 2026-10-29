@@ -36,10 +36,20 @@ smoke ran four independent service starts and eight requests with caching off;
 all completed and emitted the opt-in phase events. It ran on a loaded host and
 does not establish a speedup or a detailed solver-time split.
 
-The adapter now pins Ferrum `dfbb28053422681cf39d3af8213a8753d076dd06` and passes
-`--logLevel ERROR` to both native Ferrum and JVM Silicon. Ferrum now defaults to
-INFO and supports explicit INFO/ERROR; reporter events and verification failures
-remain independent of that filter. This update carries owned strict-operator
-returns, runtime guard fallback and typed callback/cleanup error fixes. The
-iterator results above remain the recorded earlier checkpoint; this pin change
-does not claim a fresh full iterator matrix or measured verification speedup.
+The adapter now pins Ferrum `afdf24ddba1516a7987a17d43e5090b8725b6980` and passes
+`--logLevel ERROR` to both native Ferrum and JVM Silicon. This checkpoint adds
+owned Let, strict-operator, field, domain/backend and CurrentPerm argument returns,
+fixes mask-alias declaration replay between workers, and preserves warning
+categories, occurrence timing and positions. It rejects options that disable the
+global declarations required by branch replay. The lockfile updates libc from
+0.2.176 to the Ferrum Unix logger's required 0.2.191; other registry versions stay
+unchanged.
+
+Both the native-only `prusti-server` check and the full `prusti --features ferrum`
+check (native and JVM adapters together) pass on nightly-2026-08-15. Ferrum's
+checkpoint passes 215 library tests (nine ignored), 18 real-Z3 CLI continuation
+regressions and focused warning/configuration checks. The cooperative restoration
+regression and one/two-worker mask fixtures through stdio and linked Z3 4.16 also
+pass. These are build and backend compatibility checks. The iterator results above
+remain the recorded earlier checkpoint; this pin change does not claim a fresh
+full Rust iterator matrix or a measured verification speedup.

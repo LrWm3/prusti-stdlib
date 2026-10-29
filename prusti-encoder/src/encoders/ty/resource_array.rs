@@ -3,7 +3,7 @@ use super::{
     RustTyDecomposition, RustTyNormalized, TySpecifics,
     generics::{GArgsCastEnc, GArgsTyEnc, GenericParams, GenericParamsEnc},
     indexed::{observe_element, quantify_resources},
-    resource_collection::ResourceCollectionEnc,
+    resource_collection::{ResourceCollectionEnc, ResourceCollectionTask},
     resource_conversion::ResourceConversionEnc,
     resources::ResourceUse,
     use_pure::TyUsePureEnc,
@@ -59,7 +59,8 @@ impl TaskEncoder for ResourceArrayEnc {
         };
         let element = data.decompose_normalize(task.args);
         let conversion = deps.require_dep::<ResourceConversionEnc>(element)?;
-        let collection = deps.require_dep::<ResourceCollectionEnc>(element)?;
+        let collection =
+            deps.require_dep::<ResourceCollectionEnc>(ResourceCollectionTask::aggregate(element))?;
         let pure = deps.require_dep::<TyUsePureEnc>(*task)?;
         let resource = ResourceUse::new(deps, *task)?;
         let params = deps.require_dep::<GenericParamsEnc>(task.args.context())?;

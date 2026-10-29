@@ -9,7 +9,7 @@ use super::{
     generics::{GArgCaster, GArgsCastEnc, GArgsTyEnc},
     indexed::IndexedResources,
     resource_array::{ResourceArray, ResourceArrayEnc},
-    resource_collection::{ResourceCollection, ResourceCollectionEnc},
+    resource_collection::{ResourceCollection, ResourceCollectionEnc, ResourceCollectionTask},
     resources::{ResourceUse, unit_metadata},
     use_impure::{TyUseImpure, TyUseImpureEnc},
     use_pure::{TyUsePure, TyUsePureArray, TyUsePureEnc, TyUsePureField, TyUsePureMutRef},
@@ -567,7 +567,9 @@ impl TaskEncoder for ResourceConversionEnc {
             }
             TySpecifics::ArrayLike(data) => {
                 let element = data.0.decompose_normalize(task.args);
-                let conversion = deps.require_dep::<ResourceCollectionEnc>(element)?;
+                let conversion = deps.require_dep::<ResourceCollectionEnc>(
+                    ResourceCollectionTask::aggregate(element),
+                )?;
                 let usize_decomp =
                     vir::with_vcx(|vcx| RustTyDecomposition::from_prim_ty(vcx.tcx().types.usize));
                 let usize_ty = deps.require_dep::<TyUsePureEnc>(usize_decomp)?;

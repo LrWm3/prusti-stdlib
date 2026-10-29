@@ -2037,6 +2037,28 @@ bring that experimental native framing gate to four checks
 (`target/stdlib-im4-native136-iterator-spec-logs`). The regular suite and library
 validation of the promoted native contracts are still in progress.
 
+Collection conversion now has two checked proof modes. Lifetime-resource
+boundaries use pointwise state preservation and canonical lookup triggers;
+whole-value array conversions keep the aggregate observer proof. Pointwise
+conversion recursively folds/unfolds each actual resource and proves the
+observed state unchanged. It does not ask the solver to equate unused whole
+heap maps. The aggregate mode retains the earlier direct sequence equality
+proof rather than also transporting a second pointwise observer contract.
+Every generated observer and conversion body remains verified.
+
+Both native restoration positives and all four exact-diagnostic controls
+passed with the pointwise proof (build 123); the universal reborrow positive
+and false control also pass all four checks
+(`target/stdlib-im4-universal123-iterator-spec-logs`). With the separate aggregate
+proof in build 137, direct arrays, generic identity, and initial/final
+array-state restoration pass using the original resource bounds (89.66s,
+567.86s, and 479.81s respectively,
+`target/stdlib-im4-aggregate137-iterator-spec-logs`). These timings retain a
+proof-performance concern; the remaining paired array checks are in progress.
+The complete cross-crate resource suite passes all 23 checks, including its
+library, associated types, constructors, nested references, and wrong-state
+controls (`target/stdlib-im4-resources138-resources-spec-logs`).
+
 The first step is a prerequisite for the others: adding an abstract predicate
 only to call-site contracts would not establish that a generic implementation
 actually preserves it.
@@ -2100,6 +2122,33 @@ missing owner permission, and executable observation. Logs are in
 `target/stdlib-im5-observer-final-iterator-logs`, and
 `target/stdlib-im5-observer-executable-iterator-logs`. The remaining IM5 gate
 still requires generic/native loops, Vec views, and reference-bearing wrappers.
+
+The first combined native-reference probe now reaches loop-summary selection:
+`body_restore_prefix!` rejects the loop because more than one restoration edge
+mentions the iterator (`target/stdlib-im5-loop140-iterator-spec-logs`). Its Rust
+and runtime checks pass. The existing annotation summarizes outer slice storage;
+reference-containing elements add a distinct resource-restoration stage. This
+is not repaired by selecting an arbitrary edge or weakening the uniqueness
+check.
+
+The next implementation steps are:
+
+1. Identify the unique outer-storage edge by its source and keep the additional
+   element-resource edges explicit. Preserve their checked call conversions
+   when packaging/applying retained obligations; an invariant alone must not
+   create a converted resource group.
+2. Extend the prefix summary with a separate `Seq<ResourceState>` captured
+   while each yielded element is accessible. Its length must match the shallow
+   slot prefix. A saved `Seq<T>` continues to represent slot identities only.
+3. Attach the value concatenation relation to storage restoration and the
+   per-index referent-state relation to the resource-restoration stage. Check
+   each entry/iteration package with disjoint prefix, active-yield, and tail
+   permissions. Start with before-next annotations and reference updates;
+   replacement, live-yield annotations, and Vec ownership require their own
+   gates.
+4. Verify symbolic full and partial traversals, untouched suffixes, empty
+   inputs, incorrect prefix/suffix states, and a false-after-traversal control
+   before combining wrappers, separate crates, and Vec views.
 
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification

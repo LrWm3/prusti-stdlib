@@ -12,13 +12,35 @@ use vir::{CastType, MethodIdn};
 
 type Arguments = (vir::Seq, vir::Int, vir::ManyTyVal, vir::ManyCSnap);
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct ResourceCollectionTask<'vir> {
+    element: RustTyDecomposition<'vir>,
+    aggregate: bool,
+}
+
+impl<'vir> ResourceCollectionTask<'vir> {
+    pub fn pointwise(element: RustTyDecomposition<'vir>) -> Self {
+        Self {
+            element,
+            aggregate: false,
+        }
+    }
+
+    pub fn aggregate(element: RustTyDecomposition<'vir>) -> Self {
+        Self {
+            element,
+            aggregate: true,
+        }
+    }
+}
+
 pub(crate) struct ResourceCollectionEnc;
 #[derive(Clone)]
 pub(crate) struct ResourceCollection<'vir> {
     pack: MethodIdn<'vir, Arguments>,
     unpack: MethodIdn<'vir, Arguments>,
     params: GenericParams<'vir>,
-    raw_sequence: vir::FunctionIdn<'vir, Arguments, vir::Seq>,
+    raw_sequence: Option<vir::FunctionIdn<'vir, Arguments, vir::Seq>>,
     element_state: ResourceElementState<'vir>,
 }
 impl<'vir> ResourceCollection<'vir> {
@@ -34,7 +56,9 @@ impl<'vir> ResourceCollection<'vir> {
         sequence: vir::ExprGenSeq<'vir, Curr, Next>,
     ) -> vir::ExprGenSeq<'vir, Curr, Next> {
         vir::with_vcx(|vcx| {
-            self.raw_sequence.call()(
+            self.raw_sequence
+                .expect("aggregate resource collection observer")
+                .call()(
                 sequence,
                 vcx.mk_uint::<0>().lazy(),
                 vcx.alloc_slice(
@@ -80,14 +104,8 @@ impl<'vir> ResourceCollection<'vir> {
         })
     }
 }
-impl TaskEncoder for ResourceCollectionEnc {
-    task_encoder::encoder_cache!(ResourceCollectionEnc);
-    const ENCODER_NAME: &'static str = "indexed resource conversion encoder";
-    type TaskDescription<'vir> = RustTyDecomposition<'vir>;
-    type OutputFullDependency<'vir> = ResourceCollection<'vir>;
-    type OutputFullLocal<'vir> = (Vec<vir::Function<'vir>>, Vec<vir::Method<'vir>>);
-    type EncodingError = String;
-    fn task_to_key<'vir>(task: &Self::TaskDescription<'vir>) -> Self::TaskKey<'vir> {
+impl ResourceCollectionEnc {
+    fn normalize_element<'vir>(task: &RustTyDecomposition<'vir>) -> RustTyDecomposition<'vir> {
         vir::with_vcx(|vcx| {
             // A concrete element's resource representation does not depend on
             // its source lifetime or unrelated enclosing const/type parameters.
@@ -115,6 +133,21 @@ impl TaskEncoder for ResourceCollectionEnc {
             }
         })
     }
+}
+
+impl TaskEncoder for ResourceCollectionEnc {
+    task_encoder::encoder_cache!(ResourceCollectionEnc);
+    const ENCODER_NAME: &'static str = "indexed resource conversion encoder";
+    type TaskDescription<'vir> = ResourceCollectionTask<'vir>;
+    type OutputFullDependency<'vir> = ResourceCollection<'vir>;
+    type OutputFullLocal<'vir> = (Vec<vir::Function<'vir>>, Vec<vir::Method<'vir>>);
+    type EncodingError = String;
+    fn task_to_key<'vir>(task: &Self::TaskDescription<'vir>) -> Self::TaskKey<'vir> {
+        ResourceCollectionTask {
+            element: Self::normalize_element(&task.element),
+            aggregate: task.aggregate,
+        }
+    }
     fn describe_error(error: String) -> String {
         error
     }
@@ -123,6 +156,8 @@ impl TaskEncoder for ResourceCollectionEnc {
         deps: &mut TaskEncoderDependencies<'vir, Self>,
     ) -> EncodeFullResult<'vir, Self> {
         deps.emit_output_ref(*task, ())?;
+        let aggregate = task.aggregate;
+        let task = &task.element;
         deps.require_ref::<super::resources::ResourceSequenceEnc>(())?;
         let conversion = deps.require_dep::<ResourceConversionEnc>(*task)?;
         if !conversion.supports_indexed_resources() {
@@ -160,11 +195,19 @@ impl TaskEncoder for ResourceCollectionEnc {
                 vcx.mk_local_decl("conversion_initial_state", vcx.mk_ty_seq(state_type()));
             let frame = vcx.mk_local_ex(frame_decl);
             let pack = MethodIdn::<Arguments>::new(
-                vir::vir_format_identifier!(vcx, "resource_pack_{suffix:x}"),
+                vir::vir_format_identifier!(
+                    vcx,
+                    "resource_pack_{}{suffix:x}",
+                    if aggregate { "aggregate_" } else { "" }
+                ),
                 arity,
             );
             let unpack = MethodIdn::<Arguments>::new(
-                vir::vir_format_identifier!(vcx, "resource_unpack_{suffix:x}"),
+                vir::vir_format_identifier!(
+                    vcx,
+                    "resource_unpack_{}{suffix:x}",
+                    if aggregate { "aggregate_" } else { "" }
+                ),
                 arity,
             );
             let raw_sequence = vir::FunctionIdn::<Arguments, vir::Seq>::new(
@@ -172,13 +215,6 @@ impl TaskEncoder for ResourceCollectionEnc {
                 arity,
                 vcx.mk_ty_seq(state_type()),
             );
-            let group_sequence = vir::FunctionIdn::<Arguments, vir::Seq>::new(
-                vir::vir_format_identifier!(vcx, "resource_group_sequence_{suffix:x}"),
-                arity,
-                vcx.mk_ty_seq(state_type()),
-            );
-            let observed_group =
-                |index| group_sequence.call()(seq, index, params.ty_exprs(), params.const_exprs());
             let sequence_state = |group: bool, index| {
                 if group {
                     resource.sequence_state(seq, index)
@@ -188,7 +224,11 @@ impl TaskEncoder for ResourceCollectionEnc {
             };
             let state = |group: bool, index| {
                 if group {
-                    resource.sequence_element_state(seq, index)
+                    if aggregate {
+                        element_state.observe_group(seq, index)
+                    } else {
+                        resource.sequence_element_state(seq, index)
+                    }
                 } else {
                     element_state.observe(seq, index)
                 }
@@ -216,7 +256,21 @@ impl TaskEncoder for ResourceCollectionEnc {
             let variables = vcx.alloc_slice(&[binder.as_dyn()]);
             let range = |lo: vir::ExprInt<'vir>| vir::expr! { ((lo) <= (j)) && ((j) < (length)) };
             let resources = |group, lo| {
-                quantify_resources(vcx, variables, &[], range(lo), permission(group, j))
+                quantify_resources(
+                    vcx,
+                    variables,
+                    // Observe the same lookup when checking an element and
+                    // when instantiating its quantified permission. Inferred
+                    // triggers can retain a concrete snapshot projection that
+                    // disappears after constructor normalization.
+                    if aggregate {
+                        &[]
+                    } else {
+                        vcx.alloc_slice(&[vcx.mk_trigger(&[raw_element(j).as_dyn()])])
+                    },
+                    range(lo),
+                    permission(group, j),
+                )
             };
             // Array snapshots store generic elements; retain their concrete representation
             // identity explicitly when the element has been instantiated.
@@ -233,7 +287,11 @@ impl TaskEncoder for ResourceCollectionEnc {
                     // observes an element. Inferred constructor/cast triggers
                     // may disappear while the solver normalizes snapshots,
                     // hiding the recursively established suffix typing fact.
-                    vcx.alloc_slice(&[vcx.mk_trigger(&[raw_element(j).as_dyn()])]),
+                    if aggregate {
+                        &[]
+                    } else {
+                        vcx.alloc_slice(&[vcx.mk_trigger(&[raw_element(j).as_dyn()])])
+                    },
                     vir::expr! { ([range(lo)]) ==> ([normalization(j)]) },
                 )
             };
@@ -263,64 +321,22 @@ impl TaskEncoder for ResourceCollectionEnc {
                 vcx.alloc_slice(&[vcx.mk_trigger(&[result_element.as_dyn()])]),
                 vir::expr! { (((zero) <= (j)) && ((j) < (extent))) ==> ((result_element) == (observed)) },
             );
-            functions.push(vcx.opaque_function(vcx.mk_function(
-                raw_sequence,
-                args,
-                vcx.alloc_slice(&[
-                    vir::expr! { ((zero) <= (i)) && ((i) <= (length)) },
-                    resources(false, i),
-                ]),
-                vcx.alloc_slice(&[
-                    vcx.mk_eq_expr(vcx.mk_collection_len_expr(result), extent),
-                    elements,
-                ]),
-                None,
-                Some(sequence_body),
-            )));
-            // This observer specializes the aggregate to one finite element
-            // shape. Its pointwise contract does not participate in the
-            // recursive global observer's collection/type dependency cycle.
-            let offset = vcx
-                .mk_bin_op_expr(vir::BinOpKind::Sub, j, i)
-                .downcast_ty::<vir::Int>();
-            let group_element = state(true, j);
-            let group_elements = |values| {
-                vcx.mk_forall_expr(
-                    variables,
-                    vcx.alloc_slice(&[vcx.mk_trigger(&[group_element.as_dyn()])]),
-                    vir::expr! { ([range(i)]) ==> ((group_element) ==
-                    ([vcx.mk_seq_index_expr(values, offset).downcast_ty::<vir::CSnap>()])) },
-                )
-            };
-            let known_decl = vcx.mk_local_decl("conversion_known_group", result.ty());
-            let known = vcx.mk_local_ex(known_decl);
-            let group_body = vcx.mk_let_expr(
-                known_decl,
-                vcx.reveal_function(sequence_state(true, i)),
-                vcx.mk_ternary_expr(
-                    vcx.mk_eq_expr(i, length),
-                    known,
-                    vcx.mk_seq_concat_expr(
-                        vcx.mk_seq_literal_expr(vcx.alloc_slice(&[state(true, i)]), state_type()),
-                        observed_group(next),
-                    ),
-                ),
-            );
-            functions.push(vcx.opaque_function(vcx.mk_function(
-                group_sequence,
-                args,
-                vcx.alloc_slice(&[
-                    vir::expr! { ((zero) <= (i)) && ((i) <= (length)) },
-                    resources(true, i),
-                ]),
-                vcx.alloc_slice(&[
-                    vcx.mk_eq_expr(result, sequence_state(true, i)),
-                    vcx.mk_eq_expr(vcx.mk_collection_len_expr(result), extent),
-                    group_elements(result),
-                ]),
-                None,
-                Some(group_body),
-            )));
+            if aggregate {
+                functions.push(vcx.opaque_function(vcx.mk_function(
+                    raw_sequence,
+                    args,
+                    vcx.alloc_slice(&[
+                        vir::expr! { ((zero) <= (i)) && ((i) <= (length)) },
+                        resources(false, i),
+                    ]),
+                    vcx.alloc_slice(&[
+                        vcx.mk_eq_expr(vcx.mk_collection_len_expr(result), extent),
+                        elements,
+                    ]),
+                    None,
+                    Some(sequence_body),
+                )));
+            }
             let mut methods = Vec::new();
             // Unfold these recursive observers only in the conversion proof.
             // Client frames use their checked contracts, preventing unrelated
@@ -332,6 +348,81 @@ impl TaskEncoder for ResourceCollectionEnc {
                 let target = packing;
                 let saved_decl = vcx.mk_local_decl("conversion_saved_state", state_type());
                 let saved = vcx.mk_local_ex(saved_decl);
+                if !aggregate {
+                    // A lifetime-resource boundary needs elementwise preservation.
+                    // Comparing aggregate observers additionally forces Silicon to
+                    // equate whole quantified heap maps on each recursive call.
+                    // Keep that stronger contract for whole-value array conversions.
+                    let mut body = vec![vcx.mk_local_decl_stmt(saved_decl, Some(state(source, i)))];
+                    if !packing {
+                        let vir::ExprKindData::PredicateApp(wrapper) = permission(true, i).kind
+                        else {
+                            unreachable!()
+                        };
+                        let vir::ExprKindData::PredicateApp(group) =
+                            resource.apply_generic(raw_element(i), unit).kind
+                        else {
+                            unreachable!()
+                        };
+                        body.push(vcx.mk_assert_stmt(vcx.mk_unfolding_expr(
+                            wrapper,
+                            vcx.mk_unfolding_expr(group, normalization(i)),
+                        )));
+                    }
+                    body.extend(conversion.indexed_statements(element(i), i, packing));
+                    body.push(vcx.mk_assert_stmt(vcx.mk_eq_expr(state(target, i), saved)));
+                    body.push(
+                        (if packing { pack } else { unpack })(
+                            seq,
+                            next,
+                            params.ty_exprs(),
+                            params.const_exprs(),
+                        )
+                        .alloc(),
+                    );
+                    body.push(vcx.mk_assert_stmt(vcx.mk_eq_expr(state(target, i), saved)));
+                    let statements = [vcx.mk_if_stmt(
+                        vir::expr! { (i) < (length) },
+                        vcx.alloc_slice(&body),
+                        &[],
+                    )];
+                    let block = vcx.mk_cfg_block(
+                        &vir::CfgBlockLabelData::Start,
+                        &[],
+                        vcx.alloc_slice(&statements),
+                        &vir::TerminatorStmtGenData::Exit,
+                    );
+                    let access = super::indexed::observe_element(raw_element(j), j);
+                    let posts = [
+                        typed(i),
+                        resources(target, i),
+                        vcx.mk_forall_expr(
+                            variables,
+                            vcx.alloc_slice(&[
+                                vcx.mk_trigger(&[access.as_dyn()]),
+                                vcx.mk_trigger(&[state(target, j).as_dyn()]),
+                            ]),
+                            vir::expr! { ([range(i)]) ==> (([state(target, j)]) ==
+                            ([vcx.mk_old_expr(state(source, j))])) },
+                        ),
+                    ];
+                    let mut pres = vec![
+                        vir::expr! { ((zero) <= (i)) && ((i) <= (length)) },
+                        resources(source, i),
+                    ];
+                    if packing {
+                        pres.push(typed(i));
+                    }
+                    methods.push(vcx.mk_method(
+                        if packing { pack } else { unpack },
+                        (sequence, start, params.ty_decls(), params.const_decls()),
+                        &[],
+                        vcx.alloc_slice(&pres),
+                        vcx.alloc_slice(&posts),
+                        Some(vcx.alloc_slice(&[block])),
+                    ));
+                    continue;
+                }
                 let tail_decl =
                     vcx.mk_local_decl("conversion_saved_tail", vcx.mk_ty_seq(state_type()));
                 let tail = vcx.mk_local_ex(tail_decl);
@@ -379,61 +470,28 @@ impl TaskEncoder for ResourceCollectionEnc {
                 body.push(
                     vcx.mk_assert_stmt(vcx.mk_eq_expr(revealed_sequence_state(target, next), tail)),
                 );
-                let initial = vcx.mk_old_expr(if packing {
-                    sequence_state(false, i)
-                } else {
-                    observed_group(i)
-                });
-                let group_decl = vcx.mk_local_decl("conversion_group_elements", result.ty());
-                let mut statements = vec![];
-                if !packing {
-                    statements.push(vcx.mk_local_decl_stmt(group_decl, Some(observed_group(i))));
-                    statements
-                        .push(vcx.mk_assert_stmt(group_elements(vcx.mk_local_ex(group_decl))));
-                }
-                statements.extend([
+                let statements = vcx.alloc_slice(&[
                     vcx.mk_local_decl_stmt(frame_decl, Some(revealed_sequence_state(source, i))),
-                    // Establish the pre-state relation while its complete
-                    // quantified footprint is still available.
-                    vcx.mk_assert_stmt(vcx.mk_eq_expr(frame, initial)),
                     vcx.mk_if_stmt(vir::expr! { (i) < (length) }, vcx.alloc_slice(&body), &[]),
                     // Retain the aggregate equality as a proof fact before
                     // checking pointwise observations of the completed state.
                     vcx.mk_assert_stmt(vcx.mk_eq_expr(revealed_sequence_state(target, i), frame)),
                 ]);
-                if packing {
-                    statements.push(vcx.mk_local_decl_stmt(group_decl, Some(observed_group(i))));
-                    statements
-                        .push(vcx.mk_assert_stmt(group_elements(vcx.mk_local_ex(group_decl))));
-                    statements.push(vcx.mk_assert_stmt(vcx.mk_eq_expr(observed_group(i), frame)));
-                }
                 let block = vcx.mk_cfg_block(
                     &vir::CfgBlockLabelData::Start,
                     &[],
-                    vcx.alloc_slice(&statements),
+                    statements,
                     &vir::TerminatorStmtGenData::Exit,
                 );
                 // Describe preservation directly in the method's pre-state.
                 // Passing the same heap-dependent observer as an argument and
                 // a precondition made callers prove equality across the
                 // permission transfer itself, especially inside wand packages.
+                let initial = vcx.mk_old_expr(sequence_state(source, i));
                 let mut posts = vec![
                     typed(i),
                     resources(target, i),
-                    vcx.mk_eq_expr(
-                        if packing {
-                            observed_group(i)
-                        } else {
-                            sequence_state(false, i)
-                        },
-                        initial,
-                    ),
-                    vcx.mk_forall_expr(
-                        variables,
-                        vcx.alloc_slice(&[vcx.mk_trigger(&[state(target, j).as_dyn()])]),
-                        vir::expr! { ([range(i)]) ==> (([state(target, j)]) ==
-                        ([vcx.mk_old_expr(state(source, j))])) },
-                    ),
+                    vcx.mk_eq_expr(sequence_state(target, i), initial),
                 ];
                 let access = super::indexed::observe_element(raw_element(j), j);
                 let observed = if packing {
@@ -487,7 +545,7 @@ impl TaskEncoder for ResourceCollectionEnc {
                     pack,
                     unpack,
                     params,
-                    raw_sequence,
+                    raw_sequence: aggregate.then_some(raw_sequence),
                     element_state,
                 },
             ))
@@ -510,6 +568,7 @@ pub(crate) struct ResourceElementStateEnc;
 #[derive(Clone)]
 pub(crate) struct ResourceElementState<'vir> {
     raw_state: vir::FunctionIdn<'vir, Arguments, vir::CSnap>,
+    group_state: vir::FunctionIdn<'vir, Arguments, vir::CSnap>,
     params: GenericParams<'vir>,
     opaque: Option<ResourceUse<'vir>>,
 }
@@ -523,8 +582,25 @@ impl<'vir> ResourceElementState<'vir> {
         if let Some(resource) = self.opaque {
             return resource.sequence_element_state(sequence, index);
         }
+        self.call(self.raw_state, sequence, index)
+    }
+
+    fn observe_group<Curr, Next>(
+        &self,
+        sequence: vir::ExprGenSeq<'vir, Curr, Next>,
+        index: vir::ExprGenInt<'vir, Curr, Next>,
+    ) -> vir::ExprGenCSnap<'vir, Curr, Next> {
+        self.call(self.group_state, sequence, index)
+    }
+
+    fn call<Curr, Next>(
+        &self,
+        function: vir::FunctionIdn<'vir, Arguments, vir::CSnap>,
+        sequence: vir::ExprGenSeq<'vir, Curr, Next>,
+        index: vir::ExprGenInt<'vir, Curr, Next>,
+    ) -> vir::ExprGenCSnap<'vir, Curr, Next> {
         vir::with_vcx(|vcx| {
-            self.raw_state.call()(
+            function.call()(
                 sequence,
                 index,
                 vcx.alloc_slice(
@@ -557,7 +633,7 @@ impl TaskEncoder for ResourceElementStateEnc {
     type EncodingError = String;
 
     fn task_to_key<'vir>(task: &Self::TaskDescription<'vir>) -> Self::TaskKey<'vir> {
-        ResourceCollectionEnc::task_to_key(task)
+        ResourceCollectionEnc::normalize_element(task)
     }
     fn describe_error(error: String) -> String {
         error
@@ -643,6 +719,7 @@ impl TaskEncoder for ResourceElementStateEnc {
                 functions,
                 ResourceElementState {
                     raw_state,
+                    group_state,
                     params,
                     opaque,
                 },

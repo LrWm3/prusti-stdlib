@@ -4,7 +4,7 @@ use super::{
     RustTyDecomposition, RustTyNormalized, TySpecifics,
     array_typing::{ArrayTyping, ArrayTypingEnc},
     generics::{GArgCaster, GArgsCastEnc, GArgsTyEnc},
-    resource_collection::{ResourceCollection, ResourceCollectionEnc},
+    resource_collection::{ResourceCollection, ResourceCollectionEnc, ResourceCollectionTask},
     resource_conversion::{ResourceConversion, ResourceConversionEnc},
     resources::unit_metadata,
     use_impure::{TyUseImpure, TyUseImpureEnc},
@@ -359,7 +359,9 @@ impl TaskEncoder for ResourceBoundaryEnc {
                         ))?,
                         usize_ty,
                         typing: deps.require_dep::<ArrayTypingEnc>(actual)?,
-                        collection: deps.require_dep::<ResourceCollectionEnc>(actual_element)?,
+                        collection: deps.require_dep::<ResourceCollectionEnc>(
+                            ResourceCollectionTask::pointwise(actual_element),
+                        )?,
                     }
                 }
             }

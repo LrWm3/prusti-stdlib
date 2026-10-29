@@ -252,20 +252,21 @@ impl TaskEncoder for IndirectPredicatesEnc {
                                     let resources = vcx.mk_conj(&exprs);
                                     let zero = vcx.mk_uint::<0>();
                                     let bounds = vir::expr! { (([zero]) <= (index)) && ((index) < (extent)) };
-                                    let mut triggers = vec![vcx.mk_trigger(&[vcx.mk_seq_index_expr(elements, index)])];
-                                    if fixed_extent.is_some() {
-                                        // Fixed-array indexing may not otherwise create a
-                                        // ground `to_seq` application. Slice wands must
-                                        // instead depend only on the canonical sequence:
-                                        // equal contents can come from distinct slice
-                                        // snapshots, including the iterator's tail.
-                                        triggers.push(vcx.mk_trigger(&[array.index_generic(input.snap.downcast_ty(), index).as_dyn()]));
-                                    }
-                                    quantify_resources(vcx,
+                                    let resources = quantify_resources(vcx,
                                         vcx.alloc_slice(&[index_decl.as_dyn()]),
-                                        vcx.alloc_slice(&triggers),
+                                        vcx.alloc_slice(&[vcx.mk_trigger(&[vcx.mk_seq_index_expr(elements, index)])]),
                                         bounds, resources,
-                                    ).kind
+                                    );
+                                    // Establish a ground canonical sequence even before
+                                    // the first element read. A native array/slice lookup
+                                    // trigger would instead capture the physical snapshot
+                                    // in restoration wands, preventing matching when only
+                                    // their contents are known equal. This length relation
+                                    // already follows from the array-to-sequence axiom.
+                                    vcx.mk_conj(&[
+                                        vcx.mk_eq_expr(vcx.mk_collection_len_expr(elements), extent),
+                                        resources,
+                                    ]).kind
                                 }),
                             ));
                         }

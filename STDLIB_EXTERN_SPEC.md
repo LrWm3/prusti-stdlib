@@ -2006,6 +2006,21 @@ this is not yet acceptance of all native resource frames. Initial/untouched
 referent framing and preservation of the older aggregate-array gates remain
 under investigation before promotion of the native contracts.
 
+Fixed arrays also require restoration to depend only on their canonical
+sequence. Their native lookup trigger caused a symbolic-array identity pledge
+to fail with `wand.not.found`. Indexed resources now retain the existing
+array-to-sequence length equation outside the quantifier. This provides the
+ground sequence term needed for the first native element read, while all
+resource triggers use canonical sequence lookups. The equation follows from
+the existing representation axiom; it grants no additional permission.
+Fixed-array and const-generic arbitrary-index positives and their exact
+wrong-value controls pass all seven checks
+(`target/stdlib-im4-array134-iterator-spec-logs`). The full symbolic generic
+array identity/state/expiry positive also passes with the original resource
+bounds (271.75s, `target/stdlib-im4-aggregate136-iterator-spec-logs`), repairing
+the wand mismatch. These runs include the concurrent metadata normalization
+experiment; complete whole-array regression validation is still pending.
+
 The first step is a prerequisite for the others: adding an abstract predicate
 only to call-site contracts would not establish that a generic implementation
 actually preserves it.

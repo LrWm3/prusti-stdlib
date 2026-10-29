@@ -1,0 +1,40 @@
+// Restore outer storage before the hidden resources that depend on it.
+// A frame in a later wand preserves both permission and snapshot value.
+adt Snap { Num(n: Int); Ptr(r: Ref) }
+field stored: Snap
+predicate slot(r: Ref) { acc(r.stored) }
+function read(r: Ref): Snap requires slot(r) { unfolding slot(r) in r.stored }
+predicate group(s: Snap)
+predicate pair(a: Ref, b: Ref) { slot(a) && slot(b) }
+
+method head(a: Ref, b: Ref)
+  requires pair(a,b)
+  requires group(unfolding pair(a,b) in read(a)) && group(unfolding pair(a,b) in read(b))
+  ensures slot(a) && group(read(a))
+  ensures read(a) == old(unfolding pair(a,b) in read(a))
+  ensures slot(a) --* (pair(a,b) && (unfolding pair(a,b) in read(a)) == old[lhs](read(a)))
+  ensures (group(old(unfolding pair(a,b) in read(a))) && pair(a,b)) --*
+    (group(old(unfolding pair(a,b) in read(a))) && group(old(unfolding pair(a,b) in read(b))) && pair(a,b) && (unfolding pair(a,b) in read(a)) == old[lhs](unfolding pair(a,b) in read(a)) && (unfolding pair(a,b) in read(b)) == old[lhs](unfolding pair(a,b) in read(b)))
+{
+  unfold pair(a,b)
+  var first: Snap := read(a)
+  var second: Snap := read(b)
+  package slot(a) --* (pair(a,b) && (unfolding pair(a,b) in read(a)) == old[lhs](read(a))) { fold pair(a,b) }
+  package (group(first) && pair(a,b)) --* (group(first) && group(second) && pair(a,b) && (unfolding pair(a,b) in read(a)) == old[lhs](unfolding pair(a,b) in read(a)) && (unfolding pair(a,b) in read(b)) == old[lhs](unfolding pair(a,b) in read(b))) {}
+}
+method caller(a: Ref, b: Ref, fresh: Snap)
+  requires pair(a,b)
+  requires group(unfolding pair(a,b) in read(a)) && group(unfolding pair(a,b) in read(b))
+  requires group(fresh)
+{
+  var first: Snap := unfolding pair(a,b) in read(a)
+  var second: Snap := unfolding pair(a,b) in read(b)
+  head(a,b)
+  unfold slot(a)
+  a.stored := fresh
+  fold slot(a)
+  apply slot(a) --* (pair(a,b) && (unfolding pair(a,b) in read(a)) == old[lhs](read(a)))
+  apply (group(first) && pair(a,b)) --* (group(first) && group(second) && pair(a,b) && (unfolding pair(a,b) in read(a)) == old[lhs](unfolding pair(a,b) in read(a)) && (unfolding pair(a,b) in read(b)) == old[lhs](unfolding pair(a,b) in read(b)))
+  assert unfolding pair(a,b) in read(a) == fresh
+  assert group(first) && group(fresh) && group(second)
+}

@@ -1466,6 +1466,29 @@ claims. All ten checks passed (positive 5.24s):
 `target/stdlib-im4-groups-logs`. This is the proof pattern for the pending Rust
 encoder integration, not an implemented cross-crate interface.
 
+A second [checked model](prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/dependent_resources.vpr)
+covers a dependency exposed by integrating opaque groups: the outer storage
+can expire before the resources inside its generic element. Restore the
+storage first; a later resource wand consumes and returns that storage as a
+frame. Its postcondition must preserve the storage snapshot relative to
+`old[lhs]`, since returning the same permission alone loses the value fact.
+The model verifies replacement of the yielded value while retaining the old
+value's separate resource. Five negative controls reject missing outer/inner
+permissions, wrong replacement values, false after restoration, and loss of
+the value frame. All six checks passed:
+`./x.py exec python3 scripts/test_stdlib_dependent_resources.py`, logs in
+`target/stdlib-im4-dependent-logs` (positive 43.77s during concurrent builds;
+the standalone positive previously passed in 9.45s).
+
+The Rust integration is in progress. A full build passes, and the generic
+identity/reborrow probes encode with opaque resources. The slice-head probe
+still fails its package obligation: the outer lifetime's historical graph
+root does not reconstruct the currently expanded slice. The next step is to
+restore physical storage independently, then restore its hidden resource group
+with the proved frame. Dependent wand selection, package scripts, concrete
+conversions, and cross-crate clients must all pass before integrating the PCG
+revision into a completed root milestone.
+
 The first step is a prerequisite for the others: adding an abstract predicate
 only to call-site contracts would not establish that a generic implementation
 actually preserves it.

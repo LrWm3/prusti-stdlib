@@ -594,13 +594,14 @@ impl<'vir> TyUsePureArray<'vir> {
     /// The element snapshot at `index` in its generic (`p_Param`) form, i.e.
     /// without applying the element caster. Use when relating two array-likes
     /// that share the same generic element type, where the concrete conversion
-    /// would be redundant.
+    /// would be redundant. Pure representation axioms must use the native
+    /// lookup, without the marker used by executable resource observations.
     pub fn index_generic<Curr, Next>(
         &self,
         snap: vir::ExprGenCSnap<'vir, Curr, Next>,
         index: vir::ExprGenInt<'vir, Curr, Next>,
     ) -> vir::ExprGenSnap<'vir, Curr, Next> {
-        super::indexed::observe_element(self.pure.index_access.call()(snap, index), index).upcast_ty()
+        self.pure.index_access.call()(snap, index).upcast_ty()
     }
 
     /// The array-like with the given elements (`[a, b, c]`).

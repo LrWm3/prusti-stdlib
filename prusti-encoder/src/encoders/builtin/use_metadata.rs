@@ -198,13 +198,15 @@ impl TaskEncoder for ValueCastAxiomEnc {
             // Compare the elements in their generic (`p_Param`) form: the array and
             // slice share the same element type, so the concrete element conversion
             // would be redundant.
-            let idx_body = vcx.mk_eq_expr(
-                array_pure.index_generic(arr, idx),
-                slice_pure.index_generic(sli, idx),
-            );
+            let array_element = array_pure.index_generic(arr, idx);
+            let slice_element = slice_pure.index_generic(sli, idx);
+            let idx_body = vcx.mk_eq_expr(array_element, slice_element);
             let idx_forall = vcx.mk_forall_expr(
                 vcx.alloc_slice(&[idx_decl]),
-                vcx.alloc_slice(&[vcx.mk_trigger(&[array_pure.index_generic(arr, idx)])]),
+                vcx.alloc_slice(&[
+                    vcx.mk_trigger(&[array_element]),
+                    vcx.mk_trigger(&[slice_element]),
+                ]),
                 idx_body,
             );
             let axiom_expr = vir::expr! {

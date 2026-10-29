@@ -1955,6 +1955,24 @@ experimental frame uses lookup triggers, but the full native run still reports
 a generated conversion helper's observer-permission failure. Native contracts
 and combined prefix loops are not accepted at this checkpoint.
 
+The array-to-slice observation regression is repaired. Its value-preservation
+axiom now matches the native array and slice lookups, without the executable
+resource-observation marker. This changes instantiation, not the equality
+asserted by the axiom. The previously failing observation and all three
+sequence negative controls pass, together with Rust/runtime checking (six
+checks in `target/stdlib-im4-unsize106-sequence-spec-logs`). Array replacement
+and its three negative controls also pass. The separate
+`mut_element_array_pass` fails on its first referent read on both builds 105
+and 106, so that pre-existing indexed-resource regression remains open;
+logs are `target/stdlib-im4-unsize106-iterator-spec-logs` and
+`target/stdlib-im4-array108-baseline-iterator-spec-logs`.
+
+The native holder experiment now has one successful complete verification
+(215.58s, build 106, `target/stdlib-im4-native107-iterator-spec-logs`), including
+the generated conversion helpers. Earlier equivalent runs still fail inside
+those helpers, and the two-reference positive remains unresolved. This single
+successful run does not yet establish a reliable native acceptance gate.
+
 The first step is a prerequisite for the others: adding an abstract predicate
 only to call-site contracts would not establish that a generic implementation
 actually preserves it.

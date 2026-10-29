@@ -1736,6 +1736,16 @@ iterator library bodies verify with the original solver bounds. The full
 library run now reports only the six generic shared/Vec conversion failures
 (`/tmp/prusti-im4-library68-full.log`); these remain an open regression gate.
 
+Directly restored generic inputs now unpack their resource groups using the
+pre-call interior snapshots promised by the method contract. Retained input
+resources still use the post-call heap, as required for an iterator's remaining
+tail. This fixes both shared-iterator library failures and the existing
+`refinement_mutable_pass` client (9.60s). The full build-70 iterator library run
+has four remaining failures, all at owned Vec iterator conversions; its scalar
+and shared iterator bodies pass. Logs: `/tmp/prusti-im4-library70-full.log` and
+`target/stdlib-im4-refinement70-extern-spec-logs`. The independent
+`replace_owned` restoration diagnostic remains open.
+
 The first step is a prerequisite for the others: adding an abstract predicate
 only to call-site contracts would not establish that a generic implementation
 actually preserves it.

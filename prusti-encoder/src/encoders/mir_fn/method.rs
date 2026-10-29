@@ -31,7 +31,9 @@ pub struct MethodCallEncOutput<'vir> {
     output: GArgCaster<'vir, Impure>,
     input_resources: Vec<Option<ResourceBoundary<'vir>>>,
     output_resources: Option<ResourceBoundary<'vir>>,
-    returned_inputs: Vec<Vec<ResourceBoundary<'vir>>>,
+    // The flag distinguishes retained post-call resources from resources
+    // restored at their original input snapshots.
+    returned_inputs: Vec<Vec<(ResourceBoundary<'vir>, bool)>>,
 }
 
 impl<'vir> MethodCallEncOutput<'vir> {
@@ -59,14 +61,20 @@ impl<'vir> MethodCallEncOutput<'vir> {
             args.iter()
                 .zip(&self.returned_inputs)
                 .flat_map(|(arg, conversions)| {
-                    conversions.iter().map(move |conversion| (*arg, conversion))
+                    conversions
+                        .iter()
+                        .map(move |(conversion, post_state)| (*arg, conversion, *post_state))
                 })
-                .flat_map(|(arg, conversion)| {
+                .flat_map(|(arg, conversion, post_state)| {
                     let snapshot = vcx.mk_local_labelled_old_expr(
                         conversion.physical.ref_to_snap(arg),
                         label_pre,
                     );
-                    conversion.at_snapshot(snapshot, false)
+                    if post_state {
+                        conversion.at_snapshot(snapshot, false)
+                    } else {
+                        conversion.at_snapshot_on_heap(snapshot, false, label_pre)
+                    }
                 })
                 .collect::<Vec<_>>()
         });
@@ -179,7 +187,8 @@ impl TaskEncoder for MethodCallEnc {
                             selected: Some(selected),
                         })?;
                     if !boundary.is_empty() {
-                        returned[index].push(boundary);
+                        returned[index]
+                            .push((boundary, outputs.contains(&input.to_function_shape_node())));
                     }
                 }
             }

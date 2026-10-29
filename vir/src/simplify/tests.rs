@@ -460,3 +460,32 @@ fn unchanged_expressions_are_not_reallocated() {
         assert!(Simplifier::new(c.vcx, ctx).simplify(e).is_none());
     });
 }
+
+#[test]
+fn wand_projections_preserve_heap_selection_and_order() {
+    with_ctx(|ctx, c| {
+        let read = c.app("g", &[c.i("x")]);
+        let projected = c.field(c.p(&[read, c.int(0)]), "f0");
+        let lhs = c.bin(And, c.acc("r"), c.acc("s"));
+        let rhs = c.bin(CmpEq, c.old(projected), read);
+        let wand = c.vcx.mk_wand(lhs.inner_cast_ty(), rhs.inner_cast_ty());
+        let normalized = super::simplify(c.vcx, ctx, wand);
+        let expected = c.vcx.mk_wand(
+            lhs.inner_cast_ty(),
+            c.bin(CmpEq, c.old(read), read).inner_cast_ty(),
+        );
+        assert_eq!(format!("{normalized:?}"), format!("{expected:?}"));
+    });
+}
+
+#[test]
+fn wand_projections_keep_reveals() {
+    with_ctx(|ctx, c| {
+        let revealed = c.vcx.reveal_function(c.app("g", &[c.i("x")]));
+        let projected = c.field(c.p(&[c.int(0), revealed]), "f0");
+        let rhs = c.bin(CmpEq, projected, c.int(0));
+        let wand = c.vcx.mk_wand(c.tt().inner_cast_ty(), rhs.inner_cast_ty());
+        let normalized = super::simplify(c.vcx, ctx, wand);
+        assert!(std::ptr::eq(wand, normalized));
+    });
+}

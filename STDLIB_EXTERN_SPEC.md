@@ -1837,6 +1837,28 @@ and wrong pledges, and invalid/nested temporal uses
 the JVM on the native probe, but its expanded expression is still too large;
 this checkpoint does not establish the native restoration value proof.
 
+A restricted constructor/projection normalization now runs uniformly over
+wand declarations, packages, applications, and quantifier triggers. It only
+cancels explicit, type-matched snapshot construction followed by field
+projection; it preserves bindings, temporal labels, permission order, and
+checked reveals. The native holder experiment's raw VIR shrinks from
+31,534,470 to 525,982 bytes, allowing the JVM to construct and verify it.
+All 38 VIR tests and all ten existing `after_call` checks pass
+(`/tmp/prusti-im4-projections89-tests.log`,
+`target/stdlib-im4-projections89-borrow-spec-logs`).
+
+This is a performance checkpoint, not native frame acceptance. The native
+probe now reports `apply.failed:wand.not.found`: comparison of Silver's wand
+structures identifies an entry-heap `old` beneath temporary bindings in the
+head pledge, retained as `old` in the callee but `old[pre2]` in the caller.
+The universal reborrow reaches an ordinary final-value assertion failure
+instead of exhausting AST construction. A scalar loop regression run also
+finds a generated conversion helper's type-preservation failure under
+30-second solver time bounds; that helper's body is identical with and without
+the new normalization. The scalar `false` control still rejects only its
+intended assertion. Temporary expansion, conversion proof stability, native
+resource frames, and the remaining IM gates are still open.
+
 The first step is a prerequisite for the others: adding an abstract predicate
 only to call-site contracts would not establish that a generic implementation
 actually preserves it.

@@ -14,12 +14,15 @@
 //!    not values whose locals a binder (a quantifier or `let`) rebinds,
 //!  - the span of the root of an expression tree is kept, since Prusti
 //!    backtranslates Viper errors through it,
-//!  - quantifier triggers and magic wands are left as encoded.
+//!  - quantifier triggers and magic wands only cancel explicit snapshot
+//!    constructor/projection pairs; their bindings and permission order stay
+//!    as encoded.
 //!
 //! Equations may drop subexpressions together with their well-definedness
 //! checks: Prusti checks all side conditions explicitly in impure code.
 
 mod equations;
+mod projections;
 #[cfg(test)]
 mod tests;
 mod walk;
@@ -108,6 +111,7 @@ pub fn simplify<'vir, 'tcx, T: Foldable<'vir, (), !> + Copy>(
     ctx: &SimplifyCtx<'vir>,
     item: T,
 ) -> T {
+    let item = projections::normalize(vcx, ctx, item);
     let mut s = walk::Simplifier::new(vcx, ctx);
     item.fold_with(&mut walk::Roots(&mut s)).unwrap_or(item)
 }

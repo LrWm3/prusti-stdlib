@@ -63,7 +63,8 @@ impl<'vir> Folder<'vir, (), !> for Roots<'_, '_, 'vir, '_> {
     }
 }
 
-/// Magic wands are left untouched, wherever they occur: Viper matches
+/// After the separate constructor/projection normalization, this traversal
+/// leaves magic wands untouched wherever they occur: Viper matches
 /// packaged wand instances syntactically, and evaluates the heap-dependent
 /// subterms of a wand only when applying it, in the order of its conjuncts,
 /// so moving them around inside a wand changes which permissions are there.

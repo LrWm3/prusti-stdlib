@@ -2021,6 +2021,22 @@ bounds (271.75s, `target/stdlib-im4-aggregate136-iterator-spec-logs`), repairing
 the wand mismatch. These runs include the concurrent metadata normalization
 experiment; complete whole-array regression validation is still pending.
 
+Mutable-reference resource keys now normalize unit pointer metadata by its
+resolved type. This applies both to a concrete use and inside the generic
+resource predicate; non-unit metadata, including a slice's length, keeps its
+original value. Normalizing only the concrete snapshot cast made generic
+return observations well-formed but broke concrete resource folds. The
+consistent normalization verifies untrusted direct and `Option`-wrapped
+generic returns with referent-state preservation, and rejects the unequal
+state control at its postcondition (four checks,
+`target/stdlib-im4-metadata136-iterator-spec-logs`). The full native reference
+framing positive also passes (203.57s), including initial values, an updated
+first referent, and an untouched second referent after iterator expiry; its
+wrong-state assertion is rejected as intended (112.02s). Rust/runtime checks
+bring that experimental native framing gate to four checks
+(`target/stdlib-im4-native136-iterator-spec-logs`). The regular suite and library
+validation of the promoted native contracts are still in progress.
+
 The first step is a prerequisite for the others: adding an abstract predicate
 only to call-site contracts would not establish that a generic implementation
 actually preserves it.

@@ -5,7 +5,7 @@ use vir::CastType;
 use crate::encoders::{
     Pure,
     ty::{
-        LazyRustTy, RustTyDatas,
+        LazyRustTy, RustTyDatas, RustTyDecomposition,
         generics::{GArgs, GArgsCastEnc, GArgsTyEnc, GParams},
     },
 };
@@ -13,7 +13,7 @@ use crate::encoders::{
 use super::{
     TyUseEnc, UseTyDatas,
     data::*,
-    generics::{GArgCaster, GArgsTy},
+    generics::{GArgCaster, GArgsTy, TyExprEnc},
     pure::{PureTyDatas, TyPureEnc, TyPureFieldRef, TyPureRef},
     rust_ty::RustTySpecial,
 };
@@ -96,6 +96,9 @@ pub struct TyUsePureImmRef<'vir> {
 pub struct TyUsePureMutRef<'vir> {
     referent_caster: FieldCaster<'vir>,
     metadata_caster: FieldCaster<'vir>,
+    metadata_type: vir::ExprTyVal<'vir>,
+    unit_metadata_type: vir::ExprTyVal<'vir>,
+    unit_metadata: vir::ExprPSnap<'vir>,
     pure: <PureTyDatas as TyDatas<'vir>>::MutRefData,
 }
 
@@ -235,9 +238,23 @@ impl<'a, 'vir> TyUsePureWalker<'a, 'vir> {
             TySpecifics::MutRef((data, ref_domain)) => {
                 let referent_caster = self.encode_normalized(data.referent, ty.0.params)?;
                 let metadata_caster = self.encode_normalized(data.metadata, ty.0.params)?;
+                let metadata_type = self.deps.require_dep::<TyExprEnc>(
+                    data.metadata.decompose_normalize(self.args),
+                )?;
+                let unit_metadata_type = vir::with_vcx(|vcx| {
+                    self.deps
+                        .require_dep::<TyExprEnc>(RustTyDecomposition::from_ty(
+                            vcx.tcx().types.unit,
+                            GParams::empty(),
+                        ))
+                })?;
+                let unit_metadata = super::resources::unit_metadata(self.deps)?;
                 TySpecifics::mk_mutref(TyUsePureMutRef {
                     referent_caster,
                     metadata_caster,
+                    metadata_type,
+                    unit_metadata_type,
+                    unit_metadata,
                     pure: **ref_domain,
                 })
             }
@@ -483,7 +500,17 @@ impl<'vir> TyUsePureMutRef<'vir> {
         &self,
         snap: vir::ExprGenCSnap<'vir, Curr, Next>,
     ) -> vir::ExprGenPSnap<'vir, Curr, Next> {
-        self.pure.metadata_access.call()(snap)
+        // Canonicalize unit metadata by its type, including in the generic
+        // resource predicate's body. Normalizing only the concrete use's
+        // snapshot cast would leave that body keyed by the unresolved field.
+        // Fat-pointer metadata retains its original value (e.g. slice length).
+        vir::with_vcx(|vcx| {
+            vcx.mk_ternary_expr(
+                vcx.mk_eq_expr(self.metadata_type.lazy(), self.unit_metadata_type.lazy()),
+                self.unit_metadata.lazy(),
+                self.pure.metadata_access.call()(snap),
+            )
+        })
     }
 
     pub fn prim_to_snap<Curr, Next>(

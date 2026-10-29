@@ -1617,11 +1617,41 @@ conditional obligation now reports `obligation might not hold on borrow expiry`
 at the caller instead of an internal error. Native iterator integration remains
 in progress, along with constructor conversions and the Vec resource model.
 
+Generic resource conversion now follows the definition's type constructors.
+At a call to `f<T>(&mut T)`, `f<T>(Wrapper<T>)`, or `f<T>(Option<T>)`, it converts
+only the opaque `T` group and retains the surrounding physical storage.
+Array and slice boundaries recover element type tags with checked recursive
+helpers; slices pass their runtime extent. Reference metadata is preserved,
+and conversion at expiry uses the appropriate pre-call or post-call heap.
+Retained iterator-tail resources are returned before their element predicates,
+so those predicates have permission to read the tail snapshot. A resource-free
+instantiation may omit applying an empty, pledge-free restoration stage only
+when its conversion explicitly establishes an empty resource shape.
+
+Six local constructor clients (three positive and three false controls), their
+three runtime exercises, and the Rust check pass. A separate `no_std` library
+exports `identity_container<T>`; its body, caller update/restoration proof,
+false control, runtime exercise, and Rust check all pass (five checks).
+Logs are in `target/stdlib-im4-constructor58-{iterator,resources}-spec-logs`;
+the corrected Option positive and its false control were rerun separately.
+The seven native scalar early-drop/full-prefix checks also pass with the new
+constructor conversion (`target/stdlib-im4-native56-iterator-spec-logs`).
+The original two-yield mutable-reference write probe now verifies in 153s;
+stronger final-value and negative controls are being checked before promotion.
+
+The symbolic-array positive still passes with the original solver resource
+bounds (126.49s in the concurrent build-58 run). The experimental
+`--proverEnableTimeBounds` setting rejects its package after 106.16s even when
+the emitted program is identical to the earlier passing checkpoint. This is a
+configuration-sensitive proof limitation, not evidence of a constructor
+encoding regression or a Viper bug. Keep the original array settings while
+continuing to improve proof stability.
+
 This is a development checkpoint, not an IM4 acceptance result. Symbolic
-collection conversion for further element shapes, generic parameters nested in argument type constructors,
-collection state transport, native pledges across restoration stages, complete
-diagnostics for unsupported frames, and full regression validation remain
-required. The PCG pointer on this development
+collection conversion for further element shapes, generic parameters nested
+inside collection element constructors, collection state transport, native
+reference-element restoration, Vec ownership, complete diagnostics for
+unsupported frames, and full regression validation remain required. The PCG pointer on this development
 branch is `f610569`; the stable work branch retains the earlier pointer until
 the combined encoder passes its gates.
 

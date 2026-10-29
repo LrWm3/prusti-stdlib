@@ -1181,7 +1181,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             ));
         };
         let extra = self.conditional_pledge_exprs(callee, caller_substs)?;
-        Ok(wands.selected_call_wands(
+        wands.selected_call_wands(
             &wand_args,
             label_pre,
             label_post,
@@ -1189,7 +1189,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             &extra,
             Some(&ids),
             self,
-        ))
+        )
     }
 
     fn pcs_unblock_actions(
@@ -3809,10 +3809,10 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                                 call_ctx,
                                 &[],
                                 self,
-                            );
+                            )?;
                             let stronger = wands.call_wands(
                                 &wand_args, label_pre, label_post, call_ctx, &extra, self,
-                            );
+                            )?;
                             if original.len() != 1 || stronger.len() != 1 {
                                 vcx.emit_early_error(PrustiError::unsupported(
                                     "conditional expiry requires exactly one borrow wand",

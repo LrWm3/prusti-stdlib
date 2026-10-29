@@ -10,7 +10,7 @@ impl<T> [T] {
     #[trusted]
     #[ensures(mut_slice_len(&*mut_iter_tail(&result)) == old(self.len()))]
     #[ensures(mut_slice_contents(&*mut_iter_tail(&result)) == old(Seq::from_slice(&*self)))]
-    #[after_expiry(Seq::from_slice(&*self) == before_expiry(mut_slice_contents(&*mut_iter_tail(&result))))]
+    #[after_expiry(self => Seq::from_slice(&*self) == before_expiry(mut_slice_contents(&*mut_iter_tail(&result))))]
     #[ensures(mut_iter_refs(&result).len() == Int::from(old(self.len())))]
     #[ensures(forall(|i: usize| i < old(self.len()) ==>
         mut_ref_shared_same_address(&*mut_iter_refs(&result)[i], old(&self[i]))))]
@@ -32,13 +32,13 @@ impl<'a, T> Iterator for core::slice::IterMut<'a, T> {
         Some(_) => mut_slice_contents(&*mut_iter_tail(&*self)) == old(mut_slice_contents(&*mut_iter_tail(&*self)))[1..],
         None => mut_slice_contents(&*mut_iter_tail(&*self)) == old(mut_slice_contents(&*mut_iter_tail(&*self))),
     })]
-    #[after_expiry(match (old(mut_iter_tail(&*self)), after_call(mut_iter_tail(&*self)), &result) {
+    #[after_expiry(*self => match (old(mut_iter_tail(&*self)), after_call(mut_iter_tail(&*self)), &result) {
         (slice, tail, Some(value)) => mut_slice_contents(&*slice)
             == Seq::single(&*before_expiry(Ghost::new_ref(&**value)))
                 .append(before_expiry(mut_slice_contents(&*tail))),
         _ => true,
     })]
-    #[after_expiry(match (old(mut_iter_tail(&*self)), after_call(mut_iter_tail(&*self)), &result) {
+    #[after_expiry(*self => match (old(mut_iter_tail(&*self)), after_call(mut_iter_tail(&*self)), &result) {
         (slice, tail, None) => mut_slice_contents(&*slice)
             == before_expiry(mut_slice_contents(&*tail)),
         _ => true,
@@ -56,7 +56,7 @@ impl<'a, T> core::iter::IntoIterator for &'a mut [T] {
     #[trusted]
     #[ensures(mut_slice_len(&*mut_iter_tail(&result)) == old(self.len()))]
     #[ensures(mut_slice_contents(&*mut_iter_tail(&result)) == old(Seq::from_slice(&*self)))]
-    #[after_expiry(Seq::from_slice(&*self) == before_expiry(mut_slice_contents(&*mut_iter_tail(&result))))]
+    #[after_expiry(self => Seq::from_slice(&*self) == before_expiry(mut_slice_contents(&*mut_iter_tail(&result))))]
     #[ensures(mut_iter_refs(&result).len() == Int::from(old(self.len())))]
     #[ensures(forall(|i: usize| i < old(self.len()) ==>
         mut_ref_shared_same_address(&*mut_iter_refs(&result)[i], old(&self[i]))))]

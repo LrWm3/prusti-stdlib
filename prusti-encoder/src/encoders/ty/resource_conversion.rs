@@ -54,6 +54,13 @@ enum ConversionKind<'vir> {
 }
 
 impl<'vir> ResourceConversion<'vir> {
+    /// A deliberately conservative test for an empty instantiated group.
+    /// Unknown types and collection ownership must not be inferred empty from
+    /// an absent concrete lifetime projection.
+    pub fn has_trivial_resources(&self) -> bool {
+        matches!(self.kind, ConversionKind::Empty)
+    }
+
     pub fn supports_indexed_resources(&self) -> bool {
         match &self.kind {
             ConversionKind::Array { .. } => false,
@@ -317,11 +324,12 @@ impl<'vir> ResourceConversion<'vir> {
         })
     }
 
-    pub fn at_snapshot(&self, snapshot: vir::ExprSnap<'vir>, pack: bool) -> Vec<vir::Stmt<'vir>> {
-        self.statements(snapshot, self.unit, pack)
-    }
-
-    pub fn at_storage(&self, storage: vir::ExprRef<'vir>, pack: bool) -> Vec<vir::Stmt<'vir>> {
+    pub fn at_storage_with_metadata(
+        &self,
+        storage: vir::ExprRef<'vir>,
+        metadata: vir::ExprPSnap<'vir>,
+        pack: bool,
+    ) -> Vec<vir::Stmt<'vir>> {
         let mut statements = Vec::new();
         if pack
             && let ConversionKind::Array {
@@ -331,7 +339,7 @@ impl<'vir> ResourceConversion<'vir> {
         {
             statements.push(typing.establish(storage));
         }
-        statements.extend(self.statements(self.physical.ref_to_snap(storage), self.unit, pack));
+        statements.extend(self.statements(self.physical.ref_to_snap(storage), metadata, pack));
         statements
     }
 

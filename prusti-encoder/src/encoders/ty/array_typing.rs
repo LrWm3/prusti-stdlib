@@ -1,4 +1,4 @@
-//! Checked recovery of element type tags from owned array storage.
+//! Checked recovery of element type tags from owned array or slice storage.
 use super::{
     RustTyDecomposition, RustTyNormalized, TySpecifics,
     generics::{GArgsCastEnc, GArgsTyEnc, GenericParams, GenericParamsEnc},
@@ -9,7 +9,15 @@ use std::hash::{Hash, Hasher};
 use task_encoder::{EncodeFullResult, TaskEncoder, TaskEncoderDependencies};
 use vir::CastType;
 
-type Arguments = (vir::Ref, vir::Int, vir::ManyTyVal, vir::ManyCSnap);
+// Only slices need an explicit extent. Fixed arrays retain their const-generic
+// bound in both the helper signature and its checked recursive body.
+type Arguments = (
+    vir::Ref,
+    vir::Int,
+    vir::ManyInt,
+    vir::ManyTyVal,
+    vir::ManyCSnap,
+);
 
 pub(crate) struct ArrayTypingEnc;
 
@@ -17,14 +25,28 @@ pub(crate) struct ArrayTypingEnc;
 pub(crate) struct ArrayTyping<'vir> {
     method: vir::MethodIdn<'vir, Arguments>,
     params: GenericParams<'vir>,
+    extent: Option<vir::ExprInt<'vir>>,
 }
 
 impl<'vir> ArrayTyping<'vir> {
     pub fn establish(&self, storage: vir::ExprRef<'vir>) -> vir::Stmt<'vir> {
+        self.establish_extent(storage, self.extent.expect("fixed array extent"))
+    }
+
+    pub fn establish_extent(
+        &self,
+        storage: vir::ExprRef<'vir>,
+        extent: vir::ExprInt<'vir>,
+    ) -> vir::Stmt<'vir> {
         vir::with_vcx(|vcx| {
             (self.method)(
                 storage,
                 vcx.mk_uint::<0>(),
+                vcx.alloc_slice(&if self.extent.is_none() {
+                    vec![extent]
+                } else {
+                    vec![]
+                }),
                 self.params.ty_exprs(),
                 self.params.const_exprs(),
             )
@@ -51,7 +73,6 @@ impl TaskEncoder for ArrayTypingEnc {
         let TySpecifics::ArrayLike(data) = &task.ty.specifics else {
             unreachable!()
         };
-        assert!(!data.slice);
         let element = data.decompose_normalize(task.args);
         let physical = deps.require_dep::<TyUseImpureEnc>(*task)?;
         let pure = deps.require_dep::<TyUsePureEnc>(*task)?;
@@ -74,21 +95,36 @@ impl TaskEncoder for ArrayTypingEnc {
                 (
                     vir::TYPE_REF,
                     vir::TYPE_INT,
+                    vcx.alloc_slice(&if data.slice {
+                        vec![vir::TYPE_INT]
+                    } else {
+                        vec![]
+                    }),
                     params.ty_args(),
                     params.const_args(),
                 ),
             );
             let storage_decl = vcx.mk_local_decl("typing_storage", vir::TYPE_REF);
             let start_decl = vcx.mk_local_decl("typing_start", vir::TYPE_INT);
+            let extent_decl = vcx.mk_local_decl("typing_extent", vir::TYPE_INT);
             let storage = vcx.mk_local_ex(storage_decl);
             let start = vcx.mk_local_ex(start_decl);
             let snapshot = physical.ref_to_snap(storage).downcast_ty::<vir::CSnap>();
             let before_decl = vcx.mk_local_decl("typing_before", snapshot.ty());
             let before = vcx.mk_local_ex(before_decl);
-            let extent = usize_ty
-                .expect_primitive()
-                .snap_to_prim(args.get_const()[0])
-                .downcast_ty::<vir::Int>();
+            let fixed_extent = (!data.slice).then(|| {
+                usize_ty
+                    .expect_primitive()
+                    .snap_to_prim(args.get_const()[0])
+                    .downcast_ty::<vir::Int>()
+            });
+            let extent = fixed_extent.unwrap_or_else(|| vcx.mk_local_ex(extent_decl));
+            let extent_args = vcx.alloc_slice(&if data.slice { vec![extent] } else { vec![] });
+            let extent_decls = vcx.alloc_slice(&if data.slice {
+                vec![extent_decl]
+            } else {
+                vec![]
+            });
             let zero = vcx.mk_uint::<0>();
             let binder = vcx.mk_local_decl("typing_index", vir::TYPE_INT);
             let j = vcx.mk_local_ex(binder);
@@ -112,6 +148,7 @@ impl TaskEncoder for ArrayTypingEnc {
                 (method)(
                     storage,
                     (vir::expr! { (start) + ([vcx.mk_uint::<1>()]) }).downcast_ty(),
+                    extent_args,
                     params.ty_exprs(),
                     params.const_exprs(),
                 )
@@ -143,6 +180,7 @@ impl TaskEncoder for ArrayTypingEnc {
                     (
                         storage_decl,
                         start_decl,
+                        extent_decls,
                         params.ty_decls(),
                         params.const_decls(),
                     ),
@@ -158,7 +196,11 @@ impl TaskEncoder for ArrayTypingEnc {
                     ]),
                     Some(vcx.alloc_slice(&[block])),
                 ),
-                ArrayTyping { method, params },
+                ArrayTyping {
+                    method,
+                    params,
+                    extent: fixed_extent,
+                },
             ))
         })
     }

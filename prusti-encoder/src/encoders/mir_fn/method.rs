@@ -1,7 +1,9 @@
-use crate::encoders::ty::resource_conversion::{ResourceConversion, ResourceConversionEnc};
-use pcg::borrow_pcg::FunctionData;
+use crate::encoders::ty::resource_boundary::{
+    ResourceBoundary, ResourceBoundaryEnc, ResourceBoundaryTask,
+};
+use pcg::borrow_pcg::{FunctionData, GeneralizedLifetime, region_projection::ExtractRegionsCtxt};
 use prusti_interface::PrustiError;
-use prusti_rustc_interface::{middle::mir, span::def_id::DefId};
+use prusti_rustc_interface::{index::IndexVec, middle::mir, span::def_id::DefId};
 use task_encoder::{
     EncodeFullError, EncodeFullResult, OutputRefAny, TaskEncoder, TaskEncoderDependencies,
 };
@@ -27,9 +29,9 @@ pub struct MethodCallEncOutput<'vir> {
     ty_args: GArgsTy<'vir>,
     inputs: Vec<GArgCaster<'vir, Impure>>,
     output: GArgCaster<'vir, Impure>,
-    input_resources: Vec<Option<ResourceConversion<'vir>>>,
-    output_resources: Option<ResourceConversion<'vir>>,
-    returned_inputs: Vec<bool>,
+    input_resources: Vec<Option<ResourceBoundary<'vir>>>,
+    output_resources: Option<ResourceBoundary<'vir>>,
+    returned_inputs: Vec<Vec<ResourceBoundary<'vir>>>,
 }
 
 impl<'vir> MethodCallEncOutput<'vir> {
@@ -55,10 +57,9 @@ impl<'vir> MethodCallEncOutput<'vir> {
         // Their owned storage has been consumed, so use its pre-call snapshot.
         let restored = vir::with_vcx(|vcx| {
             args.iter()
-                .zip(&self.input_resources)
                 .zip(&self.returned_inputs)
-                .filter_map(|((arg, conversion), returned)| {
-                    returned.then_some((*arg, conversion.as_ref()?))
+                .flat_map(|(arg, conversions)| {
+                    conversions.iter().map(move |conversion| (*arg, conversion))
                 })
                 .flat_map(|(arg, conversion)| {
                     let snapshot = vcx.mk_local_labelled_old_expr(
@@ -127,18 +128,22 @@ impl TaskEncoder for MethodCallEnc {
             .output
             .decompose_compare_normalize(signature.gparams, task_key.gargs);
         let output = deps.require_dep::<GArgsCastEnc<Impure>>(normalized)?;
-        let output_resources = normalized
-            .filter(|ty| ty.param.specifics.is_param())
-            .map(|ty| deps.require_dep::<ResourceConversionEnc>(ty.concrete))
-            .transpose()?;
+        let output_resources = deps.require_dep::<ResourceBoundaryEnc>(ResourceBoundaryTask {
+            definition: signature.output.decompose(signature.gparams),
+            actual: signature.output.decompose_normalize(task_key.gargs),
+            selected: None,
+        })?;
+        let output_resources = (!output_resources.is_empty()).then_some(output_resources);
         let input_resources = signature
             .inputs
             .iter()
             .map(|ty| {
-                ty.decompose_compare_normalize(signature.gparams, task_key.gargs)
-                    .filter(|ty| ty.param.specifics.is_param())
-                    .map(|ty| deps.require_dep::<ResourceConversionEnc>(ty.concrete))
-                    .transpose()
+                let boundary = deps.require_dep::<ResourceBoundaryEnc>(ResourceBoundaryTask {
+                    definition: ty.decompose(signature.gparams),
+                    actual: ty.decompose_normalize(task_key.gargs),
+                    selected: None,
+                })?;
+                Ok::<_, EncodeFullError<'vir, Self>>((!boundary.is_empty()).then_some(boundary))
             })
             .collect::<Result<Vec<_>, _>>()?;
         let returned_inputs = if input_resources.iter().any(Option::is_some) {
@@ -146,21 +151,41 @@ impl TaskEncoder for MethodCallEnc {
                 data: FunctionData::new(callee_def_id),
             })?;
             let blocked = wands.blocked_inputs();
-            input_resources
-                .iter()
-                .enumerate()
-                .map(|(index, conversion)| {
-                    let local = mir::Local::from(index + 1);
-                    conversion.is_some()
-                        && wands.inputs().any(|node| node.mir_local() == local)
-                        && wands
-                            .inputs()
-                            .filter(|node| node.mir_local() == local)
-                            .all(|node| !blocked.contains(&node))
-                })
-                .collect()
+            let outputs = vir::with_vcx(|vcx| wands.output_resource_nodes(vcx));
+            let mut returned = vec![Vec::new(); input_resources.len()];
+            for input in wands.inputs().filter(|node| {
+                !blocked.contains(node) || outputs.contains(&node.to_function_shape_node())
+            }) {
+                let index = input.mir_local().as_usize() - 1;
+                if input_resources[index].is_none() {
+                    continue;
+                }
+                let selected = vir::with_vcx(|vcx| {
+                    let regions: IndexVec<_, GeneralizedLifetime<'vir>> =
+                        vcx.tcx().extract_regions(
+                            input.to_function_shape_node().ty(wands.fn_sig(vcx, None)),
+                        );
+                    match regions.get(input.region_idx()) {
+                        Some(GeneralizedLifetime::RegionsIn(opaque)) => Some(opaque.ty(vcx.tcx())),
+                        _ => None,
+                    }
+                });
+                if let Some(selected) = selected {
+                    let source = signature.inputs[index];
+                    let boundary =
+                        deps.require_dep::<ResourceBoundaryEnc>(ResourceBoundaryTask {
+                            definition: source.decompose(signature.gparams),
+                            actual: source.decompose_normalize(task_key.gargs),
+                            selected: Some(selected),
+                        })?;
+                    if !boundary.is_empty() {
+                        returned[index].push(boundary);
+                    }
+                }
+            }
+            returned
         } else {
-            vec![false; input_resources.len()]
+            vec![Vec::new(); input_resources.len()]
         };
         Ok((
             (),

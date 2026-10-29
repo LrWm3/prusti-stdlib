@@ -4,6 +4,7 @@ pub mod indirect;
 pub(crate) mod indexed;
 pub(crate) mod resources;
 pub(crate) mod resource_conversion;
+pub(crate) mod resource_boundary;
 pub(crate) mod resource_collection;
 pub(crate) mod resource_array;
 pub(crate) mod array_typing;

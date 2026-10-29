@@ -40,3 +40,14 @@ pub fn identity_associated<S: ResourceSource>(value: S::Resource) -> S::Resource
 pub fn separate<'a, 'b>(first: &'a mut u32, second: &'b mut u32) -> (&'a mut u32, &'b mut u32) {
     (first, second)
 }
+
+pub struct Container<T> {
+    pub value: T,
+}
+
+#[ensures(result === old(value))]
+#[ensures(resource_state(&result) == old(resource_state(&value)))]
+#[after_expiry(value => resource_state(&value) == before_expiry(resource_state(&result)))]
+pub fn identity_container<T>(value: Container<T>) -> Container<T> {
+    value
+}

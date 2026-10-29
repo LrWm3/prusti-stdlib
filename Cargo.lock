@@ -2340,6 +2340,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "prusti-backend-types"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "rustc-hash",
+ "serde",
+]
+
+[[package]]
 name = "prusti-contracts-build"
 version = "0.1.0"
 dependencies = [
@@ -3746,6 +3755,7 @@ dependencies = [
  "jni",
  "lazy_static",
  "log",
+ "prusti-backend-types",
  "prusti-utils",
  "rustc-hash",
  "serde",

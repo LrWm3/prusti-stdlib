@@ -553,7 +553,7 @@ pub fn extract_errors(
                         "viper/silicon/interfaces/SiliconMappedCounterexample",
                     ) {
                         // only mapped counterexamples are processed
-                        Some(SiliconCounterexample::new(
+                        Some(crate::silicon_counterexample::extract_counterexample(
                             env,
                             *jni_utils,
                             original_counterexample,

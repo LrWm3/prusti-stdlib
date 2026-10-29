@@ -9,6 +9,7 @@ members = [
     "prusti-utils",
     "prusti-viper",
     "prusti-ferrum",
+    "prusti-backend-types",
     "tracing",
     #"mir-ssa-analysis",
     "pcg",

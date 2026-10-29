@@ -4026,6 +4026,23 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         is_pure: bool,
         span: Span,
     ) -> EncodeResult<'vir, Option<(bool, vir::ExprSnap<'vir>)>, E> {
+        let tcx = self.vcx.tcx();
+        if tcx.is_diagnostic_item(prusti_rustc_interface::span::sym::mem_drop, func_def_id)
+            && !caller_substs
+                .type_at(0)
+                .needs_drop(tcx, ty::TypingEnv::post_analysis(tcx, self.def_id))
+        {
+            // With no drop glue, `mem::drop` only consumes its argument.
+            // Preserve borrowed heap resources and their values instead of
+            // passing them through an unconstrained generic method call.
+            // Unknown types and types with destructors retain that call path.
+            self.capture_operand_snap(&args[0].node)?;
+            let unit = self
+                .ty_use_pure(tcx.types.unit)
+                .expect_structlike()
+                .field_snaps_to_snap(Vec::new());
+            return Ok(Some((false, unit.upcast_ty())));
+        }
         // The bodiless `ptr_metadata` intrinsic is only lowered to
         // `UnOp::PtrMetadata` in optimized MIR; do the lowering here.
         let intrinsic = self.vcx.tcx().intrinsic(func_def_id);

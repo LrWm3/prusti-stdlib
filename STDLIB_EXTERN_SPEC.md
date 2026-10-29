@@ -1722,11 +1722,19 @@ Logs: `target/stdlib-im4-refinement69-extern-spec-logs`,
 `target/stdlib-im4-refinement68-baseline-extern-spec-logs`, and
 `target/stdlib-im4-drop69b-iterator-spec-logs`.
 
-The full iterator library run also remains an open regression gate. Build 65
-reproduces the two scalar suffix failures with the original solver bounds;
-they are not explained by the experimental time-bound setting. Six generic
-shared/Vec conversion failures also remain. Focused client checks do not
-establish that the whole library passes.
+The scalar suffix regression is fixed. The generic `mem::drop` contract returned
+the iterator's tail permissions but forgot its values. When rustc proves that
+the argument needs no drop glue, the encoder now consumes only its owned value
+and keeps the borrowed heap unchanged. Unknown types and types with destructors
+still use the ordinary call path. The reference-bearing wrapper positive, false
+control, destructor stale-value control, and unknown-type frame control pass
+(six checks, `target/stdlib-im4-drop69-iterator-spec-logs`; the untrusted
+destructor rerun is in `target/stdlib-im4-drop69b-iterator-spec-logs`).
+The symbolic early-break positive, runtime exercise, and wrong-suffix control
+pass as well (`target/stdlib-im4-drop68-iterator-spec-logs`). All three scalar
+iterator library bodies verify with the original solver bounds. The full
+library run now reports only the six generic shared/Vec conversion failures
+(`/tmp/prusti-im4-library68-full.log`); these remain an open regression gate.
 
 The first step is a prerequisite for the others: adding an abstract predicate
 only to call-site contracts would not establish that a generic implementation

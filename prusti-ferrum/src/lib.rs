@@ -1327,7 +1327,7 @@ mod tests {
             std::env::temp_dir().join(format!("prusti-ferrum-z3-fail-{}", std::process::id()));
         std::fs::write(
             &path,
-            "#!/bin/sh\nIFS= read -r first_command || exit 1\nprintf 'WARNING failing-startup-warning\\ninvalid-response\\n'\ncat >/dev/null\n",
+            "#!/bin/sh\nIFS= read -r first_command || exit 1\nprintf '(:version \"4.16.0\")\\n'\nIFS= read -r next_command || exit 1\nprintf 'WARNING failing-startup-warning\\ninvalid-response\\n'\ncat >/dev/null\n",
         )
         .unwrap();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();

@@ -42,6 +42,8 @@ pub enum VerificationResultKind {
     JavaException(JavaException),
     /// The verifier gave up after the given number of seconds.
     Timeout(u64),
+    /// Native backend setup, conversion, or execution failed.
+    BackendError(String),
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]

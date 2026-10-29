@@ -69,6 +69,15 @@ pub struct TypeContext<'vir> {
         std::collections::HashMap<&'vir str, (vir::Adt<'vir>, vir::AdtConstructor<'vir>)>,
     adt_destructors: std::collections::HashMap<&'vir str, vir::Adt<'vir>>,
 }
+/// Retain startup warnings even when frontend construction fails.
+pub fn native_frontend_with_warning_sink(
+    args: &[String],
+    reporter: Arc<dyn ferrum_silver::reporter::reporter::Reporter>,
+    warnings: Arc<std::sync::Mutex<Vec<String>>>,
+) -> Result<ferrum::NativeFrontendApi, ferrum::FerrumError> {
+    ferrum::NativeFrontendApi::new_with_warning_sink(args, reporter, false, warnings)
+}
+
 impl<'vir> TypeContext<'vir> {
     pub fn new(program: vir::Program<'vir>) -> Self {
         Self {
@@ -1046,6 +1055,33 @@ mod tests {
             .unwrap()
             .join()
             .unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn failed_frontend_start_retains_caller_owned_warnings() {
+        use std::os::unix::fs::PermissionsExt;
+        let path =
+            std::env::temp_dir().join(format!("prusti-ferrum-z3-fail-{}", std::process::id()));
+        std::fs::write(
+            &path,
+            "#!/bin/sh\nIFS= read -r first_command || exit 1\nprintf 'WARNING failing-startup-warning\\ninvalid-response\\n'\ncat >/dev/null\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let warnings = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let result = native_frontend_with_warning_sink(
+            &["--z3Exe".into(), path.to_string_lossy().into_owned()],
+            Arc::new(NoopReporter),
+            warnings.clone(),
+        );
+        std::fs::remove_file(path).unwrap();
+        assert!(result.is_err());
+        assert!(warnings
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|s| s.contains("failing-startup-warning")));
     }
 
     #[test]

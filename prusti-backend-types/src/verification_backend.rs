@@ -10,6 +10,7 @@ use std::fmt;
 pub enum VerificationBackend {
     Silicon,
     Carbon,
+    Ferrum,
 }
 
 #[derive(Clone, Debug)]
@@ -19,7 +20,7 @@ impl fmt::Display for UknownBackendError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Invalid verification backend: '{}'. Allowed values are 'Silicon' and 'Carbon'",
+            "Invalid verification backend: '{}'. Allowed values are 'Silicon', 'Carbon' and 'Ferrum'",
             self.0
         )
     }
@@ -31,6 +32,7 @@ impl std::str::FromStr for VerificationBackend {
         match backend.to_lowercase().as_str() {
             "silicon" => Ok(VerificationBackend::Silicon),
             "carbon" => Ok(VerificationBackend::Carbon),
+            "ferrum" => Ok(VerificationBackend::Ferrum),
             _ => Err(UknownBackendError(backend.to_string())),
         }
     }
@@ -41,6 +43,7 @@ impl fmt::Display for VerificationBackend {
         match self {
             VerificationBackend::Silicon => write!(f, "Silicon"),
             VerificationBackend::Carbon => write!(f, "Carbon"),
+            VerificationBackend::Ferrum => write!(f, "Ferrum"),
         }
     }
 }

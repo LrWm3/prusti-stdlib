@@ -2434,6 +2434,7 @@ dependencies = [
  "num_cpus",
  "once_cell",
  "prusti-encoder",
+ "prusti-ferrum",
  "prusti-interface",
  "prusti-rustc-interface",
  "prusti-utils",

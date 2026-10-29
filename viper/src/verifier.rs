@@ -191,6 +191,7 @@ impl<'a> Verifier<'a, Instantiated> {
                     VerificationBackend::Carbon => {
                         carbon::CarbonFrontend::with(env).new(reporter, logger)
                     }
+                    VerificationBackend::Ferrum => panic!("Ferrum must use the native backend"),
                 }
             };
             let frontend_instance = jni.unwrap_result(unwrapped_frontend_instance);
@@ -258,6 +259,7 @@ impl<'a> Verifier<'a, Instantiated> {
             VerificationBackend::Carbon => {
                 carbon::CarbonVerifier::with(env).new(reporter, debug_info)
             }
+            VerificationBackend::Ferrum => panic!("Ferrum must use the native backend"),
         }
     }
 

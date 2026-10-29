@@ -317,6 +317,8 @@ impl TaskEncoder for MethodEnc {
                     from_to_vars: Default::default(),
                     loop_snapshot_frames: Vec::new(),
                     loop_restoration_frames: Default::default(),
+                    array_resource_captures: Default::default(),
+                    pending_array_closures: Default::default(),
 
                     current_block: None,
                     current_block_pres: None,

@@ -176,6 +176,9 @@ where
     pub from_to_vars: FromToVars<'vir>,
     pub loop_snapshot_frames: Vec<LoopSnapshotFrame<'vir>>,
     pub loop_restoration_frames: FxHashMap<mir::BasicBlock, LoopRestorationFrame<'vir>>,
+    pub array_resource_captures:
+        FxHashMap<(Place<'vir>, Place<'vir>, usize), (vir::ExprInt<'vir>, vir::ExprBool<'vir>)>,
+    pub pending_array_closures: Vec<vir::Stmt<'vir>>,
 
     // for the current basic block
     pub current_fpcs: Option<PcgBasicBlock<'enc, 'vir>>,
@@ -757,6 +760,19 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         to_skip: &mut Vec<(mir::BasicBlock, usize, ValidityConditions)>,
         mut footprint: Option<&mut Footprint<'_, 'vir>>,
     ) -> EncodeResult<'vir, (), E> {
+        // Historical indexed views can alias a current expanded dereference.
+        // Finish those physical folds before closing the indirect wrappers.
+        // Calls and new expansions need the canonical resources immediately.
+        if edge_action.is_add()
+            || matches!(
+                edge.kind(),
+                BorrowPcgEdgeKind::Coupled(_) | BorrowPcgEdgeKind::Borrow(_)
+            )
+            || matches!(edge.kind(), BorrowPcgEdgeKind::BorrowFlow(flow)
+                if matches!(flow.kind(), BorrowFlowEdgeKind::Assignment(_) | BorrowFlowEdgeKind::Aggregate { .. }))
+        {
+            self.flush_array_closures();
+        }
         let cond_conjuncts = self.edge_condition(edge);
         // For each block `b` where the edge validity depends on the successor taken from `b`,
         // every successor must be valid.
@@ -784,18 +800,32 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 .mk_bin_op_expr(vir::BinOpKind::Implies, cond, added);
             footprint.parts.push(guarded.downcast_ty());
         }
-        if stmts.is_empty()
+        let defer = edge_action.is_remove()
+            && matches!(edge.kind(), BorrowPcgEdgeKind::BorrowPcgExpansion(expansion)
+                if matches!(expansion.base(), PcgNode::LifetimeProjection(base)
+                    if matches!(base.base().place().ty(self.pcg_ctxt()).ty.kind(),
+                        ty::Array(..) | ty::Slice(..))));
+        let stmts = if stmts.is_empty()
             || stmts
                 .iter()
                 .all(|stmt| matches!(stmt.kind, vir::StmtKindData::Comment(_)))
             || cond_conjuncts.is_empty()
         {
+            stmts
+        } else {
+            vec![self.vcx.mk_if_stmt(cond, self.vcx.alloc_slice(&stmts), &[])]
+        };
+        if defer {
+            self.pending_array_closures.extend(stmts);
+        } else {
             self.stmts(stmts);
-            return Ok(());
         }
-        let stmts = self.vcx.alloc_slice(&stmts);
-        self.stmt(self.vcx.mk_if_stmt(cond, stmts, &[]));
         Ok(())
+    }
+
+    fn flush_array_closures(&mut self) {
+        let statements = std::mem::take(&mut self.pending_array_closures);
+        self.stmts(statements);
     }
 
     fn pcs_handle_edge_conditionless(
@@ -885,9 +915,21 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 return Ok(());
             }
             BorrowPcgEdgeKind::BorrowFlow(flow)
+                if matches!(flow.kind(), BorrowFlowEdgeKind::Assignment(_)) =>
+            {
+                self.repack_array_assignment(flow, edge_action.is_add(), label)?;
+            }
+            BorrowPcgEdgeKind::BorrowFlow(flow)
                 if matches!(flow.kind(), BorrowFlowEdgeKind::Aggregate { .. }) =>
             {
                 self.repack_array_aggregate(flow, edge_action.is_add(), label)?;
+            }
+            BorrowPcgEdgeKind::BorrowFlow(flow)
+                if matches!(flow.kind(), BorrowFlowEdgeKind::Future(_))
+                    && edge_action.is_remove() =>
+            {
+                let statements = self.open_array_future(flow, label)?;
+                self.stmts(statements);
             }
             BorrowPcgEdgeKind::Deref(deref) => {
                 let frame = self.fold_or_unfold(
@@ -919,7 +961,12 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             }
             BorrowPcgEdgeKind::BorrowPcgExpansion(expansion) => {
                 let fold = !edge_action.is_add();
-                if let Some(statements) = self.repack_array_indirect(expansion, fold, label)? {
+                if let Some((statements, frame)) =
+                    self.repack_array_indirect(expansion, fold, label)?
+                {
+                    if let Some(footprint) = footprint {
+                        footprint.parts.extend(frame);
+                    }
                     self.stmts(statements);
                 }
             }
@@ -1150,6 +1197,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 Some(footprint),
             )?;
         }
+        self.flush_array_closures();
         Ok(())
     }
 
@@ -1283,9 +1331,13 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 PcgAction::Borrow(action) => {
                     self.borrow_action(pcg, action, edge_to_loop, &mut to_skip)?
                 }
-                PcgAction::Owned(action) => self.pcg_repack(action.kind())?,
+                PcgAction::Owned(action) => {
+                    self.flush_array_closures();
+                    self.pcg_repack(action.kind())?;
+                }
             }
         }
+        self.flush_array_closures();
         Ok(())
     }
 
@@ -1997,7 +2049,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         Ok(result)
     }
 
-    fn new_tmp<T: CompType>(&mut self, ty: vir::Type<'vir, T>) -> vir::Expr<'vir, T> {
+    pub(crate) fn new_tmp<T: CompType>(&mut self, ty: vir::Type<'vir, T>) -> vir::Expr<'vir, T> {
         let name = vir::vir_format!(self.vcx, "_tmp{}", self.tmp_ctr);
         let local = vir::vir_local_decl! { self.vcx; [name] : [ty] };
         self.tmp_ctr += 1;
@@ -3548,17 +3600,18 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 // Unblock all inputs together so shared graph edges are folded
                 // only once, under their original control-flow conditions.
                 let blocked = self.wands.blocked_inputs();
-                let locals = self
+                let inputs = self
                     .wands
                     .inputs()
                     .filter(|input| !blocked.contains(input))
-                    .map(|input| input.mir_local())
-                    .collect::<FxHashSet<_>>();
-                let graph = UnblockGraph::for_nodes(
-                    locals.into_iter().map(mir::Place::from),
-                    borrows,
-                    self.pcg_ctxt(),
-                );
+                    .collect::<Vec<_>>();
+                let roots = inputs.iter().flat_map(|input| {
+                    [
+                        mir::Place::from(input.mir_local()).into(),
+                        self.input_resource_root(*input),
+                    ]
+                });
+                let graph = UnblockGraph::for_nodes(roots, borrows, self.pcg_ctxt());
                 let actions = match graph.actions(self.pcg_ctxt()) {
                     Ok(actions) => actions,
                     Err(_) => {
@@ -3586,6 +3639,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         None,
                     )?;
                 }
+                self.flush_array_closures();
                 let wand_packages = self.package_wands(borrows, &already_unblocked)?;
                 self.current_fpcs = Some(current_fpcs);
                 self.stmts(wand_packages);

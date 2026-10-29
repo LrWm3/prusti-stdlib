@@ -40,6 +40,42 @@ pub enum WandEncError {
 }
 
 impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
+    /// Map a signature input to the body graph's original resource root.
+    pub(crate) fn input_resource_root(
+        &self,
+        input: FunctionShapeInput<Generalized>,
+    ) -> BlockedNode<'vir> {
+        let local = input.mir_local();
+        let node: FunctionShapeNode<Generalized> = input.into();
+        let generalized: IndexVec<_, GeneralizedLifetime<'vir>> = self
+            .vcx
+            .tcx()
+            .extract_regions(node.ty(self.wands.fn_sig(self.vcx, None)));
+        let actual: IndexVec<_, PcgRegion<'vir>> = self
+            .pcg_ctxt()
+            .extract_regions(self.body.local_decls[local].ty);
+        // An explicit region preceding every opaque type has the
+        // same index in the MIR region list. Opaque types may
+        // introduce additional generalized lifetimes, so avoid
+        // mapping indices at or after the first opaque entry.
+        let index = input.region_idx().index();
+        if generalized
+            .iter()
+            .take(index + 1)
+            .all(|r| matches!(r, GeneralizedLifetime::Region(_)))
+            && index < generalized.len()
+            && index < actual.len()
+        {
+            LifetimeProjection::from_index(
+                RemotePlace::new(local),
+                input.region_idx().index().into(),
+            )
+            .into()
+        } else {
+            mir::Place::from(local).into()
+        }
+    }
+
     pub fn package_wands(
         &mut self,
         final_borrow_state: &BorrowsState<'_, 'vir>,
@@ -82,35 +118,7 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
                         None,
                         |i| args[i],
                     );
-                    let local = g.mir_local();
-                    let node: FunctionShapeNode<Generalized> = (*g).into();
-                    let generalized: IndexVec<_, GeneralizedLifetime<'vir>> = self
-                        .vcx
-                        .tcx()
-                        .extract_regions(node.ty(self.wands.fn_sig(self.vcx, None)));
-                    let actual: IndexVec<_, PcgRegion<'vir>> = self
-                        .pcg_ctxt()
-                        .extract_regions(self.body.local_decls[local].ty);
-                    // An explicit region preceding every opaque type has the
-                    // same index in the MIR region list. Opaque types may
-                    // introduce additional generalized lifetimes, so avoid
-                    // mapping indices at or after the first opaque entry.
-                    let index = g.region_idx().index();
-                    let root: BlockedNode<'vir> = if generalized
-                        .iter()
-                        .take(index + 1)
-                        .all(|r| matches!(r, GeneralizedLifetime::Region(_)))
-                        && index < generalized.len()
-                        && index < actual.len()
-                    {
-                        LifetimeProjection::from_index(
-                            RemotePlace::new(local),
-                            g.region_idx().index().into(),
-                        )
-                        .into()
-                    } else {
-                        mir::Place::from(local).into()
-                    };
+                    let root = self.input_resource_root(*g);
                     (root, resources.into_iter().collect())
                 })
                 .collect();
@@ -260,6 +268,8 @@ impl<'vir> WandEncOutput<'vir> {
                                 guard: None,
                                 extent: None,
                                 binder_depth: 0,
+                                indexed: None,
+                                resource_path: &[],
                             },
                         )
                     })

@@ -1312,8 +1312,43 @@ passed on 2026-10-28; results are in
 the iterator specification library was also independently reverified (170.79s).
 These tests read referent values through ordinary permission-checked Rust
 expressions into scalar locals. Pure dereferencing of a shallow reference
-snapshot remains unsupported. Native mutable-reference iteration, replacement,
-nested references, and the generic resource interface still require work.
+snapshot remains unsupported. Native mutable-reference iteration and the generic resource interface still
+require work. The subsequent concrete extension below adds replacement and
+nested references.
+
+The concrete extension captures referent identities while their permissions
+are available, preserves inactive-variant guards, and delays historical
+resource closure until the corresponding physical dereferences have been
+folded. Replacing an indexed reference transfers the replacement's resources
+at assignment, including when there is no later read. A restoration proof
+opens the incoming collection and returns the captured original referents.
+PCG revision `dbb94c8` keeps argument lifetime resources live until return;
+return restoration now requests their original lifetime roots as well as
+argument storage. Conditional capture locals are declared in their actual
+method or package scope.
+
+Indexed predicates now include a structural field/dereference path as well
+as the collection index. Distinct reference fields must retain distinct
+logical resource instances even when their lifetimes merge or their addresses
+cannot be proved different. Permission inspection selects an existing
+representation; every alternative remains a checked fold, unfold, or
+assertion. No new permissions are inhaled for these transitions.
+
+`mut_element_nested_*`, `mut_element_pair_merged_*`, and
+`mut_element_replace_*` cover nested mutation and framing, fields sharing one
+lifetime, symbolic-slot replacement, immediate return after replacement, and
+recovery of all local-array owners. On 2026-10-28, the full build and 34 concrete
+checks passed, including the iterator specification library, nine runtime
+clients, 23 verification clients with exact negative diagnostics, and Rust
+compilation. Ten focused borrow regression checks also passed. Logs are in
+`target/stdlib-im3-paths-full-iterator-logs` and
+`target/stdlib-im3-paths-regression-borrow-logs`.
+
+This still does not close IM3: native mutable-reference yields and the
+untrusted explicit-tail control require generic resource transport. A
+symbolic indexed loop also exposed a missing current-element close at physical
+slice folding. Adding that checked close to its generated Viper verifies,
+but the Rust encoder integration and loop controls remain outstanding.
 
 The executable [element-resource model](prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/element_resources.vpr)
 now validates indexed resource wrappers. A direct quantifier over referent
@@ -1363,6 +1398,34 @@ Keep the untrusted explicit-tail iterator as a control before relying on native
 contracts.
 
 ### IM4: Preserve those resources through generic calls and Vec views
+
+Implementation direction after concrete extraction/reassembly (not yet an
+implemented interface):
+
+1. Preserve an opaque type's resource group in the PCG body, corresponding to
+   the signature's `RegionsIn(T)`. It must survive moves, field/array expansion,
+   calls, and loop boundaries. Do not map it to a numbered concrete region or
+   treat it as a borrow-free type. Check the existing region-only consumers,
+   particularly borrow-checker queries, before extending their domain.
+2. Represent that whole group by a snapshot/type-indexed predicate. Generic
+   definitions transfer this predicate without inspecting its body. Concrete
+   type cases describe the actual referent permissions; an unknown case must
+   remain opaque. Collection instances also carry the logical element index
+   and finite bounds, including when element snapshots compare equal.
+3. Verify conversions between a concrete type's complete set of lifetime
+   resources and that abstract group. Reference cases include both the shallow
+   referent predicate and its recursive indirect resources; structs and active
+   enum variants compose their fields. Collection conversions require verified
+   symbolic extraction/reassembly, not extra assumed postconditions. A partial
+   lifetime split cannot consume or duplicate a whole opaque group.
+4. Verify the generic explicit-tail helper before adapting native `IterMut`
+   and Vec views. Then instantiate the separately verified definition with
+   owned/shared/mutable-reference elements, two-lifetime wrappers, and associated
+   types. Preserve negative tests for missing resources and incomplete maps.
+
+The first step is a prerequisite for the others: adding an abstract predicate
+only to call-site contracts would not establish that a generic implementation
+actually preserves it.
 
 Give parameter and opaque element types an abstract lifetime-resource
 interface, rather than treating their unknown internals as empty. Check how

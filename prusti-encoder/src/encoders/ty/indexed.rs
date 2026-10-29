@@ -96,6 +96,7 @@ impl TaskEncoder for IndexedPredicateEnc {
         vir::with_vcx(|vcx| {
             let name = vir::vir_format!(vcx, "indexed_{}", task.target);
             let index = vcx.mk_local_decl("index", vir::TYPE_INT);
+            let path = vcx.mk_local_decl("path", vcx.mk_ty_seq(vir::TYPE_INT));
             let args = task
                 .args
                 .iter()
@@ -114,7 +115,8 @@ impl TaskEncoder for IndexedPredicateEnc {
                     perm: None,
                 }),
             );
-            let params = std::iter::once(index.as_dyn())
+            let params = [index.as_dyn(), path.as_dyn()]
+                .into_iter()
                 .chain(args)
                 .collect::<Vec<_>>();
             Ok((
@@ -137,6 +139,108 @@ pub(crate) struct IndexedResources<'vir> {
 }
 
 impl<'vir> IndexedResources<'vir> {
+    /// Retain the identities exposed by an indexed expansion. Only executable,
+    /// permission-checked reads initialise these locals; guards are captured
+    /// before any branch-specific reads.
+    pub fn capture(
+        expression: vir::ExprBool<'vir>,
+        fresh: &mut impl FnMut(vir::TypeDyn<'vir>) -> vir::ExprDyn<'vir>,
+    ) -> Result<(vir::ExprBool<'vir>, Vec<vir::Stmt<'vir>>), &'static str> {
+        vir::with_vcx(|vcx| {
+            Ok(match expression.kind {
+                vir::ExprKindData::PredicateApp(app) => {
+                    let mut statements = Vec::new();
+                    let args = app
+                        .args
+                        .iter()
+                        .map(|arg| {
+                            let value = fresh(arg.ty());
+                            statements.push(vcx.mk_pure_assign_stmt(value, *arg));
+                            value
+                        })
+                        .collect::<Vec<_>>();
+                    (
+                        vcx.mk_predicate_app_expr(vcx.alloc(vir::PredicateAppData {
+                            args: vcx.alloc_slice(&args),
+                            target: app.target,
+                            perm: app.perm,
+                        })),
+                        statements,
+                    )
+                }
+                vir::ExprKindData::BinOp(op) if op.kind == vir::BinOpKind::And => {
+                    let (left, mut statements) = Self::capture(op.lhs.downcast_ty(), fresh)?;
+                    let (right, rest) = Self::capture(op.rhs.downcast_ty(), fresh)?;
+                    statements.extend(rest);
+                    (vcx.mk_conj(&[left, right]), statements)
+                }
+                vir::ExprKindData::BinOp(op) if op.kind == vir::BinOpKind::Implies => {
+                    let condition = fresh(vir::TYPE_BOOL.upcast_ty());
+                    let (body, statements) = Self::capture(op.rhs.downcast_ty(), fresh)?;
+                    (
+                        vir::expr! { ([condition.downcast_ty::<vir::Bool>()]) ==> (body) },
+                        vec![
+                            vcx.mk_pure_assign_stmt(condition, op.lhs),
+                            vcx.mk_if_stmt(
+                                condition.downcast_ty(),
+                                vcx.alloc_slice(&statements),
+                                &[],
+                            ),
+                        ],
+                    )
+                }
+                vir::ExprKindData::Ternary(expr) => {
+                    let condition = fresh(vir::TYPE_BOOL.upcast_ty());
+                    let (yes, yes_statements) = Self::capture(expr.then.downcast_ty(), fresh)?;
+                    let (no, no_statements) = Self::capture(expr.else_.downcast_ty(), fresh)?;
+                    (
+                        vcx.mk_ternary_expr(condition.downcast_ty(), yes, no),
+                        vec![
+                            vcx.mk_pure_assign_stmt(condition, expr.cond.upcast_ty()),
+                            vcx.mk_if_stmt(
+                                condition.downcast_ty(),
+                                vcx.alloc_slice(&yes_statements),
+                                vcx.alloc_slice(&no_statements),
+                            ),
+                        ],
+                    )
+                }
+                vir::ExprKindData::Forall(_) => return Err("nested quantified element resources"),
+                _ => (expression, Vec::new()),
+            })
+        })
+    }
+
+    /// Import exposed resources from the enclosing heap before a package's
+    /// permission-dependent folds inspect their representation. Wrapped
+    /// resources belong to the wand's antecedent and are opened by its script.
+    pub fn exposed_footprint(
+        &self,
+        expression: vir::ExprBool<'vir>,
+        label: &'vir str,
+    ) -> vir::ExprBool<'vir> {
+        struct Frame<'a, 'vir>(&'a IndexedResources<'vir>, &'vir str);
+        impl<'vir> Folder<'vir, (), !> for Frame<'_, 'vir> {
+            fn fold_expr(&mut self, expr: vir::ExprDyn<'vir>) -> Option<vir::ExprDyn<'vir>> {
+                if let vir::ExprKindData::PredicateApp(app) = expr.kind {
+                    let app = self.0.unwrapped(app).unwrap_or(app);
+                    Some(vir::with_vcx(|vcx| {
+                        let held =
+                            vcx.mk_local_labelled_old_expr(vcx.mk_predicate_perm_expr(app), self.1);
+                        let none = vcx.mk_no_perm();
+                        let resource = vcx.mk_predicate_app_expr(app);
+                        vir::expr! { ((none) < (held)) ==> (resource) }.upcast_ty()
+                    }))
+                } else {
+                    expr.super_fold_with(self)
+                }
+            }
+        }
+        expression
+            .fold_with(&mut Frame(self, label))
+            .unwrap_or(expression)
+    }
+
     pub fn new<E: TaskEncoder>(
         deps: &mut TaskEncoderDependencies<'vir, E>,
         expression: vir::ExprBool<'vir>,
@@ -168,18 +272,76 @@ impl<'vir> IndexedResources<'vir> {
     fn application(
         &self,
         index: vir::ExprInt<'vir>,
+        path: &'vir [usize],
         app: vir::PredicateApp<'vir>,
     ) -> vir::PredicateApp<'vir> {
         vir::with_vcx(|vcx| {
             vcx.alloc(vir::PredicateAppData {
                 target: self.names[app.target],
                 args: vcx.alloc_slice(
-                    &std::iter::once(index.as_dyn())
-                        .chain(app.args.iter().copied())
-                        .collect::<Vec<_>>(),
+                    &[
+                        index.as_dyn(),
+                        vcx.mk_seq_literal_expr(
+                            vcx.alloc_slice(
+                                &path
+                                    .iter()
+                                    .map(|step| {
+                                        vcx.mk_const_expr(vir::ConstData::Int(*step as u128))
+                                            .downcast_ty::<vir::Int>()
+                                    })
+                                    .collect::<Vec<_>>(),
+                            ),
+                            vir::TYPE_INT,
+                        )
+                        .as_dyn(),
+                    ]
+                    .into_iter()
+                    .chain(app.args.iter().copied())
+                    .collect::<Vec<_>>(),
                 ),
                 perm: app.perm,
             })
+        })
+    }
+
+    fn unwrapped(&self, app: vir::PredicateApp<'vir>) -> Option<vir::PredicateApp<'vir>> {
+        let target = self
+            .names
+            .iter()
+            .find_map(|(raw, indexed)| (*indexed == app.target).then_some(*raw))?;
+        Some(vir::with_vcx(|vcx| {
+            vcx.alloc(vir::PredicateAppData {
+                target,
+                args: &app.args[2..],
+                perm: app.perm,
+            })
+        }))
+    }
+
+    /// Read through a resource in either its exposed or indexed form. The
+    /// unfolding expression preserves the wrapper while establishing the
+    /// snapshot function's permission precondition.
+    pub fn read_snapshot(
+        &self,
+        app: vir::PredicateApp<'vir>,
+        snapshot: vir::ExprSnap<'vir>,
+        index: vir::ExprInt<'vir>,
+        inspect_permissions: bool,
+        path: &'vir [usize],
+    ) -> vir::ExprSnap<'vir> {
+        if !self.names.contains_key(app.target) {
+            return snapshot;
+        }
+        vir::with_vcx(|vcx| {
+            let wrapped = vcx.mk_unfolding_expr(self.application(index, path, app), snapshot);
+            // Contract resources have a fixed representation. Viper rejects
+            // permission inspection in ordinary pre/postconditions.
+            if !inspect_permissions {
+                return wrapped;
+            }
+            let held = vcx.mk_predicate_perm_expr(app);
+            let none = vcx.mk_no_perm();
+            vcx.mk_ternary_expr(vir::expr! { (none) < (held) }, snapshot, wrapped)
         })
     }
 
@@ -187,13 +349,18 @@ impl<'vir> IndexedResources<'vir> {
         &self,
         expression: vir::ExprBool<'vir>,
         index: vir::ExprInt<'vir>,
+        path: &'vir [usize],
     ) -> vir::ExprBool<'vir> {
-        struct Wrap<'a, 'vir>(&'a IndexedResources<'vir>, vir::ExprInt<'vir>);
+        struct Wrap<'a, 'vir>(
+            &'a IndexedResources<'vir>,
+            vir::ExprInt<'vir>,
+            &'vir [usize],
+        );
         impl<'vir> Folder<'vir, (), !> for Wrap<'_, 'vir> {
             fn fold_expr(&mut self, expr: vir::ExprDyn<'vir>) -> Option<vir::ExprDyn<'vir>> {
                 if let vir::ExprKindData::PredicateApp(app) = expr.kind {
                     Some(vir::with_vcx(|vcx| {
-                        vcx.mk_predicate_app_expr(self.0.application(self.1, app))
+                        vcx.mk_predicate_app_expr(self.0.application(self.1, self.2, app))
                             .as_dyn()
                     }))
                 } else {
@@ -202,7 +369,7 @@ impl<'vir> IndexedResources<'vir> {
             }
         }
         expression
-            .fold_with(&mut Wrap(self, index))
+            .fold_with(&mut Wrap(self, index, path))
             .unwrap_or(expression)
     }
 
@@ -214,14 +381,35 @@ impl<'vir> IndexedResources<'vir> {
         index: vir::ExprInt<'vir>,
         fold: bool,
     ) -> Result<Vec<vir::Stmt<'vir>>, &'static str> {
+        self.operations_with_strategy(expression, index, fold, false)
+    }
+
+    pub fn open_future(
+        &self,
+        expression: vir::ExprBool<'vir>,
+        index: vir::ExprInt<'vir>,
+    ) -> Result<Vec<vir::Stmt<'vir>>, &'static str> {
+        self.operations_with_strategy(expression, index, false, true)
+    }
+
+    fn operations_with_strategy(
+        &self,
+        expression: vir::ExprBool<'vir>,
+        index: vir::ExprInt<'vir>,
+        fold: bool,
+        future: bool,
+    ) -> Result<Vec<vir::Stmt<'vir>>, &'static str> {
         vir::with_vcx(|vcx| {
             Ok(match expression.kind {
                 vir::ExprKindData::PredicateApp(app) => {
-                    let wrapped = self.application(index, app);
+                    let (app, wrapped) = match self.unwrapped(app) {
+                        Some(raw) => (raw, *app),
+                        None => (*app, self.application(index, &[], app)),
+                    };
                     // Several historical expansions may expose the same referent.
                     // Select its existing representation, and check the alternative
                     // explicitly; absence of both representations must fail.
-                    let held = vcx.mk_predicate_perm_expr(if fold { app } else { wrapped });
+                    let held = vcx.mk_predicate_perm_expr(if future { app } else { wrapped });
                     let none = vcx.mk_no_perm();
                     let condition = vir::expr! { (none) < (held) };
                     let change = if fold {
@@ -234,24 +422,42 @@ impl<'vir> IndexedResources<'vir> {
                     } else {
                         app
                     }));
-                    vec![vcx.mk_if_stmt(
-                        condition,
-                        vcx.alloc_slice(&[change]),
-                        vcx.alloc_slice(&[unchanged]),
-                    )]
+                    let (yes, no) = if future || fold {
+                        (unchanged, change)
+                    } else {
+                        (change, unchanged)
+                    };
+                    vec![vcx.mk_if_stmt(condition, vcx.alloc_slice(&[yes]), vcx.alloc_slice(&[no]))]
                 }
                 vir::ExprKindData::BinOp(op) if op.kind == vir::BinOpKind::And => {
-                    let mut stmts = self.operations(op.lhs.downcast_ty(), index, fold)?;
-                    stmts.extend(self.operations(op.rhs.downcast_ty(), index, fold)?);
+                    let mut stmts =
+                        self.operations_with_strategy(op.lhs.downcast_ty(), index, fold, future)?;
+                    stmts.extend(self.operations_with_strategy(
+                        op.rhs.downcast_ty(),
+                        index,
+                        fold,
+                        future,
+                    )?);
                     stmts
                 }
                 vir::ExprKindData::BinOp(op) if op.kind == vir::BinOpKind::Implies => {
-                    let body = self.operations(op.rhs.downcast_ty(), index, fold)?;
+                    let body =
+                        self.operations_with_strategy(op.rhs.downcast_ty(), index, fold, future)?;
                     vec![vcx.mk_if_stmt(op.lhs.downcast_ty(), vcx.alloc_slice(&body), &[])]
                 }
                 vir::ExprKindData::Ternary(expr) => {
-                    let yes = self.operations(expr.then.downcast_ty(), index, fold)?;
-                    let no = self.operations(expr.else_.downcast_ty(), index, fold)?;
+                    let yes = self.operations_with_strategy(
+                        expr.then.downcast_ty(),
+                        index,
+                        fold,
+                        future,
+                    )?;
+                    let no = self.operations_with_strategy(
+                        expr.else_.downcast_ty(),
+                        index,
+                        fold,
+                        future,
+                    )?;
                     vec![vcx.mk_if_stmt(expr.cond, vcx.alloc_slice(&yes), vcx.alloc_slice(&no))]
                 }
                 vir::ExprKindData::Forall(_) => return Err("nested quantified element resources"),

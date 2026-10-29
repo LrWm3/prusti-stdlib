@@ -75,8 +75,12 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         element: Place<'vir>,
         index: vir::ExprInt<'vir>,
     ) -> EncodeResult<'vir, vir::ExprSnap<'vir>, E> {
-        let (slot, snap, _, child_impure) = self.encode_place_with_snap(element)?;
+        let (slot, _, _, child_impure) = self.encode_place_with_snap(element)?;
         let (parent, mut parent_snap, _, parent_impure) = self.encode_place_with_snap(owner)?;
+        let slot_ref = parent_impure
+            .expect_array()
+            .ref_to_index_ref(parent.expr.expect_predicate(), index);
+        let snap = child_impure.ref_to_snap(slot_ref);
         let owner_ty = RustTyDecomposition::from_ty(parent.ty.ty, self.def_id);
         let parent_pure = self.deps.require_dep::<TyUsePureEnc>(owner_ty)?;
         let has = |app| {
@@ -84,6 +88,8 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             let none = self.vcx.mk_no_perm();
             vir::expr! { (none) < (perm) }
         };
+        let mut parent_held =
+            has(parent_impure.ref_to_pred_app(parent.expr.expect_predicate(), None));
         // A referent that has not been expanded is held in generic form.
         if let Some((prefix, mir::ProjectionElem::Deref)) = owner.last_projection() {
             let prefix_ty = prefix.ty(self.pcg_ctxt()).ty;
@@ -101,6 +107,10 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     )?;
                 let fallback =
                     caster.cast_to_caller_ctx(generic.ref_to_snap(parent.expr.expect_predicate()));
+                parent_held = self.vcx.mk_disj(&[
+                    parent_held,
+                    has(generic.ref_to_pred_app(parent.expr.expect_predicate(), None)),
+                ]);
                 parent_snap = self.vcx.mk_ternary_expr(
                     has(parent_impure.ref_to_pred_app(parent.expr.expect_predicate(), None)),
                     parent_snap,
@@ -121,10 +131,9 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             .require_dep::<GArgsCastEnc<crate::encoders::Pure>>(
                 data.decompose_compare_normalize(owner_ty.ty.params, owner_ty.args),
             )?;
-        let generic_snap =
-            caster.cast_to_caller_ctx(generic.ref_to_snap(slot.expr.expect_predicate()));
+        let generic_snap = caster.cast_to_caller_ctx(generic.ref_to_snap(slot_ref));
         let mut fallback = self.vcx.mk_ternary_expr(
-            has(generic.ref_to_pred_app(slot.expr.expect_predicate(), None)),
+            has(generic.ref_to_pred_app(slot_ref, None)),
             generic_snap,
             parent_element,
         );
@@ -138,7 +147,7 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 .iter()
                 .zip(&child_impure.expect_structlike().fields)
             {
-                let addr = access.field_ref(slot.expr.expect_predicate());
+                let addr = access.field_ref(slot_ref);
                 let concrete = self
                     .deps
                     .require_dep::<TyUseImpureEnc>(field.ty().decompose_normalize(child_ty.args))?;
@@ -171,11 +180,17 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 .vcx
                 .mk_ternary_expr(self.vcx.mk_conj(&readable), expanded, fallback);
         }
-        Ok(self.vcx.mk_ternary_expr(
-            has(child_impure.ref_to_pred_app(slot.expr.expect_predicate(), None)),
+        let expanded = self.vcx.mk_ternary_expr(
+            has(child_impure.ref_to_pred_app(slot_ref, None)),
             snap,
             fallback,
-        ))
+        );
+        // At a heap predating the expansion the owner supplies the element's
+        // identity. Prefer that snapshot over any independently held predicate
+        // whose address might coincide with the not-yet-exposed slot.
+        Ok(self
+            .vcx
+            .mk_ternary_expr(parent_held, parent_element, expanded))
     }
 
     pub(crate) fn repack_array_aggregate(
@@ -209,12 +224,18 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             return Ok(());
         };
         let mut old_outer = WandOldOuter::Label(label);
-        let resources = self.encode_lifetime_projection(flow.long(), &mut old_outer)?;
-        let resources = self.vcx.mk_conj(&resources);
         let index = self
             .vcx
             .mk_const_expr(vir::ConstData::Int(field_idx as u128))
             .downcast_ty();
+        let indexed = self.vcx.alloc(array.indexed.clone());
+        let resources = self.encode_lifetime_projection_resources(
+            flow.long(),
+            &mut old_outer,
+            None,
+            Some((indexed, index, true)),
+        )?;
+        let resources = self.vcx.mk_conj(&resources);
         let stmts = array
             .indexed
             .operations(resources, index, fold)
@@ -225,12 +246,91 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         Ok(())
     }
 
+    /// Moving a reference-bearing value into an indexed slot also transfers
+    /// its referent resources, even when the slot is never read afterwards.
+    pub(crate) fn repack_array_assignment(
+        &mut self,
+        flow: &BorrowFlowEdge<'vir>,
+        fold: bool,
+        label: Option<&'vir str>,
+    ) -> EncodeResult<'vir, (), E> {
+        let target = flow.short();
+        let element = target.base().place();
+        let Some((owner, projection)) = element.last_projection() else {
+            return Ok(());
+        };
+        let ty = owner.ty(self.pcg_ctxt()).ty;
+        if !matches!(ty.kind(), ty::Array(..) | ty::Slice(..)) {
+            return Ok(());
+        }
+        let Ok(guide) = projection.try_into() else {
+            return Ok(());
+        };
+        let Some(index) = self.expansion_index(guide) else {
+            return Ok(());
+        };
+        let task = RustTyDecomposition::from_ty(ty, self.def_id);
+        let Some(owner_projection) = LifetimeProjection::new(
+            task,
+            target.region(self.pcg_ctxt()),
+            None,
+            crate::encoders::ty::indirect::PrustiPcgCtxt,
+        ) else {
+            return Ok(());
+        };
+        let indirect = self
+            .deps
+            .require_dep::<IndirectPredicatesEnc>(owner_projection)?;
+        let Some(array) = indirect.array else {
+            return Ok(());
+        };
+        let mut old_outer = WandOldOuter::Label(label);
+        let index = if fold {
+            index
+        } else {
+            let at = match flow.long().base() {
+                PcgLifetimeProjectionBase::Place(MaybeRemotePlace::Local(
+                    MaybeLabelledPlace::Labelled(place),
+                )) => Some(self.get_location_label(place.at())),
+                _ => label.map(vir::OldLabel::Label),
+            };
+            self.vcx.maybe_apply_label(index, at)
+        };
+        let indexed = self.vcx.alloc(array.indexed.clone());
+        let resources = if fold {
+            self.encode_lifetime_projection_resources(
+                target,
+                &mut old_outer,
+                None,
+                Some((indexed, index, true)),
+            )?
+        } else {
+            self.encode_lifetime_projection_resources(
+                flow.long(),
+                &mut old_outer,
+                None,
+                Some((indexed, index, true)),
+            )?
+        };
+        let resources = self.vcx.mk_conj(&resources);
+        let statements = if fold {
+            array.indexed.operations(resources, index, true)
+        } else {
+            array.indexed.open_future(resources, index)
+        }
+        .map_err(|reason| self.unsupported_rvalue(reason.to_string(), self.current_span()))?;
+        for statement in statements {
+            self.stmt(statement);
+        }
+        Ok(())
+    }
+
     pub(crate) fn repack_array_indirect(
         &mut self,
         expansion: &BorrowPcgExpansion<'vir>,
         fold: bool,
         label: Option<&'vir str>,
-    ) -> EncodeResult<'vir, Option<Vec<vir::Stmt<'vir>>>, E> {
+    ) -> EncodeResult<'vir, Option<(Vec<vir::Stmt<'vir>>, Vec<vir::ExprBool<'vir>>)>, E> {
         let PcgNode::LifetimeProjection(base) = expansion.base() else {
             return Ok(None);
         };
@@ -261,8 +361,27 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 self.current_span(),
             ));
         };
+        let capture_key = (
+            base.base().place(),
+            element.base().place(),
+            element.region_idx().index(),
+        );
+        if fold && let Some(&(index, resources)) = self.array_resource_captures.get(&capture_key) {
+            let statements =
+                array
+                    .indexed
+                    .operations(resources, index, true)
+                    .map_err(|reason| {
+                        self.unsupported_rvalue(reason.to_string(), self.current_span())
+                    })?;
+            let frame = label
+                .map(|label| array.indexed.exposed_footprint(resources, label))
+                .into_iter()
+                .collect();
+            return Ok(Some((statements, frame)));
+        }
         let (_, mut snap, ty, _) = self.encode_place_with_snap(element.base().place())?;
-        let heap_label = match element.label() {
+        let heap_label = match base.label().or(element.label()) {
             Some(LifetimeProjectionLabel::Location(at)) => Some(self.get_location_label(at)),
             _ => match element.base() {
                 MaybeLabelledPlace::Labelled(place) => Some(self.get_location_label(place.at())),
@@ -285,16 +404,41 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         } else {
             label.map(vir::OldLabel::Label)
         };
+        // The index local may not yet exist at the owner's historical heap.
+        // Freeze it at the child version before reading that older owner.
+        let index_label = if fold {
+            match element.label() {
+                Some(LifetimeProjectionLabel::Location(at)) => Some(self.get_location_label(at)),
+                _ => match element.base() {
+                    MaybeLabelledPlace::Labelled(place) => {
+                        Some(self.get_location_label(place.at()))
+                    }
+                    _ => heap_label,
+                },
+            }
+        } else {
+            heap_label
+        };
+        let index = self.vcx.maybe_apply_label(index, index_label);
         if fold || heap_label.is_some() {
             snap =
                 self.indexed_element_snapshot(base.base().place(), element.base().place(), index)?;
         }
         let snap = self.vcx.maybe_apply_label(snap, heap_label);
-        let index = self.vcx.maybe_apply_label(index, heap_label);
+        let (snap, index) = if !fold && label.is_none() {
+            let saved_snap = self.new_tmp(snap.ty());
+            let saved_index = self.new_tmp(index.ty());
+            self.stmt(self.vcx.mk_pure_assign_stmt(saved_snap, snap));
+            self.stmt(self.vcx.mk_pure_assign_stmt(saved_index, index));
+            (saved_snap, saved_index)
+        } else {
+            (snap, index)
+        };
         let task = RustTyDecomposition::from_ty(ty.ty, self.def_id);
         let child = self
             .deps
             .require_dep::<IndirectPredicatesEnc>(element.with_base(task))?;
+        let indexed = self.vcx.alloc(array.indexed.clone());
         let resources = child
             .predicate_applications
             .iter()
@@ -303,17 +447,131 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     self.vcx,
                     ExprInput {
                         heap_label,
+                        indexed: Some((indexed, index, true)),
                         ..ExprInput::current(snap)
                     },
                 )
             })
             .collect::<Vec<_>>();
-        let resources = self.vcx.mk_conj(&resources);
+        let mut resources = self.vcx.mk_conj(&resources);
+        if !fold && label.is_none() {
+            let (captured, statements) =
+                crate::encoders::ty::indexed::IndexedResources::capture(resources, &mut |ty| {
+                    self.new_tmp(ty)
+                })
+                .map_err(|reason| {
+                    self.unsupported_rvalue(reason.to_string(), self.current_span())
+                })?;
+            for statement in statements {
+                self.stmt(statement);
+            }
+            resources = captured;
+            self.array_resource_captures
+                .insert(capture_key, (index, resources));
+        }
         let statements = array
             .indexed
             .operations(resources, index, fold)
             .map_err(|reason| self.unsupported_rvalue(reason.to_string(), self.current_span()))?;
-        Ok(Some(statements))
+        let frame = if fold {
+            label
+                .map(|label| array.indexed.exposed_footprint(resources, label))
+                .into_iter()
+                .collect()
+        } else {
+            Vec::new()
+        };
+        Ok(Some((statements, frame)))
+    }
+
+    /// A future edge carries the updated element resources into its owner.
+    /// Reversing it during restoration exposes those resources before the
+    /// historical expansion reassembles the owner's original element.
+    pub(crate) fn open_array_future(
+        &mut self,
+        flow: &BorrowFlowEdge<'vir>,
+        label: Option<&'vir str>,
+    ) -> EncodeResult<'vir, Vec<vir::Stmt<'vir>>, E> {
+        // Outside a package the element's current resources are already
+        // exposed. Only the wand antecedent brings a new indexed collection.
+        if label.is_none() {
+            return Ok(Vec::new());
+        }
+        let PcgLifetimeProjectionBase::Place(source) = flow.long().base() else {
+            return Ok(Vec::new());
+        };
+        let Some(source) = source.as_local_place() else {
+            return Ok(Vec::new());
+        };
+        let owner = flow.short().base().place();
+        let element = source.place();
+        let Some((parent, projection)) = element.last_projection() else {
+            return Ok(Vec::new());
+        };
+        if parent != owner
+            || !matches!(
+                owner.ty(self.pcg_ctxt()).ty.kind(),
+                ty::Array(..) | ty::Slice(..)
+            )
+        {
+            return Ok(Vec::new());
+        }
+        let Ok(guide) = projection.try_into() else {
+            return Ok(Vec::new());
+        };
+        let Some(index) = self.expansion_index(guide) else {
+            return Ok(Vec::new());
+        };
+        let task = RustTyDecomposition::from_ty(owner.ty(self.pcg_ctxt()).ty, self.def_id);
+        let indirect = self
+            .deps
+            .require_dep::<IndirectPredicatesEnc>(flow.short().with_base(task))?;
+        let Some(array) = indirect.array else {
+            return Ok(Vec::new());
+        };
+        let heap_label = match flow.long().label() {
+            Some(LifetimeProjectionLabel::Location(at)) => Some(self.get_location_label(at)),
+            _ => match source {
+                MaybeLabelledPlace::Labelled(place) => Some(self.get_location_label(place.at())),
+                _ => label.map(vir::OldLabel::Label),
+            },
+        };
+        if let Some(package_label) = label {
+            // Instantiate the finite collection's selector trigger in the
+            // incoming wand state. Without this checked read, Silicon can
+            // satisfy the ensuing unfold from the outer heap instead of the
+            // quantified antecedent, consuming the collection we must return.
+            let saved_index = self.vcx.maybe_apply_label(index, heap_label);
+            let selected = self.indexed_element_snapshot(owner, element, saved_index)?;
+            let selected = self.vcx.mk_local_labelled_old_expr(selected, package_label);
+            let trigger = self.new_tmp(selected.ty());
+            self.stmt(self.vcx.mk_pure_assign_stmt(trigger, selected));
+        }
+        let snap = self.indexed_element_snapshot(owner, element, index)?;
+        let snap = self.vcx.maybe_apply_label(snap, heap_label);
+        let index = self.vcx.maybe_apply_label(index, heap_label);
+        let task = RustTyDecomposition::from_ty(element.ty(self.pcg_ctxt()).ty, self.def_id);
+        let child = self
+            .deps
+            .require_dep::<IndirectPredicatesEnc>(flow.long().with_base(task))?;
+        let indexed = self.vcx.alloc(array.indexed);
+        let resources = child
+            .predicate_applications
+            .iter()
+            .map(|expr| {
+                expr.reify(
+                    self.vcx,
+                    ExprInput {
+                        heap_label,
+                        indexed: Some((indexed, index, true)),
+                        ..ExprInput::current(snap)
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
+        indexed
+            .open_future(self.vcx.mk_conj(&resources), index)
+            .map_err(|reason| self.unsupported_rvalue(reason.to_string(), self.current_span()))
     }
 
     /// Calculate invariant at loop head
@@ -694,6 +952,20 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         old_outer: &mut WandOldOuter<'vir>,
         saved: Option<vir::ExprSnap<'vir>>,
     ) -> EncodeResult<'vir, Vec<vir::ExprBool<'vir>>, E> {
+        self.encode_lifetime_projection_resources(r, old_outer, saved, None)
+    }
+
+    fn encode_lifetime_projection_resources<T: PcgLifetimeProjectionBaseLike<'vir>>(
+        &mut self,
+        r: LifetimeProjection<'vir, T>,
+        old_outer: &mut WandOldOuter<'vir>,
+        saved: Option<vir::ExprSnap<'vir>>,
+        indexed: Option<(
+            &'vir crate::encoders::ty::indexed::IndexedResources<'vir>,
+            vir::ExprInt<'vir>,
+            bool,
+        )>,
+    ) -> EncodeResult<'vir, Vec<vir::ExprBool<'vir>>, E> {
         let place = r.base().to_pcg_lifetime_projection_base();
         let heap_label = match r.label() {
             Some(LifetimeProjectionLabel::Location(at)) => Some(self.get_location_label(at)),
@@ -760,6 +1032,7 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     ExprInput {
                         heap_label,
                         extent,
+                        indexed,
                         ..ExprInput::current(place_snap)
                     },
                 )

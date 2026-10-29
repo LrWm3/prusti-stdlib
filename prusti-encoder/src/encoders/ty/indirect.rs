@@ -53,6 +53,8 @@ pub(crate) struct ExprInput<'vir> {
     /// A slice's extent is supplied by its enclosing pointer metadata.
     pub extent: Option<vir::ExprInt<'vir>>,
     pub binder_depth: usize,
+    pub resource_path: &'vir [usize],
+    pub indexed: Option<(&'vir IndexedResources<'vir>, vir::ExprInt<'vir>, bool)>,
 }
 
 impl<'vir> ExprInput<'vir> {
@@ -64,6 +66,8 @@ impl<'vir> ExprInput<'vir> {
             guard: None,
             extent: None,
             binder_depth: 0,
+            indexed: None,
+            resource_path: &[],
         }
     }
 }
@@ -133,7 +137,9 @@ impl TaskEncoder for IndirectPredicatesEnc {
                 |struct_data: StructData<'vir, (RustTyDatas, UsePureTyDatas)>,
                  deps: &mut TaskEncoderDependencies<'vir, IndirectPredicatesEnc>| {
                     let mut result = vec![];
-                    for (field_ty, accessor) in struct_data.fields {
+                    for (field_index, (field_ty, accessor)) in
+                        struct_data.fields.into_iter().enumerate()
+                    {
                         let field_ty = field_ty.decompose_normalize(ty.args);
                         if let Some(new_projection) =
                             LifetimeProjection::new(field_ty, task_region, None, PrustiPcgCtxt)
@@ -141,7 +147,7 @@ impl TaskEncoder for IndirectPredicatesEnc {
                             let field_indirect =
                                 deps.require_dep::<IndirectPredicatesEnc>(new_projection)?;
                             for inner_expr in field_indirect.predicate_applications {
-                                result.push((accessor, inner_expr));
+                                result.push((field_index, accessor, inner_expr));
                             }
                         }
                     }
@@ -216,9 +222,11 @@ impl TaskEncoder for IndirectPredicatesEnc {
                                         bindings: None,
                                         extent: None,
                                         binder_depth: input.binder_depth + 1,
+                                        indexed: Some((vcx.alloc(indexed.clone()), index, false)),
+                                        resource_path: &[],
                                         ..input
                                     })).collect::<Vec<_>>();
-                                    let resources = indexed.wrap(vcx.mk_conj(&exprs), index);
+                                    let resources = vcx.mk_conj(&exprs);
                                     let zero = vcx.mk_uint::<0>();
                                     let bounds = vir::expr! { (([zero]) <= (index)) && ((index) < (extent)) };
                                     quantify_resources(vcx,
@@ -241,7 +249,13 @@ impl TaskEncoder for IndirectPredicatesEnc {
                             vir::TYPE_BOOL,
                             Box::new(move |vcx, input: ExprInput<'vir>| {
                                 let addr = ref_domain.deref_access(input.snap.downcast_ty());
-                                inner_impure.ref_to_pred(vcx, addr, None).kind
+                                let resource = inner_impure.ref_to_pred(vcx, addr, None);
+                                input
+                                    .indexed
+                                    .map_or(resource, |(indexed, index, _)| {
+                                        indexed.wrap(resource, index, input.resource_path)
+                                    })
+                                    .kind
                             }),
                         ));
                     }
@@ -256,6 +270,7 @@ impl TaskEncoder for IndirectPredicatesEnc {
                     {
                         let inner_indirect =
                             deps.require_dep::<IndirectPredicatesEnc>(new_projection)?;
+                        let concrete_inner = deps.require_dep::<TyUseImpureEnc>(referent_ty)?;
                         for inner_expr in inner_indirect.predicate_applications {
                             predicate_applications.push(vcx.mk_lazy_expr(
                                 "ref_inner_indirect",
@@ -265,10 +280,38 @@ impl TaskEncoder for IndirectPredicatesEnc {
                                         ref_domain.deref_access(input.snap.downcast_ty()),
                                     );
                                     let inner_snap =
+                                        if let Some((indexed, index, inspect)) = input.indexed {
+                                            let addr =
+                                                ref_domain.deref_access(input.snap.downcast_ty());
+                                            let wrapped = indexed.read_snapshot(
+                                                inner_impure.ref_to_pred_app(addr, None),
+                                                inner_snap,
+                                                index,
+                                                inspect,
+                                                input.resource_path,
+                                            );
+                                            if inspect {
+                                                let held = vcx.mk_predicate_perm_expr(
+                                                    concrete_inner.ref_to_pred_app(addr, None),
+                                                );
+                                                let none = vcx.mk_no_perm();
+                                                vcx.mk_ternary_expr(
+                                                    vir::expr! { (none) < (held) },
+                                                    ref_domain
+                                                        .cast_to_callee_ctx(
+                                                            concrete_inner.ref_to_snap(addr),
+                                                        )
+                                                        .upcast_ty(),
+                                                    wrapped,
+                                                )
+                                            } else {
+                                                wrapped
+                                            }
+                                        } else {
+                                            inner_snap
+                                        };
+                                    let inner_snap =
                                         vcx.maybe_apply_label(inner_snap, input.heap_label);
-                                    // A reference inside an inactive enum variant has no
-                                    // referent permission. Use its arbitrary snapshot field
-                                    // on that branch, which is ignored by the variant test.
                                     let inner_snap = if let Some(guard) = input.guard {
                                         let fallback = ref_domain
                                             .cast_to_callee_ctx(
@@ -297,6 +340,14 @@ impl TaskEncoder for IndirectPredicatesEnc {
                                             ExprInput {
                                                 snap: ref_domain
                                                     .cast_to_caller_ctx(inner_snap.downcast_ty()),
+                                                resource_path: vcx.alloc_slice(
+                                                    &input
+                                                        .resource_path
+                                                        .iter()
+                                                        .copied()
+                                                        .chain([0])
+                                                        .collect::<Vec<_>>(),
+                                                ),
                                                 extent: slice_metadata.as_ref().map(|usize_ty| {
                                                     usize_ty
                                                         .expect_primitive()
@@ -321,7 +372,8 @@ impl TaskEncoder for IndirectPredicatesEnc {
                 TySpecifics::StructLike(data) => {
                     // TODO: invalid recursion here if the defined struct is
                     // recursive!
-                    for (accessor, inner_expr) in collect_field_predicates(data, deps)? {
+                    for (field_index, accessor, inner_expr) in collect_field_predicates(data, deps)?
+                    {
                         predicate_applications.push(vcx.mk_lazy_expr(
                             "struct_field_indirect",
                             vir::TYPE_BOOL,
@@ -331,6 +383,14 @@ impl TaskEncoder for IndirectPredicatesEnc {
                                         vcx,
                                         ExprInput {
                                             snap: accessor.read(input.snap.downcast_ty()),
+                                            resource_path: vcx.alloc_slice(
+                                                &input
+                                                    .resource_path
+                                                    .iter()
+                                                    .copied()
+                                                    .chain([field_index])
+                                                    .collect::<Vec<_>>(),
+                                            ),
                                             ..input
                                         },
                                     )
@@ -367,7 +427,8 @@ impl TaskEncoder for IndirectPredicatesEnc {
                             let self_discr = snap_to_discr_snap.call()(self_csnap);
                             let variant_conjs: Vec<_> = variant_preds
                                 .iter()
-                                .map(|(discr, fields)| {
+                                .enumerate()
+                                .map(|(variant_index, (discr, fields))| {
                                     let is_variant = vcx.mk_eq_expr(self_discr, *discr);
                                     let inner_guard =
                                         Some(input.guard.map_or(is_variant, |guard| {
@@ -375,12 +436,20 @@ impl TaskEncoder for IndirectPredicatesEnc {
                                         }));
                                     let preds: Vec<_> = fields
                                         .iter()
-                                        .map(|(acc, expr)| {
+                                        .map(|(field_index, acc, expr)| {
                                             expr.reify(
                                                 vcx,
                                                 ExprInput {
                                                     snap: acc.read(self_csnap),
                                                     guard: inner_guard,
+                                                    resource_path: vcx.alloc_slice(
+                                                        &input
+                                                            .resource_path
+                                                            .iter()
+                                                            .copied()
+                                                            .chain([variant_index, *field_index])
+                                                            .collect::<Vec<_>>(),
+                                                    ),
                                                     ..input
                                                 },
                                             )

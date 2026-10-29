@@ -24,6 +24,8 @@ pub mod server;
 mod server_message;
 #[cfg(feature = "ferrum")]
 mod native_backend;
+#[cfg(feature = "ferrum")]
+mod native_reporter;
 mod verification_request;
 #[cfg(feature = "jvm")]
 mod backend;

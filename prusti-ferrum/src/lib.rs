@@ -4,6 +4,7 @@
 //!
 //! Incomplete cases return errors, never a weakened verification program.
 pub use ferrum_silver as silver;
+pub mod counterexample;
 use ferrum_silver::ast::{
     position::{IdentifierPosition, LineColumn, LineColumnPosition, Position},
     r#type::{Type, TypeVar},
@@ -978,6 +979,158 @@ mod tests {
                 .unwrap();
                 let result = frontend.verify(&program).unwrap();
                 assert!(matches!(result, VerificationResult::Success), "{result:?}");
+                frontend.stop().unwrap();
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    #[test]
+    #[ignore = "requires real Z3; set FERRUM_TEST_Z3"]
+    fn native_mapped_counterexample_reaches_prusti_model() {
+        let z3 = std::env::var_os("FERRUM_TEST_Z3").expect("set FERRUM_TEST_Z3");
+        std::thread::Builder::new()
+            .stack_size(ferrum::VERIFICATION_STACK_SIZE)
+            .spawn(move || {
+                let variable = ferrum_silver::ast::program::LocalVarDecl::new(
+                    "x".into(),
+                    Type::Int,
+                    Metadata::default(),
+                );
+                let x = Exp::new(ExpKind::LocalVar(variable.local_var()), Metadata::default());
+                let zero = Exp::new(ExpKind::IntLit(0.into()), Metadata::default());
+                let assertion = Stmt::new(
+                    StmtKind::Assert(Exp::new(ExpKind::GtCmp(x, zero), Metadata::default())),
+                    Metadata::default(),
+                );
+                let method = Method::new(MethodData {
+                    name: "bad".into(),
+                    formal_args: vec![variable],
+                    formal_returns: vec![],
+                    pres: vec![],
+                    posts: vec![],
+                    body: Some(assertion),
+                    meta: Metadata::default(),
+                });
+                let program = Program::new(
+                    vec![],
+                    vec![],
+                    vec![],
+                    vec![],
+                    vec![method],
+                    vec![],
+                    Metadata::default(),
+                );
+                let mut frontend = native_frontend(
+                    &[
+                        "--z3Exe".into(),
+                        z3.to_string_lossy().into_owned(),
+                        "--counterexample".into(),
+                        "mapped".into(),
+                        "--enableMoreCompleteExhale".into(),
+                    ],
+                    Arc::new(NoopReporter),
+                )
+                .unwrap();
+                let VerificationResult::Failure(errors) = frontend.verify(&program).unwrap() else {
+                    panic!("expected failure");
+                };
+                let ferrum_silver::verifier::verification_result::AbstractError::Verification(
+                    error,
+                ) = &errors[0]
+                else {
+                    panic!("expected verification error");
+                };
+                let model = counterexample::from_diagnostic(error)
+                    .unwrap()
+                    .expect("mapped counterexample");
+                assert!(
+                    model.model.entries.contains_key("x"),
+                    "{:?}",
+                    model.model.entries
+                );
+                frontend.stop().unwrap();
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    #[test]
+    #[ignore = "requires real Z3; set FERRUM_TEST_Z3"]
+    fn native_mapped_counterexample_keeps_raw_domain_local() {
+        use ferrum_silver::ast::{
+            program::{Domain, DomainData, LocalVarDecl},
+            r#type::DomainType,
+        };
+        let z3 = std::env::var_os("FERRUM_TEST_Z3").expect("set FERRUM_TEST_Z3");
+        std::thread::Builder::new()
+            .stack_size(ferrum::VERIFICATION_STACK_SIZE)
+            .spawn(move || {
+                let meta = Metadata::default();
+                let domain = Domain::new(DomainData {
+                    name: "D".into(),
+                    functions: vec![],
+                    axioms: vec![],
+                    type_vars: vec![],
+                    interpretations: None,
+                    meta: meta.clone(),
+                });
+                let x = LocalVarDecl::new(
+                    "x".into(),
+                    Type::Domain(DomainType::new("D", Default::default(), vec![])),
+                    meta.clone(),
+                );
+                let var = Exp::new(ExpKind::LocalVar(x.local_var()), meta.clone());
+                let neq = Exp::new(ExpKind::NeCmp(var.clone(), var), meta.clone());
+                let method = Method::new(MethodData {
+                    name: "bad".into(),
+                    formal_args: vec![x],
+                    formal_returns: vec![],
+                    pres: vec![],
+                    posts: vec![],
+                    body: Some(Stmt::new(StmtKind::Assert(neq), meta.clone())),
+                    meta: meta.clone(),
+                });
+                let program = Program::new(
+                    vec![domain],
+                    vec![],
+                    vec![],
+                    vec![],
+                    vec![method],
+                    vec![],
+                    meta,
+                );
+                let mut frontend = native_frontend(
+                    &[
+                        "--z3Exe".into(),
+                        z3.to_string_lossy().into_owned(),
+                        "--counterexample".into(),
+                        "mapped".into(),
+                        "--enableMoreCompleteExhale".into(),
+                    ],
+                    Arc::new(NoopReporter),
+                )
+                .unwrap();
+                let VerificationResult::Failure(errors) = frontend.verify(&program).unwrap() else {
+                    panic!("expected failure")
+                };
+                let ferrum_silver::verifier::verification_result::AbstractError::Verification(
+                    error,
+                ) = &errors[0]
+                else {
+                    panic!("expected verification error")
+                };
+                let model = counterexample::from_diagnostic(error).unwrap().unwrap();
+                assert!(
+                    matches!(
+                        model.model.entries.get("x"),
+                        Some(prusti_backend_types::ModelEntry::DomainValue(_, _))
+                    ),
+                    "{:?}",
+                    model.model.entries
+                );
                 frontend.stop().unwrap();
             })
             .unwrap()

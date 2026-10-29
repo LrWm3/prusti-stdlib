@@ -22,8 +22,10 @@ Unimplemented conversion cases and unsupported output modes return errors.
 Backend setup/verification/shutdown errors are not cached. Warnings are retained
 through failed startup and normal cleanup.
 
-Counterexample backtranslation, structured method/quantifier reporting and
-Viper/debug dumps are still gated pending their native bridges. This is an
+Mapped counterexample backtranslation and structured method/quantifier reporting
+are available through the existing Prusti options. Counterexamples use raw
+converter data, and selected method results share error deduplication with the
+final result. Viper/debug dumps remain gated pending their native bridges. This is an
 integration in progress; broader compatibility and performance measurements
 remain outstanding.
 

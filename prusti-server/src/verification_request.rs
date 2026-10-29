@@ -48,6 +48,7 @@ pub(crate) enum ServerVerificationRequest {
     FerrumRequest(
         Result<prusti_ferrum::silver::ast::program::Program, String>,
         ViperBackendConfig,
+        FxHashSet<String>,
     ),
     #[cfg(not(all(feature = "jvm", feature = "ferrum")))]
     Unavailable(String),
@@ -98,9 +99,11 @@ impl ServerVerificationRequest {
                 result.time_ms = stopwatch.finish().as_millis();
             }
             #[cfg(feature = "ferrum")]
-            ServerVerificationRequest::FerrumRequest(program, config) => {
+            ServerVerificationRequest::FerrumRequest(program, config, procedures) => {
                 result.kind = match program {
-                    Ok(program) => crate::native_backend::verify(program, config),
+                    Ok(program) => {
+                        crate::native_backend::verify(program, config, procedures, sender.clone())
+                    }
                     Err(error) => VerificationResultKind::BackendError(error),
                 };
                 result.time_ms = stopwatch.finish().as_millis();
@@ -155,7 +158,11 @@ impl VerificationRequest {
                         prusti_ferrum::program_to_silver(vcx.get_program(self.program))
                             .map_err(|e| format!("VIR conversion: {e:?}"))
                     });
-                    ServerVerificationRequest::FerrumRequest(program, self.backend_config.clone())
+                    ServerVerificationRequest::FerrumRequest(
+                        program,
+                        self.backend_config.clone(),
+                        self.procedures.clone(),
+                    )
                 }
                 #[cfg(not(feature = "ferrum"))]
                 {

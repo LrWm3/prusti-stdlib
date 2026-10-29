@@ -1642,8 +1642,14 @@ the intended assertion. The Rust check and runtime exercise also pass (four
 checks, 90.41s for the positive and 143.11s for the false control, with
 `--proverEnableTimeBounds` and a 300-second program limit). Stronger assertions
 that reread the restored slice exposed a PCG future-projection conflict; a
-plain-Rust reproducer isolates it before Viper. That restoration path remains
-under investigation, so this checkpoint establishes the writes, not final
+plain-Rust reproducer isolates it before Viper. PCG now excludes the inaccessible retained inputs from the call's restoration
+targets, matching the verifier's visibility rule. This fixes the crash;
+the numbered PCG corpus (98.09s), eight shape tests, and four projection-map
+tests pass. PCG commit `50e6a46` is pushed to the configured fork.
+The stronger mutable-reference and holder tests now reach Viper and fail their
+final-value assertions. They remain explicit known-limit probes, including
+false/wrong controls that are not counted as successful negative proofs.
+This checkpoint establishes the writes and the graph repair, not final
 referent-value framing.
 
 The symbolic-array positive still passes with the original solver resource
@@ -1660,8 +1666,26 @@ collection conversion for further element shapes, generic parameters nested
 inside collection element constructors, collection state transport, native
 reference-element restoration, Vec ownership, complete diagnostics for
 unsupported frames, and full regression validation remain required. The PCG pointer on this development
-branch is `f610569`; the stable work branch retains the earlier pointer until
+branch is `50e6a46`; the stable work branch retains the earlier pointer until
 the combined encoder passes its gates.
+
+The next value-frame step is to observe resource state through saved element
+snapshots, with permission checks, without rereading expired iterator storage.
+First expose a checked indexed state observation over a ghost sequence and
+pair valid, out-of-bounds, missing-permission, and executable-use cases. Extend
+expiry selection with `input[_]` for a unique opaque resource group; reject
+missing or ambiguous groups. Then state the native constructor and `next`
+resource frames at that group stage, using saved pre-call and post-call
+sequences. Verify contract well-formedness and the concrete two-yield/holder
+restoration probes before extending the prefix-loop summary. Keep the physical
+slot identity relation and heap-dependent referent state as separate checked
+obligations. No frame may simply be assumed for a verified helper.
+
+The full iterator library run also remains an open regression gate. With the
+experimental time bounds, build 58 reports two scalar suffix-framing failures
+and six generic shared/Vec conversion failures. Recheck the former with the
+original bounds; diagnose the latter from their emitted conversions. Focused
+client checks do not establish that the whole library passes.
 
 The first step is a prerequisite for the others: adding an abstract predicate
 only to call-site contracts would not establish that a generic implementation

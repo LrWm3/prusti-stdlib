@@ -145,3 +145,27 @@ name = "im2_prefix_ghost_quantified_int"
 path = "im2_prefix_ghost_quantified_int.rs"
 
 [workspace]
+
+[[bin]]
+name = "im4_mut_ref_restoration_pass"
+path = "im4_mut_ref_restoration_pass.rs"
+
+[[bin]]
+name = "im4_mut_ref_restoration_false"
+path = "im4_mut_ref_restoration_false.rs"
+
+[[bin]]
+name = "im4_mut_ref_restoration_wrong"
+path = "im4_mut_ref_restoration_wrong.rs"
+
+[[bin]]
+name = "im4_holder_restoration_pass"
+path = "im4_holder_restoration_pass.rs"
+
+[[bin]]
+name = "im4_holder_restoration_false"
+path = "im4_holder_restoration_false.rs"
+
+[[bin]]
+name = "im4_holder_restoration_wrong"
+path = "im4_holder_restoration_wrong.rs"

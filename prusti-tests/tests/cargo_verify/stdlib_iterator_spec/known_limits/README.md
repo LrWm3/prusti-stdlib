@@ -442,3 +442,16 @@ must also stay separate from physical address observations: raw-pointer
 construction, raw-pointer equality, and the mutable-reference address helpers
 currently use Viper `Ref` identities directly. A change to only one of those
 paths could make zero-sized element comparisons inconsistent.
+
+
+## IM4: Native inner-reference restoration after yield expiry
+
+`im4_mut_ref_restoration_{pass,false,wrong}` and
+`im4_holder_restoration_{pass,false,wrong}` strengthen the native write-only
+probes with reads of the restored source. The former exposed a PCG conflict
+between current and future lifetime projections; PCG `50e6a46` fixes it and
+passes the numbered corpus and shape/projection tests. On encoder build 60,
+the positive proofs now fail at their final-value assertions (177.23s for two
+yields, 129.62s for the holder). The false and wrong controls are retained for
+future paired validation; failures at earlier positive assertions are not
+accepted negative proofs. Logs: `target/stdlib-im4-native-ref60-iterator-spec-logs`.

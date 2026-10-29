@@ -3,6 +3,7 @@
 //! Direct VIR to native Silver AST conversion.
 //!
 //! Incomplete cases return errors, never a weakened verification program.
+pub use ferrum_silver as silver;
 use ferrum_silver::ast::{
     position::{IdentifierPosition, LineColumn, LineColumnPosition, Position},
     r#type::{Type, TypeVar},
@@ -15,7 +16,7 @@ pub enum ConversionError {
     UnsupportedType(String),
     DomainTypeRequiresDeclarations(String),
     UnsupportedExpression,
-    UnsupportedStatement,
+    UnsupportedStatement(String),
     UnsupportedProgramMember(&'static str),
 }
 
@@ -61,6 +62,11 @@ pub fn convert_type<T: CompType>(ty: &vir::Type<'_, T>) -> Result<Type, Conversi
 pub struct TypeContext<'vir> {
     domains: std::collections::HashMap<&'vir str, vir::Domain<'vir>>,
     adts: std::collections::HashMap<&'vir str, vir::Adt<'vir>>,
+    domain_functions:
+        std::collections::HashMap<&'vir str, (vir::Domain<'vir>, vir::DomainFunction<'vir>)>,
+    adt_constructors:
+        std::collections::HashMap<&'vir str, (vir::Adt<'vir>, vir::AdtConstructor<'vir>)>,
+    adt_destructors: std::collections::HashMap<&'vir str, vir::Adt<'vir>>,
 }
 impl<'vir> TypeContext<'vir> {
     pub fn new(program: vir::Program<'vir>) -> Self {
@@ -71,7 +77,51 @@ impl<'vir> TypeContext<'vir> {
                 .map(|domain| (domain.name, *domain))
                 .collect(),
             adts: program.adts.iter().map(|adt| (adt.name, *adt)).collect(),
+            domain_functions: program
+                .domains
+                .iter()
+                .flat_map(|domain| {
+                    domain
+                        .functions
+                        .iter()
+                        .map(move |f| (f.name.to_str(), (*domain, *f)))
+                })
+                .collect(),
+            adt_constructors: program
+                .adts
+                .iter()
+                .flat_map(|adt| adt.constructors.iter().map(move |c| (c.name, (*adt, *c))))
+                .collect(),
+            adt_destructors: program
+                .adts
+                .iter()
+                .flat_map(|adt| {
+                    adt.constructors
+                        .iter()
+                        .flat_map(move |c| c.args.iter().map(move |arg| (arg.name, *adt)))
+                })
+                .collect(),
         }
+    }
+    fn adt_type_map(
+        &self,
+        ty: vir::TypeDyn<'vir>,
+    ) -> Result<ferrum_silver::ast::r#type::TypeSubstitution, ConversionError> {
+        let vir::TypeKind::Domain(name, args) = ty.kind() else {
+            return Err(ConversionError::UnsupportedExpression);
+        };
+        let adt = self
+            .adts
+            .get(name)
+            .ok_or(ConversionError::UnsupportedExpression)?;
+        if adt.typarams.len() != args.len() {
+            return Err(ConversionError::UnsupportedExpression);
+        }
+        adt.typarams
+            .iter()
+            .zip(args.iter())
+            .map(|(p, t)| Ok((TypeVar::new(p.name), self.convert(t)?)))
+            .collect()
     }
     pub fn convert<T: CompType>(&self, ty: &vir::Type<'vir, T>) -> Result<Type, ConversionError> {
         use ferrum_silver::ast::r#type::{BackendType, DomainType};
@@ -96,6 +146,13 @@ impl<'vir> TypeContext<'vir> {
                             ))
                         }
                     };
+                if parameters.len() != args.len() {
+                    return Err(ConversionError::DomainTypeRequiresDeclarations(format!(
+                        "{name}: expected {} type arguments, got {}",
+                        parameters.len(),
+                        args.len()
+                    )));
+                }
                 if let Some(backend) = interpretation {
                     Type::Backend(BackendType::new(
                         (*name).into(),
@@ -170,6 +227,7 @@ impl<'vir> TypeContext<'vir> {
                 ..Default::default()
             }
         };
+        let mut extra = ferrum_silver::ast::expression::ExpExtra::default();
         let kind = match expression.kind {
             vir::ExprKindData::Const(value) => match value {
                 vir::ConstData::Bool(true) => ExpKind::TrueLit,
@@ -266,6 +324,199 @@ impl<'vir> TypeContext<'vir> {
                     self.expression(&unfolding.expr)?,
                 )
             }
+            vir::ExprKindData::FuncApp(app) => {
+                let args = app
+                    .args
+                    .iter()
+                    .map(|a| self.expression(a))
+                    .collect::<Result<Vec<_>, _>>()?;
+                extra.typ = Some(self.convert(&app.result_ty)?);
+                if let Some((domain, function)) = self.domain_functions.get(app.target) {
+                    if domain.typarams.len() != app.typ_var_map.len() {
+                        return Err(ConversionError::UnsupportedExpression);
+                    }
+                    if let Some(interp) = &function.interpretation {
+                        extra.interpretation = Some(interp.interpretation.into());
+                        ExpKind::BackendFuncApp(app.target.into(), args)
+                    } else {
+                        extra.domain_name = Some(domain.name.into());
+                        let substitutions = domain
+                            .typarams
+                            .iter()
+                            .zip(app.typ_var_map)
+                            .map(|(p, t)| Ok((TypeVar::new(p.name), self.convert(t)?)))
+                            .collect::<Result<_, ConversionError>>()?;
+                        ExpKind::DomainFuncApp(app.target.into(), args, substitutions)
+                    }
+                } else if let Some((adt, _)) = self.adt_constructors.get(app.target) {
+                    if !app.typ_var_map.is_empty() {
+                        return Err(ConversionError::UnsupportedExpression);
+                    }
+                    let type_vars = self.adt_type_map(app.result_ty)?;
+                    let node = ferrum_silver::plugin::standard::adt::adt_ast_extension::AdtConstructorApp { name:app.target.into(), args, type_vars, typ:self.convert(&app.result_ty)?, adt_name:adt.name.into(), meta:meta.clone() };
+                    return Ok(node.expression());
+                } else if !app.typ_var_map.is_empty() {
+                    return Err(ConversionError::UnsupportedExpression);
+                } else {
+                    ExpKind::FuncApp(app.target.into(), args)
+                }
+            }
+            vir::ExprKindData::AdtDestructor(receiver, field) => {
+                let adt = self
+                    .adt_destructors
+                    .get(field.name)
+                    .ok_or(ConversionError::UnsupportedExpression)?;
+                let node =
+                    ferrum_silver::plugin::standard::adt::adt_ast_extension::AdtDestructorApp {
+                        name: field.name.into(),
+                        receiver: self.expression(&receiver)?,
+                        type_vars: self.adt_type_map(receiver.ty())?,
+                        typ: self.convert(&field.ty)?,
+                        adt_name: adt.name.into(),
+                        meta: meta.clone(),
+                    };
+                return Ok(node.expression());
+            }
+            vir::ExprKindData::AdtDiscriminator(receiver, constructor) => {
+                let (adt, _) = self
+                    .adt_constructors
+                    .get(constructor)
+                    .ok_or(ConversionError::UnsupportedExpression)?;
+                let node =
+                    ferrum_silver::plugin::standard::adt::adt_ast_extension::AdtDiscriminatorApp {
+                        name: (*constructor).into(),
+                        receiver: self.expression(&receiver)?,
+                        type_vars: self.adt_type_map(receiver.ty())?,
+                        adt_name: adt.name.into(),
+                        meta: meta.clone(),
+                    };
+                return Ok(node.expression());
+            }
+            vir::ExprKindData::Let(binding) => {
+                let declaration = ferrum_silver::ast::program::LocalVarDecl::new(
+                    binding.name.into(),
+                    self.convert(&binding.val.ty())?,
+                    Metadata::default(),
+                );
+                ExpKind::Let(
+                    declaration,
+                    self.expression(&binding.val)?,
+                    self.expression(&binding.expr)?,
+                )
+            }
+            vir::ExprKindData::Forall(q) => {
+                let vars = q
+                    .qvars
+                    .iter()
+                    .map(|v| self.local_declaration(v))
+                    .collect::<Result<_, _>>()?;
+                let triggers = q
+                    .triggers
+                    .iter()
+                    .map(|t| {
+                        Ok(ferrum_silver::ast::expression::Trigger::new(
+                            t.exprs
+                                .iter()
+                                .map(|e| self.expression(e))
+                                .collect::<Result<_, _>>()?,
+                            Metadata::default(),
+                        ))
+                    })
+                    .collect::<Result<_, ConversionError>>()?;
+                ExpKind::Forall(vars, triggers, self.expression(&q.body)?)
+            }
+            vir::ExprKindData::Exists(q) => {
+                let vars = q
+                    .qvars
+                    .iter()
+                    .map(|v| self.local_declaration(v))
+                    .collect::<Result<_, _>>()?;
+                let triggers = q
+                    .triggers
+                    .iter()
+                    .map(|t| {
+                        Ok(ferrum_silver::ast::expression::Trigger::new(
+                            t.exprs
+                                .iter()
+                                .map(|e| self.expression(e))
+                                .collect::<Result<_, _>>()?,
+                            Metadata::default(),
+                        ))
+                    })
+                    .collect::<Result<_, ConversionError>>()?;
+                ExpKind::Exists(vars, triggers, self.expression(&q.body)?)
+            }
+            vir::ExprKindData::CollectionBinOp(op) => {
+                let lhs = self.expression(&op.lhs)?;
+                let rhs = self.expression(&op.rhs)?;
+                match op.kind {
+                    vir::CollectionBinOpKind::Contains => match op.rhs.ty().kind() {
+                        vir::TypeKind::Set(_) | vir::TypeKind::Multiset(_) => {
+                            ExpKind::AnySetContains(lhs, rhs)
+                        }
+                        vir::TypeKind::Seq(_) => ExpKind::SeqContains(lhs, rhs),
+                        vir::TypeKind::Map(..) => ExpKind::MapContains(rhs, lhs),
+                        _ => return Err(ConversionError::UnsupportedExpression),
+                    },
+                    vir::CollectionBinOpKind::Index => match op.lhs.ty().kind() {
+                        vir::TypeKind::Seq(_) => ExpKind::SeqIndex(lhs, rhs),
+                        vir::TypeKind::Map(..) => ExpKind::MapLookup(lhs, rhs),
+                        _ => return Err(ConversionError::UnsupportedExpression),
+                    },
+                    vir::CollectionBinOpKind::Union => ExpKind::AnySetUnion(lhs, rhs),
+                    vir::CollectionBinOpKind::Intersection => ExpKind::AnySetIntersection(lhs, rhs),
+                    vir::CollectionBinOpKind::Difference => ExpKind::AnySetMinus(lhs, rhs),
+                    vir::CollectionBinOpKind::Subset => ExpKind::AnySetSubset(lhs, rhs),
+                    vir::CollectionBinOpKind::Concat => ExpKind::SeqAppend(lhs, rhs),
+                    vir::CollectionBinOpKind::Take => ExpKind::SeqTake(lhs, rhs),
+                    vir::CollectionBinOpKind::Drop => ExpKind::SeqDrop(lhs, rhs),
+                }
+            }
+            vir::ExprKindData::CollectionLiteral(literal) => {
+                let values = literal
+                    .values
+                    .iter()
+                    .map(|value| self.expression(value))
+                    .collect::<Result<Vec<_>, _>>()?;
+                if values.is_empty() {
+                    match literal.ty.kind() {
+                        vir::TypeKind::Set(t) => ExpKind::EmptySet(self.convert(t)?),
+                        vir::TypeKind::Multiset(t) => ExpKind::EmptyMultiset(self.convert(t)?),
+                        vir::TypeKind::Seq(t) => ExpKind::EmptySeq(self.convert(t)?),
+                        vir::TypeKind::Map(k, v) => {
+                            ExpKind::EmptyMap(self.convert(k)?, self.convert(v)?)
+                        }
+                        _ => return Err(ConversionError::UnsupportedExpression),
+                    }
+                } else {
+                    match literal.ty.kind() {
+                        vir::TypeKind::Set(_) => ExpKind::ExplicitSet(values),
+                        vir::TypeKind::Multiset(_) => ExpKind::ExplicitMultiset(values),
+                        vir::TypeKind::Seq(_) => ExpKind::ExplicitSeq(values),
+                        _ => return Err(ConversionError::UnsupportedExpression),
+                    }
+                }
+            }
+            vir::ExprKindData::CollectionUpdate(update) => {
+                let target = self.expression(&update.target)?;
+                let key = self.expression(&update.key)?;
+                let value = self.expression(&update.val)?;
+                match update.target.ty().kind() {
+                    vir::TypeKind::Seq(_) => ExpKind::SeqUpdate(target, key, value),
+                    vir::TypeKind::Map(..) => ExpKind::MapUpdate(target, key, value),
+                    _ => return Err(ConversionError::UnsupportedExpression),
+                }
+            }
+            vir::ExprKindData::CollectionLen(value) => match value.ty().kind() {
+                vir::TypeKind::Set(_) | vir::TypeKind::Multiset(_) => {
+                    ExpKind::AnySetCardinality(self.expression(&value)?)
+                }
+                vir::TypeKind::Seq(_) => ExpKind::SeqLength(self.expression(&value)?),
+                vir::TypeKind::Map(..) => ExpKind::MapCardinality(self.expression(&value)?),
+                _ => return Err(ConversionError::UnsupportedExpression),
+            },
+            vir::ExprKindData::MapDomain(value) => ExpKind::MapDomain(self.expression(&value)?),
+            vir::ExprKindData::MapRange(value) => ExpKind::MapRange(self.expression(&value)?),
             vir::ExprKindData::Ternary(t) => ExpKind::CondExp(
                 self.expression(&t.cond)?,
                 self.expression(&t.then)?,
@@ -328,7 +579,7 @@ impl<'vir> TypeContext<'vir> {
             }
             _ => return Err(ConversionError::UnsupportedExpression),
         };
-        Ok(Exp::new(kind, meta))
+        Ok(Exp::with_extra(kind, meta, extra))
     }
 }
 
@@ -347,10 +598,9 @@ mod tests {
     };
 
     #[test]
+    #[ignore = "requires real Z3; set FERRUM_TEST_Z3"]
     fn vir_program_reaches_validated_native_verifier() {
-        let Some(z3) = std::env::var_os("FERRUM_TEST_Z3") else {
-            return;
-        };
+        let z3 = std::env::var_os("FERRUM_TEST_Z3").expect("set FERRUM_TEST_Z3");
         std::thread::Builder::new()
             .stack_size(ferrum::VERIFICATION_STACK_SIZE)
             .spawn(move || {
@@ -399,10 +649,271 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires real Z3; set FERRUM_TEST_Z3"]
+    fn vir_collection_membership_reaches_native_verifier() {
+        let z3 = std::env::var_os("FERRUM_TEST_Z3").expect("set FERRUM_TEST_Z3");
+        std::thread::Builder::new()
+            .stack_size(ferrum::VERIFICATION_STACK_SIZE)
+            .spawn(move || {
+                vir::init_vcx(vir::VirCtxt::new_without_tcx());
+                let program = vir::with_vcx(|vcx| {
+                    let one = vcx.mk_int::<1>();
+                    let set = vcx.mk_set_literal_expr(vcx.alloc_slice(&[one]), one.ty());
+                    let expr = vcx.mk_set_in_expr(one, set);
+                    let assertion = vcx.mk_assert_stmt(expr);
+                    let label = vcx.alloc(vir::CfgBlockLabelData::End);
+                    let end = vcx.alloc(vir::TerminatorStmtData::Exit);
+                    let block = vcx.mk_cfg_block(label, &[], vcx.alloc_slice(&[assertion]), end);
+                    let method = vcx.mk_method_unchecked(
+                        "test",
+                        &[],
+                        &[],
+                        &[],
+                        &[],
+                        Some(vcx.alloc_slice(&[block])),
+                    );
+                    program_to_silver(vcx.mk_program(
+                        &[],
+                        &[],
+                        &[],
+                        &[],
+                        &[],
+                        vcx.alloc_slice(&[method]),
+                    ))
+                    .unwrap()
+                });
+                let mut frontend = native_frontend(
+                    &["--z3Exe".into(), z3.to_string_lossy().into_owned()],
+                    Arc::new(NoopReporter),
+                )
+                .unwrap();
+                assert!(matches!(
+                    frontend.verify(&program).unwrap(),
+                    VerificationResult::Success
+                ));
+                frontend.stop().unwrap();
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    #[test]
+    fn malformed_domain_arity_is_rejected() {
+        vir::init_vcx(vir::VirCtxt::new_without_tcx());
+        vir::with_vcx(|vcx| {
+            let domain = vcx.alloc(vir::DomainData {
+                name: "D",
+                typarams: &[],
+                axioms: &[],
+                functions: &[],
+                interpretation: None,
+            });
+            let program = vcx.mk_program(&[], &[], vcx.alloc_slice(&[domain]), &[], &[], &[]);
+            let context = TypeContext::new(program);
+            let arg = vcx.alloc(vir::TypeData::<vir::Dyn>::new(vir::TypeKind::Int));
+            let bad = vcx.alloc(vir::TypeData::<vir::Dyn>::new(vir::TypeKind::Domain(
+                "D",
+                vcx.alloc_slice(&[arg]),
+            )));
+            assert!(matches!(
+                context.convert(&bad),
+                Err(ConversionError::DomainTypeRequiresDeclarations(_))
+            ));
+        });
+    }
+
+    #[test]
+    #[ignore = "requires real Z3; set FERRUM_TEST_Z3"]
+    fn vir_domain_axiom_reaches_native_verifier() {
+        let z3 = std::env::var_os("FERRUM_TEST_Z3").expect("set FERRUM_TEST_Z3");
+        std::thread::Builder::new()
+            .stack_size(ferrum::VERIFICATION_STACK_SIZE)
+            .spawn(move || {
+                vir::init_vcx(vir::VirCtxt::new_without_tcx());
+                let program = vir::with_vcx(|vcx| {
+                    let axiom = vcx.alloc(vir::DomainAxiomData {
+                        name: "trivial",
+                        expr: vcx.mk_bool::<true>(),
+                    });
+                    let domain = vcx.alloc(vir::DomainData {
+                        name: "D",
+                        typarams: &[],
+                        axioms: vcx.alloc_slice(&[axiom]),
+                        functions: &[],
+                        interpretation: None,
+                    });
+                    let assertion = vcx.mk_assert_stmt(vcx.mk_bool::<true>());
+                    let label = vcx.alloc(vir::CfgBlockLabelData::End);
+                    let end = vcx.alloc(vir::TerminatorStmtData::Exit);
+                    let block = vcx.mk_cfg_block(label, &[], vcx.alloc_slice(&[assertion]), end);
+                    let method = vcx.mk_method_unchecked(
+                        "test",
+                        &[],
+                        &[],
+                        &[],
+                        &[],
+                        Some(vcx.alloc_slice(&[block])),
+                    );
+                    program_to_silver(vcx.mk_program(
+                        &[],
+                        &[],
+                        vcx.alloc_slice(&[domain]),
+                        &[],
+                        &[],
+                        vcx.alloc_slice(&[method]),
+                    ))
+                    .unwrap()
+                });
+                let mut frontend = native_frontend(
+                    &["--z3Exe".into(), z3.to_string_lossy().into_owned()],
+                    Arc::new(NoopReporter),
+                )
+                .unwrap();
+                assert!(matches!(
+                    frontend.verify(&program).unwrap(),
+                    VerificationResult::Success
+                ));
+                frontend.stop().unwrap();
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    #[test]
+    #[ignore = "requires real Z3; set FERRUM_TEST_Z3"]
+    fn vir_adt_reaches_native_frontend() {
+        let z3 = std::env::var_os("FERRUM_TEST_Z3").expect("set FERRUM_TEST_Z3");
+        std::thread::Builder::new()
+            .stack_size(ferrum::VERIFICATION_STACK_SIZE)
+            .spawn(move || {
+                vir::init_vcx(vir::VirCtxt::new_without_tcx());
+                let program = vir::with_vcx(|vcx| {
+                    let constructor = vcx.alloc(vir::AdtConstructorData {
+                        name: "Just",
+                        args: &[],
+                        axiom: None,
+                    });
+                    let adt = vcx.alloc(vir::AdtData {
+                        name: "Box",
+                        typarams: &[],
+                        constructors: vcx.alloc_slice(&[constructor]),
+                    });
+                    let assertion = vcx.mk_assert_stmt(vcx.mk_bool::<true>());
+                    let label = vcx.alloc(vir::CfgBlockLabelData::End);
+                    let end = vcx.alloc(vir::TerminatorStmtData::Exit);
+                    let block = vcx.mk_cfg_block(label, &[], vcx.alloc_slice(&[assertion]), end);
+                    let method = vcx.mk_method_unchecked(
+                        "test",
+                        &[],
+                        &[],
+                        &[],
+                        &[],
+                        Some(vcx.alloc_slice(&[block])),
+                    );
+                    program_to_silver(vcx.mk_program(
+                        &[],
+                        vcx.alloc_slice(&[adt]),
+                        &[],
+                        &[],
+                        &[],
+                        vcx.alloc_slice(&[method]),
+                    ))
+                    .unwrap()
+                });
+                let mut frontend = native_frontend(
+                    &["--z3Exe".into(), z3.to_string_lossy().into_owned()],
+                    Arc::new(NoopReporter),
+                )
+                .unwrap();
+                assert!(matches!(
+                    frontend.verify(&program).unwrap(),
+                    VerificationResult::Success
+                ));
+                frontend.stop().unwrap();
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    #[test]
+    #[ignore = "requires real Z3; set FERRUM_TEST_Z3"]
+    fn native_error_preserves_identifier_positions() {
+        let z3 = std::env::var_os("FERRUM_TEST_Z3").expect("set FERRUM_TEST_Z3");
+        std::thread::Builder::new()
+            .stack_size(ferrum::VERIFICATION_STACK_SIZE)
+            .spawn(move || {
+                let id = |value: &str| {
+                    Position::LineColumn(LineColumn::Identifier(Box::new(IdentifierPosition {
+                        file: None,
+                        start: Box::new(LineColumnPosition::new(0, 0).into()),
+                        end: None,
+                        id: value.into(),
+                    })))
+                };
+                let exp = Exp::new(
+                    ExpKind::FalseLit,
+                    Metadata {
+                        position: id("456"),
+                        ..Default::default()
+                    },
+                );
+                let statement = Stmt::new(
+                    StmtKind::Assert(exp),
+                    Metadata {
+                        position: id("123"),
+                        ..Default::default()
+                    },
+                );
+                let method = Method::new(MethodData {
+                    name: "bad".into(),
+                    formal_args: vec![],
+                    formal_returns: vec![],
+                    pres: vec![],
+                    posts: vec![],
+                    body: Some(statement),
+                    meta: Metadata::default(),
+                });
+                let program = Program::new(
+                    vec![],
+                    vec![],
+                    vec![],
+                    vec![],
+                    vec![method],
+                    vec![],
+                    Metadata::default(),
+                );
+                let mut frontend = native_frontend(
+                    &["--z3Exe".into(), z3.to_string_lossy().into_owned()],
+                    Arc::new(NoopReporter),
+                )
+                .unwrap();
+                let VerificationResult::Failure(errors) = frontend.verify(&program).unwrap() else {
+                    panic!("expected failure");
+                };
+                let ferrum_silver::verifier::verification_result::AbstractError::Verification(
+                    error,
+                ) = &errors[0]
+                else {
+                    panic!("expected verification error");
+                };
+                let error = verification_error(error.clone()).unwrap();
+                assert_eq!(error.offending_pos_id.as_deref(), Some("123"));
+                assert_eq!(error.reason_pos_id.as_deref(), Some("456"));
+                assert!(error.full_id.starts_with("assert.failed"));
+                frontend.stop().unwrap();
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    #[test]
+    #[ignore = "requires real Z3; set FERRUM_TEST_Z3"]
     fn constructed_ast_uses_native_frontend_validation_and_verifier() {
-        let Some(z3) = std::env::var_os("FERRUM_TEST_Z3") else {
-            return;
-        };
+        let z3 = std::env::var_os("FERRUM_TEST_Z3").expect("set FERRUM_TEST_Z3");
         std::thread::Builder::new()
             .stack_size(ferrum::VERIFICATION_STACK_SIZE)
             .spawn(move || {
@@ -496,6 +1007,10 @@ impl<'vir> TypeContext<'vir> {
         };
         Ok(match statement.kind {
             vir::StmtKindData::Comment(text) => empty(Info::Simple(vec![(*text).into()])),
+            vir::StmtKindData::Label(label) => Stmt::new(
+                StmtKind::Label(self.label((*label).into(), vec![])),
+                Metadata::default(),
+            ),
             vir::StmtKindData::LocalDecl(decl, initializer) => {
                 let silver_decl = self.local_declaration(decl)?;
                 declarations.push(Declaration::Local(silver_decl));
@@ -522,6 +1037,30 @@ impl<'vir> TypeContext<'vir> {
             vir::StmtKindData::Exhale(exp) => {
                 Stmt::new(StmtKind::Exhale(self.expression(&exp)?), meta)
             }
+            vir::StmtKindData::Fold(pred) | vir::StmtKindData::Unfold(pred) => {
+                let args = pred
+                    .args
+                    .iter()
+                    .map(|arg| self.expression(arg))
+                    .collect::<Result<Vec<_>, _>>()?;
+                let m = Metadata::default();
+                let access = ferrum_silver::ast::expression::PredicateAccess::new(
+                    args,
+                    pred.target.into(),
+                    m.clone(),
+                );
+                let predicate = ferrum_silver::ast::statement::PredicateAccessPredicate::new(
+                    access,
+                    pred.perm.map(|p| self.expression(&p)).transpose()?,
+                    m,
+                );
+                let kind = if matches!(statement.kind, vir::StmtKindData::Fold(_)) {
+                    StmtKind::Fold(predicate)
+                } else {
+                    StmtKind::Unfold(predicate)
+                };
+                Stmt::new(kind, meta)
+            }
             vir::StmtKindData::PureAssign(assign) => {
                 let lhs = self.expression(&assign.lhs)?;
                 let rhs = self.expression(&assign.rhs)?;
@@ -533,7 +1072,12 @@ impl<'vir> TypeContext<'vir> {
                         },
                         Metadata::default(),
                     ),
-                    _ => return Err(ConversionError::UnsupportedStatement),
+                    _ => {
+                        return Err(ConversionError::UnsupportedStatement(format!(
+                            "{:?}",
+                            statement.kind
+                        )))
+                    }
                 }
             }
             vir::StmtKindData::MethodCall(call) => {
@@ -589,7 +1133,12 @@ impl<'vir> TypeContext<'vir> {
                     Metadata::default(),
                 )
             }
-            _ => return Err(ConversionError::UnsupportedStatement),
+            _ => {
+                return Err(ConversionError::UnsupportedStatement(format!(
+                    "{:?}",
+                    statement.kind
+                )))
+            }
         })
     }
 }
@@ -694,7 +1243,16 @@ impl<'vir> TypeContext<'vir> {
                     vec![tail]
                 }
             }
-            vir::TerminatorStmtData::Dummy(_) => return Err(ConversionError::UnsupportedStatement),
+            vir::TerminatorStmtData::Dummy(text) => vec![
+                seq(vec![
+                    self.comment((*text).into()),
+                    Stmt::new(
+                        StmtKind::Assert(Exp::new(ExpKind::FalseLit, meta.clone())),
+                        meta.clone(),
+                    ),
+                ]),
+                goto(vir::CfgBlockLabelData::End.name()),
+            ],
         })
     }
     pub fn method(
@@ -778,13 +1336,115 @@ pub fn program_to_silver(
         ast::Metadata,
         program::{Field, FieldData, Program},
     };
-    if !program.domains.is_empty() {
-        return Err(ConversionError::UnsupportedProgramMember("domains"));
-    }
-    if !program.adts.is_empty() {
-        return Err(ConversionError::UnsupportedProgramMember("adts"));
-    }
     let context = TypeContext::new(program);
+    let extensions = program
+        .adts
+        .iter()
+        .map(|adt| {
+            use ferrum_silver::plugin::standard::adt::adt_ast_extension::{Adt, AdtConstructor};
+            let type_vars = adt
+                .typarams
+                .iter()
+                .map(|p| TypeVar::new(p.name))
+                .collect::<Vec<_>>();
+            let constructors = adt
+                .constructors
+                .iter()
+                .map(|constructor| {
+                    let args = constructor
+                        .args
+                        .iter()
+                        .map(|arg| context.local_declaration(arg))
+                        .collect::<Result<_, _>>()?;
+                    Ok(Arc::new(AdtConstructor::new(
+                        adt.name,
+                        type_vars.clone(),
+                        constructor.name,
+                        args,
+                        Metadata::default(),
+                    )))
+                })
+                .collect::<Result<Vec<_>, ConversionError>>()?;
+            Ok(ferrum_silver::ast::program::ExtensionMemberHandle(
+                Arc::new(Adt {
+                    name: adt.name.into(),
+                    constructors,
+                    type_vars,
+                    deriving_info: Default::default(),
+                    meta: Metadata::default(),
+                }),
+            ))
+        })
+        .collect::<Result<Vec<_>, ConversionError>>()?;
+    let domains = program
+        .domains
+        .iter()
+        .map(|domain| {
+            use ferrum_silver::ast::program::{
+                AnyLocalVarDecl, Domain, DomainAxiom, DomainAxiomKind, DomainData, DomainFunc,
+                DomainFuncData, LocalVarDecl,
+            };
+            let functions = domain
+                .functions
+                .iter()
+                .map(|function| {
+                    let args = function
+                        .args
+                        .iter()
+                        .enumerate()
+                        .map(|(index, ty)| {
+                            Ok(AnyLocalVarDecl::Named(LocalVarDecl::new(
+                                format!("arg{index}"),
+                                context.convert(ty)?,
+                                Metadata::default(),
+                            )))
+                        })
+                        .collect::<Result<_, ConversionError>>()?;
+                    Ok(DomainFunc::new(DomainFuncData {
+                        name: function.name.to_str().into(),
+                        formal_args: args,
+                        typ: context.convert(&function.ret)?,
+                        unique: function.unique,
+                        interpretation: function
+                            .interpretation
+                            .as_ref()
+                            .map(|i| i.interpretation.into()),
+                        domain_name: domain.name.into(),
+                        meta: Metadata::default(),
+                    }))
+                })
+                .collect::<Result<_, ConversionError>>()?;
+            let axioms = domain
+                .axioms
+                .iter()
+                .map(|axiom| {
+                    Ok(DomainAxiom::new(DomainAxiomKind::Named {
+                        name: axiom.name.into(),
+                        exp: context.expression(&axiom.expr)?,
+                        domain_name: domain.name.into(),
+                        meta: Metadata::default(),
+                    }))
+                })
+                .collect::<Result<_, ConversionError>>()?;
+            Ok(Domain::new(DomainData {
+                name: domain.name.into(),
+                functions,
+                axioms,
+                type_vars: domain
+                    .typarams
+                    .iter()
+                    .map(|p| TypeVar::new(p.name))
+                    .collect(),
+                interpretations: domain.interpretation.map(|i| {
+                    i.interpretation
+                        .iter()
+                        .map(|p| (p.key.into(), p.value.into()))
+                        .collect()
+                }),
+                meta: Metadata::default(),
+            }))
+        })
+        .collect::<Result<Vec<_>, ConversionError>>()?;
     let fields = program
         .fields
         .iter()
@@ -854,12 +1514,51 @@ pub fn program_to_silver(
         .map(|method| context.method(method))
         .collect::<Result<Vec<_>, _>>()?;
     Ok(Program::new(
-        vec![],
+        domains,
         fields,
         functions,
         predicates,
         methods,
-        vec![],
+        extensions,
         Metadata::default(),
     ))
+}
+
+/// Identifier payloads have the same meaning as the identifiers supplied to
+/// the JVM adapter; ordinary source positions do not carry a Prusti span ID.
+pub fn position_id(pos: &Position) -> Option<String> {
+    match pos {
+        Position::LineColumn(LineColumn::Identifier(p)) => Some(p.id.clone()),
+        _ => None,
+    }
+}
+
+/// Native diagnostic data required by Prusti's existing span backtranslation.
+/// Retain the original diagnostic so later counterexample mapping has access to
+/// its typed payload instead of silently dropping it.
+#[derive(Clone, Debug)]
+pub struct NativeVerificationError {
+    pub full_id: String,
+    pub pos_id: Option<String>,
+    pub offending_pos_id: Option<String>,
+    pub reason_pos_id: Option<String>,
+    pub message: String,
+    pub diagnostic: Arc<dyn ferrum_silver::verifier::verification_result::VerificationDiagnostic>,
+}
+
+pub fn verification_error(
+    error: Arc<dyn ferrum_silver::verifier::verification_result::VerificationDiagnostic>,
+) -> Result<NativeVerificationError, ferrum_silver::verifier::verification_result::DiagnosticError>
+{
+    use ferrum_silver::verifier::verification_error::node_position;
+    let offending_pos = node_position(&error.offending_node()?)?;
+    let reason_pos = error.reason()?.position()?;
+    Ok(NativeVerificationError {
+        full_id: error.full_id(),
+        pos_id: position_id(&error.position()),
+        offending_pos_id: position_id(&offending_pos),
+        reason_pos_id: position_id(&reason_pos),
+        message: error.readable_message()?,
+        diagnostic: error,
+    })
 }

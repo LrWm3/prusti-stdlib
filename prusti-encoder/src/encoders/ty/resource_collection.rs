@@ -399,6 +399,11 @@ impl TaskEncoder for ResourceCollectionEnc {
                         vcx.mk_forall_expr(
                             variables,
                             vcx.alloc_slice(&[
+                                // A loop wand can connect several conversion
+                                // heaps before observing the restored state.
+                                // Ground each frame from the pure element key,
+                                // as well as from a heap-specific observation.
+                                vcx.mk_trigger(&[raw_element(j).as_dyn()]),
                                 vcx.mk_trigger(&[access.as_dyn()]),
                                 vcx.mk_trigger(&[state(target, j).as_dyn()]),
                             ]),

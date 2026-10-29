@@ -36,6 +36,7 @@ pub enum SpecBuiltin {
     ForIterator,
     MutIterTail,
     LoopRestorePrefix,
+    LoopRestoreResourcePrefix,
     ModeStart(Mode),
     ModeEnd(Mode),
 }
@@ -257,6 +258,9 @@ impl PrustiBuiltin {
                     "for_iterator" => Self::Spec(SpecBuiltin::ForIterator),
                     "mut_iter_tail" => Self::Spec(SpecBuiltin::MutIterTail),
                     "loop_restore_prefix" => Self::Spec(SpecBuiltin::LoopRestorePrefix),
+                    "loop_restore_resource_prefix" => {
+                        Self::Spec(SpecBuiltin::LoopRestoreResourcePrefix)
+                    }
                     "ghost_call" => Self::Ghost(GhostOp::Call),
                     "ghost_erased" => Self::Ghost(GhostOp::Erased),
                     "mut_ref_same_address" => Self::MutRefSameAddress,

@@ -157,11 +157,20 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     old_outer,
                 );
                 let snapshot = ty.ref_to_snap(address);
+                // Evaluate the storage read once before quantifying over its
+                // referents. Heap reads inside resource keys otherwise become
+                // repeated preconditions of Silicon's inverse-map axioms.
+                let stored = self.vcx.mk_local_decl("_joint_loop_storage", snapshot.ty());
                 resources.extend(self.encode_lifetime_projection_with_snapshot(
                     LifetimeProjection::from_index(projection.base(), projection.region_idx()),
                     old_outer,
-                    Some(snapshot),
+                    Some(self.vcx.mk_local_ex(stored)),
                 )?);
+                resources =
+                    vec![
+                        self.vcx
+                            .mk_let_expr(stored, snapshot, self.vcx.mk_conj(&resources)),
+                    ];
             } else {
                 self.encode_pcg_node(&*i, &mut resources, old_outer)?;
             }

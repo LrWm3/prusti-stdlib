@@ -2313,8 +2313,54 @@ fails to complete its first package within a 240-second diagnostic limit
 experiments verify only `m_visit` and are not acceptance runs. Build 185 instead
 captures the checked aggregate resource-state observers before comparing
 prefix and suffix sequences, so the quantified relation itself reads no heap.
-Its full Rust value probe is pending; do not promote the four-argument summary
-or final-reference-value support until that positive and its controls pass.
+The full Rust value probe fails its restoration annotation in 101.25 seconds
+(`target/stdlib-im5-state185-iterator-spec-logs`). A checked assertion of the
+same relation inside the entry script also fails (diagnostic 189), so moving
+the final assertion alone does not establish the missing frame.
+
+Extending the standalone model with checked recursive pack/unpack helpers
+reproduces that failure (diagnostic 190). Intermediate checked state assertions
+make it verify, while a single initial or final assertion does not. Giving the
+conversion frame a pure `xs[j]` trigger, in addition to its heap-observer
+trigger, proves the composition without those assertions (diagnostic 194).
+The extended checked model and both controls pass together in 10.58, 17.16,
+and 13.05 seconds (`/tmp/prusti-im5-model196.log`). The helper bodies remain
+verified; the trigger adds no assumptions or stronger contract.
+
+The same pure-element trigger on the concrete emitted conversion contracts
+lets the Rust entry package complete: a deliberately false assertion inserted
+immediately afterward is rejected in 15.49 seconds
+(`/tmp/prusti-im5-trigger197.log`). This is caller-only localization evidence,
+not full acceptance. Adding an observation marker only to the restoration
+quantifier does not fix the proof (diagnostic 195). Build 198 adds the element
+trigger to the encoder's pointwise conversion frames. Its full state-prefix positive passes in 674.72 seconds, including all
+generated observers and conversion bodies, Rust compilation, and empty/two-
+element runtime checks (`target/stdlib-im5-state198-iterator-spec-logs`). The
+false-after-traversal and wrong-final-value controls pass in 216.52 and 156.23
+seconds. The wrong-recorded-state case first times out at 600 seconds; a fresh
+full rerun passes its exact restoration diagnostic in 330.89 seconds
+(`target/stdlib-im5-badstate201-iterator-spec-logs`). These use fresh targets,
+disabled caching, overflow/panic checks, 600-second whole-program limits, and
+30-second solver time bounds. The first run's wall time includes compilation
+and setup. The four clients are promoted as `mut_native_resource_prefix_*`.
+This is the first accepted symbolic whole-prefix referent-value proof.
+
+The broader regression batch passes reference-loop identity (146.99 seconds),
+scalar whole-prefix restoration (34.65), generic identity (42.01), scalar false
+(52.88), native wrong framing (119.37), reference-loop false (95.27), and
+reference-loop wrong count (73.17), plus Rust/runtime checks. Native correct
+framing initially fails its preserved-value assertion after 662.04 seconds;
+a fresh full rerun with the same proof bounds passes in 168.56 seconds
+(`target/stdlib-im5-framing205-iterator-spec-logs`). Keep both failures in the
+evidence: the focused gates pass across these runs, but their solver/runtime
+sensitivity remains a limitation.
+
+The next gate is exact early-break framing. A first probe cannot capture the
+borrowed owner directly in an invariant even under `old`: Rust rejects the
+closure's overlapping borrow. The next implementation captures the initial
+resource-state sequence before creating the iterator, and compares the tail
+to that pure snapshot. Generic/wrapper/cross-crate loops, Vec views, and full
+combined acceptance still follow; IM5 is not complete.
 
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification

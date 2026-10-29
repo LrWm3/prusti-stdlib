@@ -285,10 +285,16 @@ impl AstRewriter {
         spec_id: SpecificationId,
         tokens: TokenStream,
     ) -> syn::Result<TokenStream> {
+        let call: syn::ExprCall = syn::parse2(quote! { __restoration(#tokens) })?;
+        let marker = if call.args.len() == 4 {
+            quote! { ::prusti_contracts::loop_restore_resource_prefix }
+        } else {
+            quote! { ::prusti_contracts::loop_restore_prefix }
+        };
         self.process_prusti_expression(
             quote! {loop_body_restoration_spec},
             spec_id,
-            quote! { ::prusti_contracts::loop_restore_prefix(#tokens) },
+            quote! { #marker(#tokens) },
         )
     }
 

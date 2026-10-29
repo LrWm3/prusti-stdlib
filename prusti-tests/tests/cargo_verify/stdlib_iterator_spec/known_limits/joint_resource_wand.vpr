@@ -1,7 +1,11 @@
 // Constructor-stage model of joint storage/referent restoration.
-// Every wand is packaged with a checked body. No axioms or assumptions are
-// added. The final assertions check that packaging preserves the real tail
-// and its referent resources. This does not model a complete Rust loop.
+// Every wand and recursive resource conversion has a checked body. No axioms
+// or assumptions are added. The final assertions check that packaging preserves
+// the real tail and its referent resources. This does not model a Rust loop.
+//
+// Resource conversion frames have a heap-independent element trigger as well
+// as an observer trigger. The former connects observations across heap changes
+// when a constituent wand is applied between the two conversions.
 
 field slots: Seq[Ref]
 field value: Int
@@ -18,6 +22,33 @@ function state(xs: Seq[Ref], j: Int): Int
   requires 0 <= j && j < |xs|
   requires acc(Element(j, xs[j]))
 { unfolding acc(Element(j, xs[j])) in xs[j].value }
+predicate Group(index: Int, p: Ref) { acc(Element(index,p)) }
+function group_state(xs: Seq[Ref], j: Int): Int
+  requires 0 <= j && j < |xs|
+  requires acc(Group(j,xs[j]))
+{ unfolding acc(Group(j,xs[j])) in state(xs,j) }
+method pack(xs: Seq[Ref], i: Int)
+  requires 0 <= i && i <= |xs|
+  requires forall j: Int :: {xs[j]} i <= j && j < |xs| ==> acc(Element(j,xs[j]))
+  ensures forall j: Int :: {xs[j]} i <= j && j < |xs| ==> acc(Group(j,xs[j]))
+  ensures forall j: Int :: {xs[j]} {group_state(xs,j)} i <= j && j < |xs| ==> group_state(xs,j) == old(state(xs,j))
+{
+  if (i < |xs|) {
+    fold acc(Group(i,xs[i]));
+    pack(xs,i+1);
+  }
+}
+method unpack(xs: Seq[Ref], i: Int)
+  requires 0 <= i && i <= |xs|
+  requires forall j: Int :: {xs[j]} i <= j && j < |xs| ==> acc(Group(j,xs[j]))
+  ensures forall j: Int :: {xs[j]} i <= j && j < |xs| ==> acc(Element(j,xs[j]))
+  ensures forall j: Int :: {xs[j]} {state(xs,j)} i <= j && j < |xs| ==> state(xs,j) == old(group_state(xs,j))
+{
+  if (i < |xs|) {
+    unfold acc(Group(i,xs[i]));
+    unpack(xs,i+1);
+  }
+}
 method entry(owner: Ref, initial: Seq[Ref])
   requires acc(Source(owner))
   requires source_contents(owner) == initial
@@ -29,9 +60,11 @@ method entry(owner: Ref, initial: Seq[Ref])
     unfold acc(Tail(owner));
     fold acc(Source(owner));
   }
-  package (forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> acc(Element(j, initial[j]))) --*
-    ((forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> acc(Element(j, initial[j]))) &&
-     (forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> state(initial,j) == old[lhs](state(initial,j)))) {}
+  pack(initial,0);
+  package (forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> acc(Group(j, initial[j]))) --*
+    ((forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> acc(Group(j, initial[j]))) &&
+     (forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> group_state(initial,j) == old[lhs](group_state(initial,j)))) {}
+  unpack(initial,0);
   assert acc(Tail(owner)) && tail_contents(owner) == initial;
   assert forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> acc(Element(j, initial[j]));
   package (acc(Tail(owner)) && tail_contents(owner) == initial &&
@@ -40,14 +73,16 @@ method entry(owner: Ref, initial: Seq[Ref])
      (forall j: Int :: {source_contents(owner)[j]} 0 <= j && j < |source_contents(owner)| ==> acc(Element(j, source_contents(owner)[j]))) &&
      (forall j: Int :: {source_contents(owner)[j]} 0 <= j && j < |source_contents(owner)| ==> state(source_contents(owner),j) == old[lhs](state(tail_contents(owner),j)) + 0)) {
     assert acc(Tail(owner)) --* (acc(Source(owner)) && source_contents(owner) == old[lhs](tail_contents(owner)));
-    assert (forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> acc(Element(j, initial[j]))) --*
-      ((forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> acc(Element(j, initial[j]))) &&
-       (forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> state(initial,j) == old[lhs](state(initial,j))));
+    assert (forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> acc(Group(j, initial[j]))) --*
+      ((forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> acc(Group(j, initial[j]))) &&
+       (forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> group_state(initial,j) == old[lhs](group_state(initial,j))));
     apply acc(Tail(owner)) --* (acc(Source(owner)) && source_contents(owner) == old[lhs](tail_contents(owner)));
     assert forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> acc(Element(j, initial[j]));
-    apply (forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> acc(Element(j, initial[j]))) --*
-      ((forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> acc(Element(j, initial[j]))) &&
-       (forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> state(initial,j) == old[lhs](state(initial,j))));
+    pack(initial,0);
+    apply (forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> acc(Group(j, initial[j]))) --*
+      ((forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> acc(Group(j, initial[j]))) &&
+       (forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> group_state(initial,j) == old[lhs](group_state(initial,j))));
+    unpack(initial,0);
   }
   assert acc(Tail(owner));
   assert forall j: Int :: {initial[j]} 0 <= j && j < |initial| ==> acc(Element(j, initial[j]));

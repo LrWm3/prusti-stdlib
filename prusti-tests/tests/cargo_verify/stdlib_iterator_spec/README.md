@@ -15,7 +15,8 @@ reassembles the yielded element and the final tail at expiry. This supports
 two simultaneous yields, non-`Copy` elements, empty and exhausted iterators,
 and source-slice reuse after mutation. Yielded references remain usable after
 the iterator itself is dropped. A loop also restores ownership of the source;
-it does not yet prove a value invariant for the entire updated prefix.
+functional prefix assertions additionally require a checked `body_restore_prefix`
+summary.
 
 The `no_std` specification library verifies `set_first_native`, which uses a
 native iterator to update the first element and preserves the remaining
@@ -46,8 +47,13 @@ exercise these resource contracts. The `mut_native_resource_loop_identity_*`
 cases additionally verify joint source/referent ownership restoration and
 unchanged slot identities after a symbolic reference-update loop, with false
 and incorrect-count controls. The three-argument prefix summary records
-shallow identities; whole-prefix referent-value proofs and their Vec views
-remain incomplete. Solver configuration and
+shallow identities. The four-argument form additionally records a
+`Seq<ResourceState>` captured while each yielded element is accessible.
+`mut_native_resource_prefix_*` proves that a symbolic traversal sets every
+referenced value to 7 and rejects an incorrect recorded state, a wrong final
+value, and `false` after traversal. Exact early-break suffix framing, generic
+and cross-crate combined loops, and their Vec views remain open. Solver
+configuration and
 the fresh-run `IntoIterator` result are recorded in `STDLIB_EXTERN_SPEC.md`;
 the complete native batch has not yet passed consistently.
 

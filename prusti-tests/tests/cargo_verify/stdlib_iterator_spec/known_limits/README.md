@@ -459,8 +459,10 @@ remain separate acceptance work; see `STDLIB_EXTERN_SPEC.md`.
 
 [`joint_resource_wand.vpr`](joint_resource_wand.vpr) checks the constructor
 stage of a combined storage/referent obligation. It preserves a symbolic
-sequence of referent values through two checked constituent wands and a joint
-package. The real iterator tail and all referent permissions remain available
+sequence of referent values through checked recursive resource conversions,
+two constituent wands, and a joint package. Conversion frames use a pure
+element-lookup trigger to connect observations across the intermediate heap
+changes. The real iterator tail and all referent permissions remain available
 after packaging. It contains no added axioms or assumptions.
 
 Run its positive, wrong-state, and reachable-false controls with:

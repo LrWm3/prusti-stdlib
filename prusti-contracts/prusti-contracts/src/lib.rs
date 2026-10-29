@@ -91,8 +91,18 @@ pub use prusti_contracts_proc_macros::body_invariant;
 /// The verifier checks this obligation on loop entry and each backedge; it
 /// does not make the borrowed source readable inside the loop.
 ///
-/// Currently this requires one matching singleton loop edge from a local
-/// mutable slice reference to a local native `slice::IterMut`. The annotation
+/// For elements containing mutable references, a fourth operand can supply a
+/// ghost `Seq<ResourceState>` with the states of completed elements. Capture
+/// each state with `resource_state` while its yielded element is accessible.
+/// This sequence must have the same length as `prefix`; the checked summary
+/// restores those states and preserves the remaining tail's states at expiry.
+/// The three-operand form describes shallow element snapshots only.
+///
+/// Currently this requires one matching loop obligation from a local mutable
+/// slice reference to a local native `slice::IterMut`. Storage and referent
+/// resources of the same source may form one joint obligation. Reference-bearing
+/// tails must preserve their shallow element snapshots; referent values can change.
+/// The annotation
 /// must be reached before any iterator is advanced on the entry path. Ambiguous
 /// edges and unsupported control-flow shapes are rejected.
 pub use prusti_contracts_proc_macros::body_restore_prefix;
@@ -105,6 +115,17 @@ pub fn loop_restore_prefix<T>(
     _prefix: Seq<T>,
 ) -> bool {
     panic!("loop_restore_prefix is a specification-only marker")
+}
+
+/// Internal resource-state marker emitted by `body_restore_prefix!`.
+#[doc(hidden)]
+pub fn loop_restore_resource_prefix<T>(
+    _iterator: &core::slice::IterMut<'_, T>,
+    _owner: *const [T],
+    _prefix: Seq<T>,
+    _states: Seq<ResourceState>,
+) -> bool {
+    panic!("loop_restore_resource_prefix is a specification-only marker")
 }
 
 /// Observe the iterator of the enclosing `for` loop in a body invariant.

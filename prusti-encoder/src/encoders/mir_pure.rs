@@ -447,12 +447,15 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
         // post-state. Keep its construction as an expression so an `old`
         // inside the closure can select the entry heap before it is evaluated.
         let has_closure = body.basic_blocks.iter().any(|block| {
-            block.statements.iter().any(|statement| matches!(
-                &statement.kind,
-                mir::StatementKind::Assign(box (_, mir::Rvalue::Aggregate(
-                    box mir::AggregateKind::Closure(..), _
-                )))
-            ))
+            block.statements.iter().any(|statement| {
+                matches!(
+                    &statement.kind,
+                    mir::StatementKind::Assign(box (
+                        _,
+                        mir::Rvalue::Aggregate(box mir::AggregateKind::Closure(..), _),
+                    ))
+                )
+            })
         });
         Self {
             vcx,
@@ -1842,7 +1845,7 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                 assert!(qvars.is_empty(), "`spec_block` closures take no arguments");
                 mk_bool(body.downcast_ty::<vir::Bool>())
             }
-            SpecBuiltin::LoopRestorePrefix => {
+            SpecBuiltin::LoopRestorePrefix | SpecBuiltin::LoopRestoreResourcePrefix => {
                 if !self.restoration_block || self.encoding_depth != 1 {
                     return Err(self.unsupported_rvalue(
                         "loop_restore_prefix is only available in body_restore_prefix annotations"
@@ -1850,7 +1853,8 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                         self.current_span(),
                     ));
                 }
-                assert_eq!(args.len(), 3);
+                let resource_prefix = builtin == SpecBuiltin::LoopRestoreResourcePrefix;
+                assert_eq!(args.len(), if resource_prefix { 4 } else { 3 });
                 let iterator_ref_ty = args[0].node.ty(self.body, self.vcx.tcx());
                 let TyKind::Ref(_, iterator_ty, ty::Mutability::Not) = iterator_ref_ty.kind() else {
                     unreachable!("restoration marker requires an iterator reference")
@@ -1909,8 +1913,82 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                 let inner_impure = self.deps.require_dep::<crate::encoders::TyUseImpureEnc>(inner_task)?;
                 let tail_value = caster.cast_to_caller_ctx(inner_impure.ref_to_snap(tail_addr));
                 let tail_contents = slice_use.expect_array().to_seq(tail_value.downcast_ty(), tail_len);
-                let tail_contents = self.vcx.mk_old_lhs_expr(tail_contents);
-                let restored = self.vcx.mk_seq_concat_expr(prefix.downcast_ty(), tail_contents);
+                let restored = self.vcx.mk_seq_concat_expr(
+                    prefix.downcast_ty(), self.vcx.mk_old_lhs_expr(tail_contents),
+                );
+                let resource_relation = if resource_prefix {
+                    let source_decl = self.vcx.mk_local_decl("_restore_source_values", source.ty());
+                    let source_values = self.vcx.mk_local_ex(source_decl).lift();
+                    let tail_decl = self.vcx.mk_local_decl("_restore_tail_values", tail_contents.ty());
+                    let tail_values = self.vcx.mk_local_ex(tail_decl).lift();
+                    let states_ty = args[3].node.ty(self.body, self.vcx.tcx());
+                    let states = self.encode_operand_snap(&args[3].node, curr_ver)?
+                        .downcast_ty::<vir::Seq>();
+                    let states_decl = self.vcx.mk_local_decl("_restore_prefix_states", states.ty());
+                    let state_values = self.vcx.mk_local_ex(states_decl).lift();
+                    let prefix_len = self.vcx.mk_collection_len_expr(prefix.downcast_ty::<vir::Seq>());
+                    let prefix_len_decl = self.vcx.mk_local_decl("_restore_prefix_len", vir::TYPE_INT);
+                    let prefix_size = self.vcx.mk_local_ex(prefix_len_decl).lift();
+                    let source_len = self.vcx.mk_collection_len_expr(source_values);
+                    let index = self.vcx.mk_local_decl("_restore_resource_index", vir::TYPE_INT);
+                    let j = self.vcx.mk_local_ex(index).lift();
+                    let zero = self.vcx.mk_uint::<0>().lift();
+                    let TyKind::Slice(element_ty) = slice_ty.kind() else { unreachable!() };
+                    let element = RustTyDecomposition::from_ty(*element_ty, self.context);
+                    use crate::encoders::ty::resource_collection::{ResourceCollectionEnc, ResourceCollectionTask};
+                    let observer = self.deps.require_dep::<ResourceCollectionEnc>(
+                        ResourceCollectionTask::aggregate(element),
+                    )?;
+                    // Capture each heap-dependent observation once. The
+                    // quantified relation below compares only pure sequences.
+                    let source_states = observer.observe_elements(source_values);
+                    let source_states_decl = self.vcx.mk_local_decl("_restore_source_states", source_states.ty());
+                    let source_state_values = self.vcx.mk_local_ex(source_states_decl).lift();
+                    let tail_states = self.vcx.mk_old_lhs_expr(observer.observe_elements(tail_values));
+                    let tail_states_decl = self.vcx.mk_local_decl("_restore_tail_states", tail_states.ty());
+                    let tail_state_values = self.vcx.mk_local_ex(tail_states_decl).lift();
+                    let source_state = self.vcx.mk_seq_index_expr(source_state_values, j).downcast_ty::<vir::CSnap>();
+                    let prefix_state = self.ty_use(states_ty).expect_builtin().elem_caster()
+                        .cast_to_caller_ctx(self.vcx.mk_seq_index_expr(state_values, j).downcast_ty::<vir::PSnap>().upcast_ty())
+                        .downcast_ty::<vir::CSnap>();
+                    let tail_index = self.vcx.mk_bin_op_expr(vir::BinOpKind::Sub, j, prefix_size)
+                        .downcast_ty::<vir::Int>();
+                    let tail_state = self.vcx.mk_seq_index_expr(tail_state_values, tail_index).downcast_ty::<vir::CSnap>();
+                    // Keep the current-prefix and antecedent-tail observations
+                    // in separate quantified regions. A conditional observer
+                    // merges heap snapshots while Silicon checks the wand.
+                    let prefix_bounds = self.vcx.mk_conj(&[
+                        self.vcx.mk_bin_op_expr(vir::BinOpKind::CmpLe, zero, j).downcast_ty(),
+                        self.vcx.mk_bin_op_expr(vir::BinOpKind::CmpLt, j, prefix_size).downcast_ty(),
+                    ]);
+                    let tail_bounds = self.vcx.mk_conj(&[
+                        self.vcx.mk_bin_op_expr(vir::BinOpKind::CmpLe, prefix_size, j).downcast_ty(),
+                        self.vcx.mk_bin_op_expr(vir::BinOpKind::CmpLt, j, source_len).downcast_ty(),
+                    ]);
+                    let source_element = self.vcx.mk_seq_index_expr(source_values, j);
+                    let variables = self.vcx.alloc_slice(&[index.as_dyn()]);
+                    let triggers = self.vcx.alloc_slice(&[self.vcx.mk_trigger(&[source_element.as_dyn()])]);
+                    let quantified = |bounds, state| self.vcx.mk_forall_expr(
+                        variables, triggers,
+                        self.vcx.mk_bin_op_expr(
+                            vir::BinOpKind::Implies, bounds,
+                            self.vcx.mk_eq_expr(source_state, state),
+                        ).downcast_ty(),
+                    );
+                    let relation = self.vcx.mk_conj(&[
+                        self.vcx.mk_eq_expr(self.vcx.mk_collection_len_expr(state_values), prefix_size),
+                        quantified(prefix_bounds, prefix_state),
+                        quantified(tail_bounds, tail_state),
+                    ]);
+                    let relation = self.vcx.mk_let_expr(tail_states_decl, tail_states, relation);
+                    let relation = self.vcx.mk_let_expr(source_states_decl, source_states, relation);
+                    let relation = self.vcx.mk_let_expr(tail_decl, self.vcx.mk_old_lhs_expr(tail_contents), relation);
+                    let relation = self.vcx.mk_let_expr(source_decl, source, relation);
+                    let relation = self.vcx.mk_let_expr(states_decl, states, relation);
+                    Some(self.vcx.mk_let_expr(prefix_len_decl, prefix_len, relation))
+                } else {
+                    None
+                };
                 // These placeholders are replaced with the selected PCG edge's
                 // actual addresses and metadata by the impure encoder. Check
                 // them before reading either slice in the wand consequent.
@@ -1930,13 +2008,15 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                     .vcx
                     .mk_local_ex(self.vcx.mk_local_decl(RESTORE_TAIL_LEN, vir::TYPE_INT))
                     .lift();
-                mk_bool(self.vcx.mk_conj(&[
+                let mut relations = vec![
                     self.vcx.mk_eq_expr(owner_addr, source_addr),
                     self.vcx.mk_eq_expr(owner_len, source_len),
                     self.vcx.mk_eq_expr(tail_addr, edge_tail_addr),
                     self.vcx.mk_eq_expr(tail_len, edge_tail_len),
                     self.vcx.mk_eq_expr(source, restored),
-                ]))
+                ];
+                relations.extend(resource_relation);
+                mk_bool(self.vcx.mk_conj(&relations))
             }
             SpecBuiltin::MutIterTail => {
                 if !self.specification {

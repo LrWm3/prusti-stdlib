@@ -44,6 +44,8 @@ pub(super) struct Simplifier<'a, 'vir, 'tcx> {
     simplified: FxHashMap<(Ptr<'vir>, usize), Option<ExprDyn<'vir>>>,
     /// Memoized [`Self::is_impure`].
     impure: FxHashMap<Ptr<'vir>, bool>,
+    /// Memoized checked-definition reveals, whose evaluation is a proof hint.
+    reveals: FxHashMap<Ptr<'vir>, bool>,
 }
 
 /// Hands the roots of the expression trees of an item (contract clauses,
@@ -86,6 +88,7 @@ impl<'a, 'vir, 'tcx> Simplifier<'a, 'vir, 'tcx> {
             scopes: 0,
             simplified: FxHashMap::default(),
             impure: FxHashMap::default(),
+            reveals: FxHashMap::default(),
         }
     }
 
@@ -216,7 +219,9 @@ impl<'a, 'vir, 'tcx> Simplifier<'a, 'vir, 'tcx> {
         self.scoped(
             |name, b| name != local && !b.mentions(local),
             |s| {
-                if !binding.mentions(local) {
+                // Keep a reveal at its original evaluation point. Moving it
+                // into a conditional use loses the definition on other paths.
+                if !binding.mentions(local) && !s.has_reveal(binding.val) {
                     s.env.insert(local, binding);
                 }
                 f(s)
@@ -295,6 +300,20 @@ impl<'a, 'vir, 'tcx> Simplifier<'a, 'vir, 'tcx> {
         };
         self.impure.insert(std::ptr::from_ref(e), impure);
         impure
+    }
+
+    pub(super) fn has_reveal(&mut self, e: ExprDyn<'vir>) -> bool {
+        let key = std::ptr::from_ref(e);
+        if let Some(&reveals) = self.reveals.get(&key) {
+            return reveals;
+        }
+        let reveals = matches!(e.kind, ExprKindGenData::FuncApp(app) if app.reveal) || {
+            let mut children = Children(Vec::new());
+            e.super_visit_with(&mut children);
+            children.0.into_iter().any(|child| self.has_reveal(child))
+        };
+        self.reveals.insert(key, reveals);
+        reveals
     }
 }
 

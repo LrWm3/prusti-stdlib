@@ -32,7 +32,7 @@ impl<'vir> Simplifier<'_, 'vir, '_> {
     fn fold_let(&mut self, l: &LetGenData<'vir, (), !>) -> Option<ExprDyn<'vir>> {
         match l.expr.kind {
             ExprKindGenData::Local(x) if x.name == l.name => Some(l.val),
-            _ => (occurrences(l.name, l.expr) == 0).then_some(l.expr),
+            _ => (!self.has_reveal(l.val) && occurrences(l.name, l.expr) == 0).then_some(l.expr),
         }
     }
 

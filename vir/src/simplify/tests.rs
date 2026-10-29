@@ -380,6 +380,30 @@ fn let_scopes() {
 }
 
 #[test]
+fn reveals_keep_their_evaluation_point() {
+    // A reveal establishes a checked definition even when its value is unused
+    // or used only on one branch. A nested reveal has the same requirement.
+    for conditional in [false, true] {
+        for nested in [false, true] {
+            check_prefix("(let a ==", |c| {
+                let revealed = c.vcx.reveal_function(c.app("g", &[c.i("x")]));
+                let value = if nested {
+                    c.bin(Add, revealed, c.int(1))
+                } else {
+                    revealed
+                };
+                let body = if conditional {
+                    c.ite(c.b("c"), c.i("a"), c.int(0))
+                } else {
+                    c.int(0)
+                };
+                c.let_("a", value, body)
+            });
+        }
+    }
+}
+
+#[test]
 fn assertions() {
     // `c || acc(r.f)` would not be a valid assertion; the pure branch is
     // still simplified.

@@ -252,17 +252,18 @@ impl TaskEncoder for IndirectPredicatesEnc {
                                     let resources = vcx.mk_conj(&exprs);
                                     let zero = vcx.mk_uint::<0>();
                                     let bounds = vir::expr! { (([zero]) <= (index)) && ((index) < (extent)) };
+                                    let mut triggers = vec![vcx.mk_trigger(&[vcx.mk_seq_index_expr(elements, index)])];
+                                    if fixed_extent.is_some() {
+                                        // Fixed-array indexing may not otherwise create a
+                                        // ground `to_seq` application. Slice wands must
+                                        // instead depend only on the canonical sequence:
+                                        // equal contents can come from distinct slice
+                                        // snapshots, including the iterator's tail.
+                                        triggers.push(vcx.mk_trigger(&[array.index_generic(input.snap.downcast_ty(), index).as_dyn()]));
+                                    }
                                     quantify_resources(vcx,
                                         vcx.alloc_slice(&[index_decl.as_dyn()]),
-                                        // Executable indexing observes the native array
-                                        // lookup; specifications can instead observe the
-                                        // canonical sequence. Either must instantiate the
-                                        // resource, even when `to_seq` occurs only beneath
-                                        // this quantifier and has no ground application.
-                                        vcx.alloc_slice(&[
-                                            vcx.mk_trigger(&[vcx.mk_seq_index_expr(elements, index)]),
-                                            vcx.mk_trigger(&[array.index_generic(input.snap.downcast_ty(), index).as_dyn()]),
-                                        ]),
+                                        vcx.alloc_slice(&triggers),
                                         bounds, resources,
                                     ).kind
                                 }),

@@ -1990,6 +1990,22 @@ reference gate: the two-yield reference caller still reports helper permission
 and aggregate-state failures. The helper-trigger change remains experimental
 pending that gate, and native contracts remain outside the accepted suite.
 
+The full sequence regression gate now passes all 22 checks, including the
+core specification library (`target/stdlib-im4-sequence115-sequence-spec-logs`).
+The extra native lookup trigger on indexed permissions is restricted to fixed
+arrays. Slice restoration wands use only the canonical sequence lookup: a raw
+slice trigger captured a physical slice snapshot even when the wand's contract
+related equal contents from distinct snapshots. Removing that extra slice
+trigger repairs native wand matching without weakening its permission body.
+The full holder and two-reference restoration positives, four exact-diagnostic
+negative controls, and empty/exhausted iterator cases pass with build 123 and
+experimental native contracts (logs in
+`target/stdlib-im4-{native,negative,boundary}123-iterator-spec-logs`). These runs
+also include the pointwise conversion-helper experiment described below;
+this is not yet acceptance of all native resource frames. Initial/untouched
+referent framing and preservation of the older aggregate-array gates remain
+under investigation before promotion of the native contracts.
+
 The first step is a prerequisite for the others: adding an abstract predicate
 only to call-site contracts would not establish that a generic implementation
 actually preserves it.

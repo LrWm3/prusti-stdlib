@@ -1588,6 +1588,34 @@ entry point is only a runtime exercise; the symbolic relay and generic identity
 are verified without trust. The earlier pledge simplification experiments
 remain removed. Arrays of reference-bearing structs still expose a conversion
 state-proof gap; nested collections and Vec ownership also remain open.
+The full array subset passes all 15 checks with a 300-second program limit
+(`target/stdlib-im4-opacity-iterator-spec-logs`), including all earlier literal
+array controls. The 17 cross-crate finite-resource checks also pass with this
+observer encoding (`target/stdlib-im4-opacity-resources-spec-logs`).
+
+Explicit pledge placement is now implemented. A function
+can restore its outer input storage before references inside its element expire;
+placing every pledge on the last stage loses the earlier storage relation.
+Use `after_expiry(input => condition)` and
+`assert_on_expiry(input => obligation, condition)` to select the stage that
+restores the named input's outer borrowed lifetime. Dereferencing the selector
+chooses a nested type, for example `*self` for the borrowed tail inside a
+temporary borrow of `IterMut`. A non-reference selected type must identify a
+unique contained borrowed lifetime (or a single opaque resource group).
+The encoder resolves it in the definition's signature,
+then match the original input projection by lifetime, since repeated lifetimes
+are deduplicated. Omitted selectors and `result` remain restricted to an
+unambiguous stage; missing or ambiguous sources are rejected. Each pledge is
+attached to exactly one restoration stage. Eighteen focused checks cover
+independent expiry value frames, generic outer-storage framing, nested and
+repeated-lifetime selection, conditional obligations, and exact diagnostics.
+They include a nested read that still fails for missing permission: selecting
+a stage does not supply permission for a possibly replaced inner reference.
+The 37 specification-parser tests pass, as do all 20 cross-crate resource checks,
+including exported independent-expiry contracts and a false control. A failed
+conditional obligation now reports `obligation might not hold on borrow expiry`
+at the caller instead of an internal error. Native iterator integration remains
+in progress, along with constructor conversions and the Vec resource model.
 
 This is a development checkpoint, not an IM4 acceptance result. Symbolic
 collection conversion for further element shapes, generic parameters nested in argument type constructors,

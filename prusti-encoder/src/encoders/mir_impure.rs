@@ -984,7 +984,17 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         // package, `old[lhs]` must see the complete input heap.
                         self.stmt(self.vcx.mk_assert_stmt(wand.lhs));
                     }
-                    self.stmt(self.vcx.mk_apply_stmt(wand));
+                    let span = self.current_span();
+                    let apply = self.vcx.with_span(span, |vcx| {
+                        vcx.handle_error("apply.failed:assertion.false", move |_| {
+                            Some(vec![PrustiError::verification(
+                                "obligation might not hold on borrow expiry",
+                                span.into(),
+                            )])
+                        });
+                        vcx.mk_apply_stmt(wand)
+                    });
+                    self.stmt(apply);
                     self.stmts(after);
                 }
             }

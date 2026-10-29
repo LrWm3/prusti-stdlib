@@ -22,39 +22,64 @@ pub fn parse_prusti(tokens: TokenStream) -> syn::Result<TokenStream> {
     syn::parse2::<syn::Expr>(parsed.clone())?;
     Ok(parsed)
 }
-pub fn parse_prusti_pledge(tokens: TokenStream) -> syn::Result<TokenStream> {
-    // TODO: pledges with reference that is not "result" are not supported;
-    // for this reason we assert here that the reference (if there is any) is "result"
-    // then return the RHS only
-    let (reference, rhs) = PrustiTokenStream::new(tokens).parse_pledge()?;
-    if let Some(reference) = reference {
-        if reference.to_string() != "result" {
-            return err(
-                reference.span(),
-                "reference of after_expiry must be \"result\"",
-            );
-        }
-    }
-    syn::parse2::<syn::Expr>(rhs.clone())?;
-    Ok(rhs)
+/// An input whose restoration determines the expiry stage of a pledge.
+/// `result` and omitted selectors retain the existing single-stage semantics.
+#[derive(Debug)]
+pub struct PledgeSource {
+    pub argument: syn::Ident,
+    pub dereferences: usize,
 }
 
-pub fn parse_prusti_assert_pledge(tokens: TokenStream) -> syn::Result<(TokenStream, TokenStream)> {
-    // TODO: pledges with reference that is not "result" are not supported;
-    // for this reason we assert here that the reference (if there is any) is "result"
-    // then return the RHS only
-    let (reference, lhs, rhs) = PrustiTokenStream::new(tokens).parse_assert_pledge()?;
-    if let Some(reference) = reference {
-        if reference.to_string() != "result" {
-            return err(
-                reference.span(),
-                "reference of assert_on_expiry must be \"result\"",
-            );
-        }
+fn pledge_source(reference: Option<TokenStream>) -> syn::Result<Option<PledgeSource>> {
+    let Some(reference) = reference else {
+        return Ok(None);
+    };
+    let mut expression = syn::parse2::<syn::Expr>(reference)?;
+    let mut dereferences = 0;
+    loop {
+        expression = match expression {
+            syn::Expr::Unary(unary) if matches!(unary.op, syn::UnOp::Deref(_)) => {
+                dereferences += 1;
+                *unary.expr
+            }
+            syn::Expr::Paren(paren) => *paren.expr,
+            syn::Expr::Path(path) if path.path.get_ident().is_some() => {
+                let argument = path.path.get_ident().unwrap().clone();
+                if argument == "result" && dereferences == 0 {
+                    return Ok(None);
+                }
+                return Ok(Some(PledgeSource {
+                    argument,
+                    dereferences,
+                }));
+            }
+            _ => {
+                return err(
+                    expression.span(),
+                    "expiry selector must name an input, optionally dereferenced",
+                )
+            }
+        };
     }
+}
+
+pub fn parse_prusti_pledge(
+    tokens: TokenStream,
+) -> syn::Result<(Option<PledgeSource>, TokenStream)> {
+    let (reference, rhs) = PrustiTokenStream::new(tokens).parse_pledge()?;
+    let source = pledge_source(reference)?;
+    syn::parse2::<syn::Expr>(rhs.clone())?;
+    Ok((source, rhs))
+}
+
+pub fn parse_prusti_assert_pledge(
+    tokens: TokenStream,
+) -> syn::Result<(Option<PledgeSource>, TokenStream, TokenStream)> {
+    let (reference, lhs, rhs) = PrustiTokenStream::new(tokens).parse_assert_pledge()?;
+    let source = pledge_source(reference)?;
     syn::parse2::<syn::Expr>(lhs.clone())?;
     syn::parse2::<syn::Expr>(rhs.clone())?;
-    Ok((lhs, rhs))
+    Ok((source, lhs, rhs))
 }
 
 pub fn parse_type_cond_spec(tokens: TokenStream) -> syn::Result<TypeCondSpecRefinement> {
@@ -1247,6 +1272,28 @@ fn join_spans(s1: Span, s2: Span) -> Span {
 mod tests {
     use super::*;
 
+    #[test]
+    fn expiry_selectors() {
+        for tokens in [quote!(true), quote!(result => true)] {
+            assert!(parse_prusti_pledge(tokens).unwrap().0.is_none());
+        }
+        let (source, _) = parse_prusti_pledge(quote!(*self => true)).unwrap();
+        let source = source.unwrap();
+        assert_eq!(source.argument, "self");
+        assert_eq!(source.dereferences, 1);
+        let (source, _, _) = parse_prusti_assert_pledge(quote!((**value) => true, true)).unwrap();
+        let source = source.unwrap();
+        assert_eq!(source.argument, "value");
+        assert_eq!(source.dereferences, 2);
+        for tokens in [
+            quote!(value.field => true),
+            quote!(value[0] => true),
+            quote!(call() => true),
+        ] {
+            assert!(parse_prusti_pledge(tokens).is_err());
+        }
+    }
+
     macro_rules! assert_error {
         ( $result:expr, $expected:expr ) => {{
             let _res = $result;
@@ -1304,7 +1351,9 @@ mod tests {
 
     #[test]
     fn test_preparser() {
-        let after_call = parse_prusti("after_call(self.count)".parse().unwrap()).unwrap().to_string();
+        let after_call = parse_prusti("after_call(self.count)".parse().unwrap())
+            .unwrap()
+            .to_string();
         assert!(after_call.contains("after_call_start"));
         assert!(after_call.contains("after_call_end"));
         assert_eq!(
@@ -1434,7 +1483,8 @@ mod tests {
         fn conditional_expiry_is_parsed() {
             let constraint = parse_type_cond_spec(quote! {
                 where T: A, [after_expiry(true)]
-            }).unwrap();
+            })
+            .unwrap();
             assert_matches!(&constraint.specs[0], NestedSpec::AfterExpiry(_));
         }
 

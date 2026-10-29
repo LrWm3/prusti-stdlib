@@ -145,4 +145,3 @@ name = "im2_prefix_ghost_quantified_int"
 path = "im2_prefix_ghost_quantified_int.rs"
 
 [workspace]
-

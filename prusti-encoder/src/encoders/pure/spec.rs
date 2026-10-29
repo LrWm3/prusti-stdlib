@@ -103,6 +103,8 @@ impl<'vir> PledgeExpr<'vir> {
 /// predicate if present.
 #[derive(Clone, Copy, Debug)]
 pub struct EncodedPledge<'vir> {
+    /// Input MIR local and number of dereferences selecting its restoration.
+    pub source: Option<(usize, usize)>,
     /// The VIR expression and span corresponding to the `assert_on_expiry`
     /// predicate, if present.
     pub expiry_obligation: Option<PledgeExpr<'vir>>,
@@ -381,7 +383,22 @@ impl TaskEncoder for MirSpecEnc {
                             rhs
                         });
                         let rhs_expr = PledgeExpr::new(*rhs_def_id, rhs_expr);
+                        let source = prusti_interface::utils::get_prusti_attr_of(
+                            vcx.tcx(),
+                            *rhs_def_id,
+                            "pledge_source",
+                        )
+                        .and_then(prusti_interface::utils::read_prusti_attr_value)
+                        .map(|value| {
+                            let (argument, dereferences) =
+                                value.split_once(':').expect("generated pledge source");
+                            (
+                                argument.parse().expect("pledge source argument"),
+                                dereferences.parse().expect("pledge source dereferences"),
+                            )
+                        });
                         Some(EncodedPledge {
+                            source,
                             expiry_obligation: lhs_expr,
                             expiry_postcondition: rhs_expr,
                         })

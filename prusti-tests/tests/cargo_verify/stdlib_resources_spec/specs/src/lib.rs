@@ -34,3 +34,9 @@ pub trait ResourceSource {
 pub fn identity_associated<S: ResourceSource>(value: S::Resource) -> S::Resource {
     identity(value)
 }
+
+#[after_expiry(first => *first == before_expiry(*result.0))]
+#[after_expiry(second => *second == before_expiry(*result.1))]
+pub fn separate<'a, 'b>(first: &'a mut u32, second: &'b mut u32) -> (&'a mut u32, &'b mut u32) {
+    (first, second)
+}

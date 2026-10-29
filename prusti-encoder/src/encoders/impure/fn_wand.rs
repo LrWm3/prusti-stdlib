@@ -955,7 +955,14 @@ impl TaskEncoder for WandEnc {
             let (inputs, outputs) = shape.take_inputs_and_outputs();
             let spec = deps.require_dep::<MirSpecEnc>((def_id, def_id, MirSpecEncMode::Impure))?;
             if coupled_edges.is_empty() {
-                assert!(spec.pledges.is_empty());
+                if !spec.pledges.is_empty() {
+                    return Err(EncodeFullError::EncodingError(
+                        WandEncError::Unsupported(
+                            "expiry pledge has no borrowed input to restore".into(),
+                        ),
+                        None,
+                    ));
+                }
                 return Ok((
                     (),
                     WandEncOutput {
@@ -996,7 +1003,7 @@ impl TaskEncoder for WandEnc {
                 wands: Vec::new(),
             };
             output.wands = output
-                .select_wands(wands, !pledges.is_empty(), &edges, vcx, deps)
+                .select_wands(wands, &pledges, &edges, vcx, deps)
                 .map_err(|err| EncodeFullError::EncodingError(err, None))?;
             Ok(((), output))
         })
@@ -1009,7 +1016,7 @@ impl<'vir> WandEncOutput<'vir> {
     fn select_wands<E: TaskEncoder>(
         &self,
         wands: Vec<WandData<'vir>>,
-        has_pledges: bool,
+        pledges: &[EncodedPledge<'vir>],
         edges: &FxHashSet<(WandRhsKey, WandLhsKey)>,
         vcx: &'vir vir::VirCtxt<'vir>,
         deps: &mut TaskEncoderDependencies<'vir, E>,
@@ -1110,8 +1117,7 @@ impl<'vir> WandEncOutput<'vir> {
             }
             groups.sort_by_key(|(targets, _)| targets.len());
             let mut previous: Vec<(Vec<WandLhsKey>, Vec<WandRhsKey>)> = Vec::new();
-            let group_count = groups.len();
-            for (group_index, (original, sources)) in groups.into_iter().enumerate() {
+            for (original, sources) in groups {
                 let mut targets = original.clone();
                 let mut frames = Vec::new();
                 for (earlier_targets, earlier_sources) in &previous {
@@ -1138,33 +1144,120 @@ impl<'vir> WandEncOutput<'vir> {
                     ));
                 }
                 previous.push((original.clone(), sources.clone()));
-                // Pledge placement across distinct expiry stages is checked
-                // separately; initially keep it on the final stage.
-                let pledges = if group_index + 1 == group_count {
-                    wand_data.pledges.clone()
-                } else {
-                    Vec::new()
-                };
-                let mut wand = WandData::new(targets, sources, pledges);
+                let mut wand = WandData::new(targets, sources, Vec::new());
                 wand.frames = frames;
                 wand.flow_lhs = Some(original);
                 stratified.push(wand);
             }
         }
         let mut wands = stratified;
-        if has_pledges {
-            if wands.is_empty() {
-                wands.extend(resourceless.into_iter().take(1));
-            } else if wands.len() > 1 {
-                // It is unclear which expiry the pledges refer to.
-                return Err(WandEncError::Unsupported(
-                    "pledges on a function whose result contains borrows that expire \
-                     separately are not supported"
-                        .to_string(),
-                ));
-            }
+        let resource_count = wands.len();
+        wands.extend(resourceless);
+        for wand in &mut wands {
+            wand.pledges.clear();
         }
-        Ok(wands)
+        for pledge in pledges {
+            let selected = if let Some((argument, dereferences)) = pledge.source {
+                let source = self.pledge_source(argument, dereferences, vcx)?;
+                let matches = wands
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, wand)| wand.rhs.contains(&source))
+                    .map(|(index, _)| index)
+                    .collect::<Vec<_>>();
+                let [selected] = matches.as_slice() else {
+                    return Err(WandEncError::Unsupported(
+                        "expiry selector must identify exactly one input restoration stage".into(),
+                    ));
+                };
+                *selected
+            } else {
+                if resource_count > 1 {
+                    return Err(WandEncError::Unsupported(
+                        "pledges on a function whose result contains borrows that expire \
+                         separately require an explicit input expiry selector"
+                            .into(),
+                    ));
+                }
+                if wands.is_empty() {
+                    return Err(WandEncError::Unsupported(
+                        "expiry pledge has no borrowed input to restore".into(),
+                    ));
+                }
+                0
+            };
+            wands[selected].pledges.push(*pledge);
+        }
+        Ok(wands
+            .into_iter()
+            .enumerate()
+            .filter(|(index, wand)| *index < resource_count || !wand.pledges.is_empty())
+            .map(|(_, wand)| wand)
+            .collect())
+    }
+
+    /// Resolve the selector at the definition's signature. Dereferences choose
+    /// a nested type, then its outer reference (or unique contained lifetime).
+    /// Match the lifetime in the original input: repeated lifetimes are
+    /// deduplicated, so counting dereferences is not a projection index.
+    fn pledge_source(
+        &self,
+        argument: usize,
+        dereferences: usize,
+        vcx: &'vir vir::VirCtxt<'vir>,
+    ) -> Result<WandRhsKey, WandEncError> {
+        let sig = self.fn_sig(vcx, None);
+        let Some(original) = argument
+            .checked_sub(1)
+            .and_then(|index| sig.inputs().get(index))
+        else {
+            return Err(WandEncError::Unsupported(
+                "invalid expiry input selector".into(),
+            ));
+        };
+        let mut selected = *original;
+        for _ in 0..dereferences {
+            let ty::TyKind::Ref(_, target, _) = selected.kind() else {
+                return Err(WandEncError::Unsupported(
+                    "expiry selector dereferences a non-reference input type".into(),
+                ));
+            };
+            selected = *target;
+        }
+        let lifetime = if let ty::TyKind::Ref(region, _, _) = selected.kind() {
+            GeneralizedLifetime::Region((*region).into())
+        } else {
+            let regions: IndexVec<_, GeneralizedLifetime<'vir>> =
+                vcx.tcx().extract_regions(selected);
+            let concrete = regions
+                .iter()
+                .copied()
+                .filter(|region| matches!(region, GeneralizedLifetime::Region(_)))
+                .collect::<Vec<_>>();
+            match concrete.as_slice() {
+                [region] => *region,
+                [] if regions.len() == 1 => *regions.iter().next().unwrap(),
+                _ => {
+                    return Err(WandEncError::Unsupported(
+                        "expiry selector's input type must contain a unique borrowed lifetime"
+                            .into(),
+                    ));
+                }
+            }
+        };
+        let regions: IndexVec<_, GeneralizedLifetime<'vir>> = vcx.tcx().extract_regions(*original);
+        self.inputs
+            .iter()
+            .copied()
+            .find(|input| {
+                input.mir_local().index() == argument
+                    && regions.get(input.region_idx()) == Some(&lifetime)
+            })
+            .ok_or_else(|| {
+                WandEncError::Unsupported(
+                    "expiry selector does not identify a borrowed input resource".into(),
+                )
+            })
     }
 
     pub fn viper_wands(&self) -> Vec<WandData<'vir>> {

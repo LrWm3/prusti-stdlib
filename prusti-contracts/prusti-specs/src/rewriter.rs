@@ -3,7 +3,7 @@ use crate::{
     span_overrider::SpanOverrider,
     specifications::{
         common::{SpecificationId, SpecificationIdGenerator},
-        preparser::{parse_prusti, parse_prusti_assert_pledge, parse_prusti_pledge},
+        preparser::{parse_prusti, parse_prusti_assert_pledge, parse_prusti_pledge, PledgeSource},
         untyped,
     },
 };
@@ -163,12 +163,46 @@ impl AstRewriter {
         tokens: TokenStream,
         item: &untyped::AnyFnItem,
     ) -> syn::Result<syn::Item> {
-        self.generate_spec_item_fn(
-            SpecItemType::Pledge,
-            spec_id,
-            parse_prusti_pledge(tokens)?,
-            item,
-        )
+        let (source, expression) = parse_prusti_pledge(tokens)?;
+        let mut spec =
+            self.generate_spec_item_fn(SpecItemType::Pledge, spec_id, expression, item)?;
+        Self::attach_pledge_source(&mut spec, source, item)?;
+        Ok(spec)
+    }
+
+    fn attach_pledge_source(
+        spec: &mut syn::Item,
+        source: Option<PledgeSource>,
+        item: &untyped::AnyFnItem,
+    ) -> syn::Result<()> {
+        let Some(source) = source else { return Ok(()) };
+        let argument = &source.argument;
+        let index = item
+            .sig()
+            .inputs
+            .iter()
+            .position(|input| match input {
+                syn::FnArg::Receiver(_) => argument == "self",
+                syn::FnArg::Typed(input) => {
+                    matches!(input.pat.as_ref(), syn::Pat::Ident(pat) if pat.ident == *argument)
+                }
+            })
+            .ok_or_else(|| {
+                syn::Error::new(
+                    argument.span(),
+                    "expiry selector must name a function input",
+                )
+            })?;
+        // Store a positional selector so renaming arguments in an extern spec
+        // or a separate crate does not change the selected restoration stage.
+        let value = format!("{}:{}", index + 1, source.dereferences);
+        let syn::Item::Fn(spec) = spec else {
+            unreachable!()
+        };
+        spec.attrs.push(parse_quote_spanned! {argument.span()=>
+            #[prusti::pledge_source = #value]
+        });
+        Ok(())
     }
 
     pub fn process_pure_refinement(
@@ -203,9 +237,11 @@ impl AstRewriter {
         tokens: TokenStream,
         item: &untyped::AnyFnItem,
     ) -> syn::Result<(syn::Item, syn::Item)> {
-        let (lhs, rhs) = parse_prusti_assert_pledge(tokens)?;
+        let (source, lhs, rhs) = parse_prusti_assert_pledge(tokens)?;
         let lhs_item = self.generate_spec_item_fn(SpecItemType::Pledge, spec_id_lhs, lhs, item)?;
-        let rhs_item = self.generate_spec_item_fn(SpecItemType::Pledge, spec_id_rhs, rhs, item)?;
+        let mut rhs_item =
+            self.generate_spec_item_fn(SpecItemType::Pledge, spec_id_rhs, rhs, item)?;
+        Self::attach_pledge_source(&mut rhs_item, source, item)?;
         Ok((lhs_item, rhs_item))
     }
 

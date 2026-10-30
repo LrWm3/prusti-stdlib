@@ -5,13 +5,17 @@ only its exported contract to prove unchanged reference identities and that
 every referent becomes 7. Negative clients reject an incorrect final value
 and `false` after the call. Runtime checks cover empty and nonempty slices.
 
-Run after building Prusti:
+Run after building this branch with `./x.py build --all --locked --features prusti/ferrum`:
 
 ```sh
 ./x.py exec python3 scripts/test_stdlib_extern_spec.py \
-  --suite iterator_resources --timeout 600 \
+  --suite iterator_resources --backend Ferrum --timeout 600 \
   --solver-timeout-ms 30000 --solver-time-bounds
 ```
+
+Repeat with `--backend Silicon` for specification changes, negative tests,
+unexpected backend differences, and before merging. The runner uses one
+verifier worker and disables Ferrum branch parallelism.
 
 This suite is separate from the broader iterator library so the combined
 resource proofs can be checked within their own program budget. The plan in

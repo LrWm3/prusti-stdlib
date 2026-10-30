@@ -85,3 +85,19 @@ Congratulations! You just proved absence of panics and integer overflows in the 
 ### Native backend development builds
 
 The dev profile compiles the three Ferrum crates at optimization level 1 to reduce stack use during verification. Debug assertions and unwinding remain enabled. Some iterator programs overflow the verification thread stack when these crates are built without optimization; this setting mitigates those observed cases and does not establish a general stack bound.
+
+For stdlib encoder development, build the current branch with both backends:
+
+```sh
+./x.py build --all --locked --features prusti/ferrum
+./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite iterator --backend Ferrum
+./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite borrow --backend Ferrum
+```
+
+The suite runner selects one verifier worker and disables Ferrum branch
+parallelism. Use Ferrum for routine iteration, and repeat changed specifications,
+negative tests, and unexpected backend differences with `--backend Silicon`.
+Validate both backends before merging. Use a fresh build of this branch rather
+than an older benchmark binary. The [validation record](prusti-ferrum/VALIDATION.md)
+and [stdlib plan](STDLIB_EXTERN_SPEC.md) distinguish the current adoption checks
+from the full stdlib matrix, which remains required at the final Ferrum pin.

@@ -4,29 +4,27 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use crate::{Backend, ServerMessage};
+#[cfg(feature = "jvm")]
+use crate::Backend;
+use crate::ServerMessage;
+#[cfg(feature = "jvm")]
 use log::info;
 use prusti_rustc_interface::data_structures::fx::FxHashSet;
-use prusti_utils::{
-    config,
-    config::VerifyMode,
-    report::log::{report, to_legal_file_name},
-    Stopwatch,
-};
-use std::{
-    fs::create_dir_all,
-    path::PathBuf,
-    sync::{self, mpsc, OnceLock},
-};
-use viper::{
-    self, smt_manager::SmtManager, VerificationBackend, VerificationResult, VerificationResultKind,
-    Viper,
-};
+#[cfg(feature = "jvm")]
+use prusti_utils::report::log::{report, to_legal_file_name};
+use prusti_utils::{config, config::VerifyMode, Stopwatch};
+use std::sync::{self, mpsc};
+#[cfg(feature = "jvm")]
+use std::{fs::create_dir_all, path::PathBuf, sync::OnceLock};
+use viper::{self, VerificationBackend, VerificationResult, VerificationResultKind};
+#[cfg(feature = "jvm")]
+use viper::{smt_manager::SmtManager, Viper};
 
 /// The JVM object should only instantiated once, so it is stored in a
 /// global reference, shareable between threads and execution of different
 /// requests when running the server. No Mutex is used because
 /// the value should only ever be used through non mutable references.
+#[cfg(feature = "jvm")]
 pub(crate) static VIPER: OnceLock<Viper> = OnceLock::new();
 
 /// Server requests that are sent between client and server
@@ -40,17 +38,27 @@ pub(crate) enum ServerRequest {
 /// Specifies the kind of backend to be used for verification and carries necessary data.
 pub(crate) enum ServerVerificationRequest {
     // viper program, backend config, set of viper identifiers
+    #[cfg(feature = "jvm")]
     JVMViperRequest(
         jni::objects::GlobalRef,
         ViperBackendConfig,
         FxHashSet<String>,
     ),
+    #[cfg(feature = "ferrum")]
+    FerrumRequest(
+        Result<prusti_ferrum::silver::ast::program::Program, String>,
+        ViperBackendConfig,
+        FxHashSet<String>,
+    ),
+    #[cfg(not(all(feature = "jvm", feature = "ferrum")))]
+    Unavailable(String),
 }
 
 impl ServerVerificationRequest {
     /// Process and consume the request
     // FIXME: can we do without the "program" strings?
     pub fn process<'v, 't: 'v>(self, sender: &mpsc::Sender<ServerMessage>) {
+        #[allow(unused_mut)]
         let mut stopwatch = Stopwatch::start("prusti-server", "verifier startup");
         let mut result = VerificationResult {
             item_name: "program".to_string(),
@@ -60,6 +68,7 @@ impl ServerVerificationRequest {
         };
 
         match self {
+            #[cfg(feature = "jvm")]
             ServerVerificationRequest::JVMViperRequest(
                 viper_program_ref,
                 backend_config,
@@ -77,10 +86,34 @@ impl ServerVerificationRequest {
                         &verification_context,
                         viper_program_ref,
                     ),
+                    VerificationBackend::Ferrum => {
+                        result.kind = VerificationResultKind::BackendError(
+                            "Ferrum backend received a JVM request".into(),
+                        );
+                        sender.send(ServerMessage::Termination(result)).unwrap();
+                        return;
+                    }
                 };
                 stopwatch.start_next("backend verification");
-                result.kind = backend.verify(procedures, sender.clone());
+                result.kind = {
+                    let _phase = crate::bench_phase::Phase::start("backend verification");
+                    backend.verify(procedures, sender.clone())
+                };
                 result.time_ms = stopwatch.finish().as_millis();
+            }
+            #[cfg(feature = "ferrum")]
+            ServerVerificationRequest::FerrumRequest(program, config, procedures) => {
+                result.kind = match program {
+                    Ok(program) => {
+                        crate::native_backend::verify(program, config, procedures, sender.clone())
+                    }
+                    Err(error) => VerificationResultKind::BackendError(error),
+                };
+                result.time_ms = stopwatch.finish().as_millis();
+            }
+            #[cfg(not(all(feature = "jvm", feature = "ferrum")))]
+            ServerVerificationRequest::Unavailable(error) => {
+                result.kind = VerificationResultKind::BackendError(error);
             }
         }
 
@@ -110,6 +143,12 @@ impl VerificationRequest {
     pub(crate) fn send(&self, mtx_tx_verreq: &sync::Mutex<mpsc::Sender<ServerRequest>>) {
         let request = self.build_request();
 
+        #[cfg(feature = "ferrum")]
+        if self.backend_config.verify_mode.is_encode_only() {
+            if let ServerVerificationRequest::FerrumRequest(Err(error), ..) = &request {
+                panic!("{error}");
+            }
+        }
         if !self.backend_config.verify_mode.is_encode_only() {
             mtx_tx_verreq
                 .lock()
@@ -121,6 +160,49 @@ impl VerificationRequest {
 
     fn build_request(&self) -> ServerVerificationRequest {
         match self.backend_config.backend {
+            VerificationBackend::Ferrum => {
+                #[cfg(feature = "ferrum")]
+                {
+                    let program = {
+                        let _phase = crate::bench_phase::Phase::start("VIR conversion");
+                        vir::with_vcx(|vcx| {
+                            prusti_ferrum::program_to_silver(vcx.get_program(self.program))
+                                .map_err(|e| format!("VIR conversion: {e:?}"))
+                        })
+                    }
+                    .and_then(|program| {
+                        if config::dump_viper_program() {
+                            let rendered =
+                                prusti_ferrum::silver::ast::pretty::pretty_printer::pretty_node(
+                                    &prusti_ferrum::silver::ast::utility::nodes::Node::Program(
+                                        program.clone(),
+                                    ),
+                                )
+                                .map_err(|e| format!("Viper program printing: {e:?}"))?;
+                            let namespace = "viper_program";
+                            let filename =
+                                format!("{}.vpr", self.program.get_name_with_check_mode());
+                            log::info!("Dumping Viper program to '{namespace}/{filename}'");
+                            prusti_utils::report::log::report(namespace, filename, rendered);
+                        }
+                        Ok(program)
+                    });
+                    ServerVerificationRequest::FerrumRequest(
+                        program,
+                        self.backend_config.clone(),
+                        self.procedures.clone(),
+                    )
+                }
+                #[cfg(not(feature = "ferrum"))]
+                {
+                    ServerVerificationRequest::Unavailable("Ferrum backend not built".into())
+                }
+            }
+            #[cfg(not(feature = "jvm"))]
+            VerificationBackend::Carbon | VerificationBackend::Silicon => {
+                ServerVerificationRequest::Unavailable("JVM backend not built".into())
+            }
+            #[cfg(feature = "jvm")]
             VerificationBackend::Carbon | VerificationBackend::Silicon => {
                 let mut stopwatch = Stopwatch::start("prusti-server backend", "JVM startup");
                 let viper = VIPER.get_or_init(|| {
@@ -134,10 +216,13 @@ impl VerificationRequest {
                 ast_utils.with_local_frame(16, || {
                     let ast_factory = context.new_ast_factory();
 
-                    let viper_program = vir::with_vcx(|vcx| {
-                        let program = vcx.get_program(self.program);
-                        prusti_viper::program_to_viper(program, &ast_factory)
-                    });
+                    let viper_program = {
+                        let _phase = crate::bench_phase::Phase::start("VIR conversion");
+                        vir::with_vcx(|vcx| {
+                            let program = vcx.get_program(self.program);
+                            prusti_viper::program_to_viper(program, &ast_factory)
+                        })
+                    };
 
                     if config::dump_viper_program() {
                         stopwatch.start_next("dumping viper program");
@@ -178,7 +263,7 @@ impl ViperBackendConfig {
     pub fn new(backend: VerificationBackend, verify_mode: VerifyMode) -> Self {
         let mut verifier_args = config::extra_verifier_args();
         match backend {
-            VerificationBackend::Silicon => {
+            VerificationBackend::Silicon | VerificationBackend::Ferrum => {
                 verifier_args.push(format!(
                     "--numberOfErrorsToReport={}",
                     config::num_errors_per_function()
@@ -221,6 +306,7 @@ impl ViperBackendConfig {
 
                 verifier_args.push(prover_args);
 
+                // Keep backend informational output quiet for both implementations.
                 verifier_args.extend(vec!["--logLevel".to_string(), "ERROR".to_string()]);
 
                 if let Some(check_timeout) = config::check_timeout() {
@@ -244,6 +330,7 @@ impl ViperBackendConfig {
     }
 }
 
+#[cfg(feature = "jvm")]
 fn new_viper_verifier<'v, 't: 'v>(
     program_name: &str,
     verification_context: &'v viper::VerificationContext<'t>,
@@ -267,6 +354,7 @@ fn new_viper_verifier<'v, 't: 'v>(
                     //"--printTranslatedProgram".to_string(),
                 ])
             }
+            VerificationBackend::Ferrum => unreachable!("native backend does not use JVM verifier"),
             VerificationBackend::Carbon => verifier_args.extend(vec![
                 "--boogieOpt".to_string(),
                 format!("/logPrefix {log_dir_str}"),
@@ -325,6 +413,7 @@ fn new_viper_verifier<'v, 't: 'v>(
     )
 }
 
+#[cfg(feature = "jvm")]
 pub fn dump_viper_program(
     ast_utils: &viper::AstUtils,
     program: viper::Program,
@@ -334,4 +423,57 @@ pub fn dump_viper_program(
     let filename = format!("{program_name}.vpr");
     info!("Dumping Viper program to '{namespace}/{filename}'");
     report(namespace, filename, ast_utils.pretty_print(program));
+}
+
+#[cfg(all(test, feature = "ferrum"))]
+mod native_tests {
+    use super::*;
+    #[test]
+    #[ignore = "requires real Z3; set Z3_EXE"]
+    fn vir_request_uses_native_queue_and_returns_failure() {
+        std::env::var_os("Z3_EXE").expect("set Z3_EXE");
+        std::thread::Builder::new()
+            .stack_size(128 * 1024 * 1024)
+            .spawn(|| {
+                vir::init_vcx(vir::VirCtxt::new_without_tcx());
+                let program = vir::with_vcx(|vcx| {
+                    let assertion = vcx.mk_assert_stmt(vcx.mk_bool::<false>());
+                    let label = vcx.alloc(vir::CfgBlockLabelData::End);
+                    let end = vcx.alloc(vir::TerminatorStmtData::Exit);
+                    let block = vcx.mk_cfg_block(label, &[], vcx.alloc_slice(&[assertion]), end);
+                    let method = vcx.mk_method_unchecked(
+                        "bad",
+                        &[],
+                        &[],
+                        &[],
+                        &[],
+                        Some(vcx.alloc_slice(&[block])),
+                    );
+                    vcx.mk_program(&[], &[], &[], &[], &[], vcx.alloc_slice(&[method]))
+                        .to_ref()
+                });
+                let request = VerificationRequest {
+                    program,
+                    procedures: Default::default(),
+                    backend_config: ViperBackendConfig::new(
+                        VerificationBackend::Ferrum,
+                        VerifyMode::Verify,
+                    ),
+                };
+                let request = request.build_request();
+                let (tx, rx) = std::sync::mpsc::channel();
+                request.process(&tx);
+                let ServerMessage::Termination(result) = rx.recv().unwrap() else {
+                    panic!("expected termination");
+                };
+                assert!(
+                    matches!(result.kind, VerificationResultKind::Failure(_)),
+                    "{:?}",
+                    result.kind
+                );
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
 }

@@ -7,7 +7,7 @@ edition = "2021"
 [[bin]]
 name = "prusti-smt-solver"
 path = "src/solver.rs"
-test = false # we have no unit tests
+test = true
 doctest = false # and no doc tests
 
 [dependencies]

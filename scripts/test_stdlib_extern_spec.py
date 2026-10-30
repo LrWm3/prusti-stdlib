@@ -181,7 +181,8 @@ def main():
                 "driver_sha256": sha256(prusti), "harness_sha256": sha256(Path(__file__)),
                 "case_patterns": args.case, "spec_library_selected": not args.skip_library,
                 "verifier_timeout": args.timeout, "solver_timeout_ms": args.solver_timeout_ms, "solver_check_timeout_ms": args.solver_check_timeout_ms,
-                "solver_time_bounds": args.solver_time_bounds}
+                "solver_time_bounds": args.solver_time_bounds,
+                "parallel_verifiers": 1, "parallelize_branches": False}
 
     def save_results():
         temporary = log_dir / "results.json.tmp"
@@ -247,6 +248,8 @@ def main():
             "PRUSTI_EXTRA_VERIFIER_ARGS": "--timeout={} --numberOfParallelVerifiers 1".format(args.timeout),
             "PRUSTI_LOG_DIR": str(log_dir / "verifier"),
         })
+        if args.backend == "Ferrum":
+            env["PRUSTI_EXTRA_VERIFIER_ARGS"] += " --parallelizeBranches=false"
         if args.solver_timeout_ms is not None:
             env["PRUSTI_ASSERT_TIMEOUT"] = str(args.solver_timeout_ms)
         if args.solver_check_timeout_ms is not None:

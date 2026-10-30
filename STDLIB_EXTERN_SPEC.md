@@ -2430,6 +2430,30 @@ suite; verification under the final repository paths follows the next rebuild.
 The runner also exposes `--solver-check-timeout-ms` and records that optional
 budget independently of the assertion budget. Its default remains unchanged.
 
+On 2026-10-30, the development branch merges the tested Prusti Ferrum adapter
+through `a59ed917c`, pinning all three Ferrum crates to
+`afdf10cf59106c38d09df32939f1aa9c77d0b989`. The merge preserves the newer
+encoder and state-observer work. Rebuild this branch with both backends before
+running comparisons; binaries from the earlier integration benchmark do not
+contain these changes:
+
+```sh
+./x.py build --all --locked --features prusti/ferrum
+./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite iterator --backend Ferrum
+./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite borrow --backend Ferrum
+```
+
+The adoption baseline runs current iterator/borrow positives and negatives
+once on each backend, retaining exact diagnostics, fresh targets, disabled
+caches, overflow/panic checks, artifact/source hashes, and separate logs.
+The runner uses one verifier worker and explicitly disables Ferrum branch
+parallelism. Routine development then uses `--backend Ferrum`; changed
+specifications, negative tests, and unexpected backend differences retain
+Silicon checks. Both backends remain required before merging the work into
+its destination branch. The final Ferrum pin has not yet passed a complete
+stdlib matrix; adoption as the development backend does not close that gate
+or the outstanding IM proofs.
+
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification
 suites at acceptance. Run PCG shape tests and the numbered corpus whenever

@@ -1,3 +1,48 @@
+# Stdlib encoder adoption at afdf10c
+
+The `stdlib/opaque-resource-encoder` branch integrates the tested adapter through
+Prusti `a59ed917c`, retaining the branch's newer iterator/resource encoder work.
+All three Ferrum crates remain pinned to
+`afdf10cf59106c38d09df32939f1aa9c77d0b989`; PCG remains
+`c18a51899e37e0fa67f9b5f17f7d518ef2f5518c`.
+
+Prusti `474b7ae1ddba6b82599de7f5b4c65c8527546893` was built from this branch with
+`./x.py build --all --locked --features prusti/ferrum` on nightly-2026-08-15.
+Its driver SHA-256 is
+`68d24cd16b0f2f12afc6d8363b41fd629dee98f26d3b12656f70aff214e72ef3`.
+The build record and frozen binaries are in `/tmp/prusti-im5-dual229` and
+`/tmp/prusti-im5-checkpoint229`. These are fresh branch artifacts, not the
+earlier benchmark binaries.
+
+The adoption checks exposed missing conversion of VIR's opaque-function and
+reveal-call annotations. Commit `474b7ae1d` preserves both using the existing
+Ferrum metadata API, without changing the backend pin or encoder contracts.
+A real-Z3 test passes five scenarios: transparent and revealed calls verify;
+hidden-body use and a wrong revealed value fail; an incorrect opaque function
+postcondition fails even when the function is unused. The three generic-array
+positives that previously timed out on native conversion now pass on both
+backends, with byte-identical Viper inputs:
+
+| Client | Ferrum seconds | Silicon seconds |
+| --- | ---: | ---: |
+| `mut_generic_array_pass` | 106.65 | 107.86 |
+| `mut_generic_array_state_pass` | 119.93 | 114.79 |
+| `mut_generic_array_symbolic_pass` | 54.27 | 51.55 |
+
+These are full generated-program checks, including observer and conversion
+bodies, at the standard 180-second program limit. Timings include client
+compilation and do not establish a performance ratio. Exact hashes and
+annotation counts are in `/tmp/prusti-im5-dual229/annotation-comparison.json`.
+
+The current iterator, borrow, and cross-crate resource suites are being checked
+on both backends. The unchanged Silicon run uses frozen checkpoint 226; the
+corrected Ferrum run uses checkpoint 229. Both use one verifier worker, with
+Ferrum branch parallelism disabled. The original native iterator results are
+retained separately after that run was stopped to apply the annotation fix.
+The full stdlib matrix at the final pin remains outstanding. Use Ferrum for
+routine development, retain Silicon for changed specifications, negative tests
+and unexpected differences, and require dual-backend validation before merging.
+
 # Stage 4 backend integration checkpoint
 
 Prusti `e76038c31a4cb1bb3e34745940b1f883094dd2cb` pins all three Ferrum

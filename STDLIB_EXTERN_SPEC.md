@@ -2486,6 +2486,17 @@ Their complete logs and input hashes are preserved in
 `/tmp/prusti-im5-dual226/replacement-differences.json`; annotation preservation
 does not account for those differences, so they retain the Silicon gate.
 
+Checkpoint 229 rebuilds Prusti from `474b7ae1d` with both backends and the
+annotation fix (driver SHA-256
+`68d24cd16b0f2f12afc6d8363b41fd629dee98f26d3b12656f70aff214e72ef3`).
+All three formerly timed-out generic-array positives now pass natively:
+ordinary, state, and symbolic cases take 106.65, 119.93, and 54.27 seconds.
+Silicon passes the same cases in 107.86, 114.79, and 51.55 seconds, and all
+three generated-program pairs are byte-identical. Each run checks every
+generated helper body at the baseline 180-second program limit. The complete
+suite comparison continues separately; this focused result does not close
+the remaining backend differences or establish a performance ratio.
+
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification
 suites at acceptance. Run PCG shape tests and the numbered corpus whenever

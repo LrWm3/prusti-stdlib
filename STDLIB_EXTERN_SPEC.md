@@ -2514,8 +2514,32 @@ The current replacement-return inputs are byte-identical; the other replacement
 pair differs only in standalone comments. Neither iterator run unexpectedly
 accepts a negative. Ferrum's full-prefix `false` control passes, but its
 wrong-final-value control reaches the baseline limit while Silicon rejects it.
-Borrow and cross-crate resource totals are pending, so this is not combined
-acceptance or full stdlib qualification.
+The complete borrow baseline matches 92/109 expectations on Ferrum and 91/109
+on Silicon, with 52/53 controls passing on each. The library control fails
+the existing partial-restoration encoding error; the paired clients have
+90 matches, 15 shared mismatches (including the stale projection expectation),
+and four timeout-inconclusive pairs. There is no completed native-only borrow
+failure. The original expectations and failures remain in the baseline record.
+
+The promoted `iterator_resources` suite passes all six checks on both backends,
+including the separate untrusted library body and all generated helpers.
+Library verification takes 57.23 seconds on Ferrum and 79.90 on Silicon;
+positive/false/wrong clients take 1.48/1.48/1.95 and 6.86/12.09/12.92 seconds,
+respectively. These use the established 600-second program and 30-second solver
+time limits; the full iterator/borrow suites retain their 180-second baseline
+limits. This closes the concrete cross-crate check at its promoted paths.
+
+The adoption comparison is complete: 432 client pairs, 609 checks per backend,
+with 379 Ferrum and 383 Silicon client expectations matched and 176/177 controls
+passing on each. The source/artifact audit checks all 463 fixture and contract
+files plus all six executables per build before any fixture correction. Its
+immutable results are in `/tmp/prusti-im5-dual229/audit-baseline-complete.json`.
+Routine iteration now uses Ferrum with one worker and branch parallelism off.
+Keep Silicon checks for changed specifications, negatives, and backend
+differences, and require dual-backend validation before merging. The full
+stdlib matrix at the final pin, generic/wrapper loops, exact early-break
+referent framing, and Vec resource integration remain open; adoption does not
+complete IM5 or qualify a destination merge.
 
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification

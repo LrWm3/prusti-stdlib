@@ -34,21 +34,32 @@ bodies, at the standard 180-second program limit. Timings include client
 compilation and do not establish a performance ratio. Exact hashes and
 annotation counts are in `/tmp/prusti-im5-dual229/annotation-comparison.json`.
 
-The current iterator, borrow, and cross-crate resource suites are being checked
+The iterator, borrow, and cross-crate resource adoption suites have been checked
 on both backends. The unchanged Silicon run uses frozen checkpoint 226; the
 corrected Ferrum run uses checkpoint 229. Both use one verifier worker, with
 Ferrum branch parallelism disabled. The original native iterator results are
 retained separately after that run was stopped to apply the annotation fix.
 
-Both iterator baselines are complete. Counts below are client expectation
-matches; compilation, runtime, and specification-library controls are separate.
+All six suite/backend runs completed, covering 432 client pairs and 609 checks
+per backend. Counts below are matches against the original fixture expectations;
+compilation, runtime, and specification-library controls are separate. The
+iterator and borrow suites use the standard 180-second program limit and
+default assertion resource bounds. The cross-crate resource suite uses a
+600-second program limit and 30-second solver time bounds. All runs disable
+verification caching, use fresh targets, and check overflows and panics.
 
-| Backend | Positives | Negatives | All clients | Controls |
-| --- | ---: | ---: | ---: | ---: |
-| Ferrum | 102 / 119 | 182 / 201 | 284 / 320 | 121 / 121 |
-| Silicon | 104 / 119 | 185 / 201 | 289 / 320 | 121 / 121 |
+| Suite | Backend | Positives | Negatives | All clients | Controls |
+| --- | --- | ---: | ---: | ---: | ---: |
+| iterator | Ferrum | 102 / 119 | 182 / 201 | 284 / 320 | 121 / 121 |
+| iterator | Silicon | 104 / 119 | 185 / 201 | 289 / 320 | 121 / 121 |
+| borrow | Ferrum | 41 / 51 | 51 / 58 | 92 / 109 | 52 / 53 |
+| borrow | Silicon | 41 / 51 | 50 / 58 | 91 / 109 | 52 / 53 |
+| iterator_resources | Ferrum | 1 / 1 | 2 / 2 | 3 / 3 | 3 / 3 |
+| iterator_resources | Silicon | 1 / 1 | 2 / 2 | 3 / 3 | 3 / 3 |
+| **Total** | **Ferrum** | **144 / 171** | **235 / 261** | **379 / 432** | **176 / 177** |
+| **Total** | **Silicon** | **146 / 171** | **237 / 261** | **383 / 432** | **176 / 177** |
 
-Ferrum's 36 mismatches comprise 23 unsupported cases, seven timeouts, three
+In the iterator suite, Ferrum's 36 mismatches comprise 23 unsupported cases, seven timeouts, three
 diagnostic mismatches, and three internal errors. Silicon's 31 comprise 20
 unsupported cases, seven timeouts, three diagnostic mismatches, and one internal
 error. The timeout category takes precedence when a log also contains an
@@ -65,11 +76,32 @@ These two cases retain the Silicon gate. The full whole-prefix referent-value
 positive verifies on both, while its incorrect recorded-state control times
 out on both; its wrong-final-value control times out only on Ferrum.
 
-Complete iterator results are in `target/stdlib-im5-dual229/ferrum/iterator` and
-`target/stdlib-im5-dual226/silicon/iterator`; borrow and cross-crate resource
-results are still pending. The frozen source manifest and paired audit are in
-`/tmp/prusti-im5-dual226/source-manifest.json` and
-`/tmp/prusti-im5-dual229/audit.json`.
+The borrow comparison has 90 matches on both backends, 15 shared mismatches,
+and four timeout-inconclusive pairs. Both specification-library controls fail
+the existing unsupported partial-restoration obligation in `replace_lookup`.
+One shared mismatch is the previously stale `call_wand_shifted_projection`
+unsupported expectation: both backends accept its correct value assertion.
+That original outcome remains in this baseline; follow-up controls are separate.
+There is no completed native-only borrow failure in this comparison.
+
+The promoted cross-crate resource suite passes all six checks on both backends.
+Its untrusted library body and generated helpers verify in 57.23 seconds on
+Ferrum and 79.90 seconds on Silicon. The positive and two exact negative clients
+take 1.48/1.48/1.95 seconds on Ferrum and 6.86/12.09/12.92 seconds on Silicon.
+The Rust/runtime checks also pass. These timings are evidence for these runs,
+not a controlled performance benchmark.
+
+Across all 432 client pairs, 375 match on both backends, 39 are shared
+mismatches (including the stale expectation), 16 are timeout-inconclusive, and
+the two reference-replacement positives are completed native-only failures.
+The baseline is not entirely passing and does not close the outstanding IM
+gates. Complete results are under `target/stdlib-im5-dual229/ferrum` and
+`target/stdlib-im5-dual226/silicon`. Before any fixture correction, the audit
+confirmed all 463 fixture/contract source hashes and all six frozen executable
+hashes for each build. The immutable records are
+`/tmp/prusti-im5-dual226/source-manifest.json`,
+`/tmp/prusti-im5-dual229/audit-baseline-complete.json`, and
+`/tmp/prusti-im5-dual229/completion.json`.
 
 The full stdlib matrix at the final pin remains outstanding. Use Ferrum for
 routine development, retain Silicon for changed specifications, negative tests

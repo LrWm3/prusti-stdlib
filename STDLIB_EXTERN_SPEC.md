@@ -2497,6 +2497,15 @@ generated helper body at the baseline 180-second program limit. The complete
 suite comparison continues separately; this focused result does not close
 the remaining backend differences or establish a performance ratio.
 
+The complete Silicon iterator baseline matches 289/320 client expectations
+and passes all 121 controls (`target/stdlib-im5-dual226/silicon/iterator`). Its
+31 mismatches comprise 20 unsupported cases, seven timeouts, three diagnostic
+mismatches, and one internal error. The whole-prefix referent-value positive
+passes on both backends (135.40 seconds Ferrum, 103.57 seconds Silicon).
+The incorrect recorded-state control reaches the baseline limit on both;
+the earlier longer-budget acceptance remains separate evidence. Other suite
+and backend totals are pending, so this is not combined acceptance.
+
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification
 suites at acceptance. Run PCG shape tests and the numbered corpus whenever

@@ -39,6 +39,17 @@ on both backends. The unchanged Silicon run uses frozen checkpoint 226; the
 corrected Ferrum run uses checkpoint 229. Both use one verifier worker, with
 Ferrum branch parallelism disabled. The original native iterator results are
 retained separately after that run was stopped to apply the annotation fix.
+
+The Silicon iterator baseline is complete: 289/320 client expectations match,
+and all 121 compilation, runtime, and specification-library controls pass.
+Its 31 mismatches comprise 20 unsupported cases, seven timeouts, three diagnostic
+mismatches, and one internal error. An unsupported rejection does not satisfy a
+negative test expecting an assertion failure. A timeout remains unresolved.
+The complete results are in `target/stdlib-im5-dual226/silicon/iterator`;
+the other suite/backend results are still pending. The frozen source manifest
+and paired audit are in `/tmp/prusti-im5-dual226/source-manifest.json` and
+`/tmp/prusti-im5-dual229/audit.json`.
+
 The full stdlib matrix at the final pin remains outstanding. Use Ferrum for
 routine development, retain Silicon for changed specifications, negative tests
 and unexpected differences, and require dual-backend validation before merging.

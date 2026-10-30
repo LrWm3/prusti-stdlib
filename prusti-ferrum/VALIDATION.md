@@ -1,4 +1,20 @@
-# Current stdlib integration checkpoint
+# Stage 4 backend integration checkpoint
+
+Prusti `e76038c31a4cb1bb3e34745940b1f883094dd2cb` pins all three Ferrum
+crates to `dc20a0fa9fdc5a6a290b24c7bcf92a5afd15bbb7`. On
+nightly-2026-08-15, locked native-only and dual-backend production driver
+builds and both launchers passed; all 17 real-Z3 adapter library tests passed
+with test-only Ferrum optimization overrides. The first dual build could not
+load `libjvm.so`; the retry passed with the JDK server library directory in
+`LD_LIBRARY_PATH`. No full stdlib matrix or benchmark was run at this pin.
+The earlier 602-fixture matrix below remains historical evidence for its
+recorded revisions, not a result for the new backend. Source and artifact
+hashes, commands, and logs are retained under `/tmp/prusti-stage4-preparation`.
+The native and dual driver SHA-256 values are respectively
+`1a14204ab0678fcc1cdc6b983714c4aac41d716c2169815a20cfaf77e219042d` and
+`eeb0fe7fe668cb016a37866cc999856d5f9551fe6051fcfa47cb971a36dc72bf`.
+
+# Stage 3 stdlib integration checkpoint
 
 The final integration branch `codex/stage3-cleanup-fix` is based on Prusti
 commit `3f623122a0b1473c44d15c4d1a11200addb8a030` and pins Ferrum

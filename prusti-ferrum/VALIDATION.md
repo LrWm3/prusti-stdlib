@@ -1,4 +1,20 @@
-# Stage 4 backend integration checkpoint
+# Stage 4 final backend integration checkpoint
+
+Prusti `a59ed917c1c3c4c4ca6ff1de12ad20d48491d021` pins all three Ferrum
+crates to `afdf10cf59106c38d09df32939f1aa9c77d0b989`. Locked native-only
+and dual-backend production driver and launcher builds passed on
+nightly-2026-08-15, and all 17 real-Z3 adapter library tests passed with
+test-only Ferrum optimization overrides. Tracked Prusti and PCG source hashes
+were unchanged during the builds; the stage 3 and dc20 binaries remain intact.
+The native and dual driver SHA-256 values are respectively
+`502df7c2b2b6e100cceae31e79cb782e1cac1d313235575372121f4c250d1fdd` and
+`f305a0a61963ba6573058e409c5a1e17d3b1f15b51a92cb71f4e713aff8f99aa`.
+Source, binary and log hashes are recorded in
+`/tmp/prusti-afdf-validation/validation-manifest.json`. No full Rust stdlib
+matrix or benchmark was rerun at this pin; the stage 3 602-fixture matrix below
+remains historical evidence for its recorded revisions.
+
+# Stage 4 dc20 intermediate backend integration checkpoint
 
 Prusti `e76038c31a4cb1bb3e34745940b1f883094dd2cb` pins all three Ferrum
 crates to `dc20a0fa9fdc5a6a290b24c7bcf92a5afd15bbb7`. On

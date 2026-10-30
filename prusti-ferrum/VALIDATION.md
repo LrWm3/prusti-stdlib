@@ -40,14 +40,35 @@ corrected Ferrum run uses checkpoint 229. Both use one verifier worker, with
 Ferrum branch parallelism disabled. The original native iterator results are
 retained separately after that run was stopped to apply the annotation fix.
 
-The Silicon iterator baseline is complete: 289/320 client expectations match,
-and all 121 compilation, runtime, and specification-library controls pass.
-Its 31 mismatches comprise 20 unsupported cases, seven timeouts, three diagnostic
-mismatches, and one internal error. An unsupported rejection does not satisfy a
-negative test expecting an assertion failure. A timeout remains unresolved.
-The complete results are in `target/stdlib-im5-dual226/silicon/iterator`;
-the other suite/backend results are still pending. The frozen source manifest
-and paired audit are in `/tmp/prusti-im5-dual226/source-manifest.json` and
+Both iterator baselines are complete. Counts below are client expectation
+matches; compilation, runtime, and specification-library controls are separate.
+
+| Backend | Positives | Negatives | All clients | Controls |
+| --- | ---: | ---: | ---: | ---: |
+| Ferrum | 102 / 119 | 182 / 201 | 284 / 320 | 121 / 121 |
+| Silicon | 104 / 119 | 185 / 201 | 289 / 320 | 121 / 121 |
+
+Ferrum's 36 mismatches comprise 23 unsupported cases, seven timeouts, three
+diagnostic mismatches, and three internal errors. Silicon's 31 comprise 20
+unsupported cases, seven timeouts, three diagnostic mismatches, and one internal
+error. The timeout category takes precedence when a log also contains an
+unsupported diagnostic. An unsupported rejection does not satisfy a negative
+test expecting an assertion failure. A timeout remains unresolved.
+
+The paired classification is 282 cases matching on both backends, 24 shared
+mismatches, 12 timeout-inconclusive pairs, and two completed native-only failures:
+`mut_element_replace_pass` and `mut_element_replace_return_pass`. Both fail an
+implicit permission postcondition natively and verify on Silicon. The return
+variant's Viper inputs are byte-identical; the other pair differs only in
+standalone comments. Neither run unexpectedly accepts an iterator negative.
+These two cases retain the Silicon gate. The full whole-prefix referent-value
+positive verifies on both, while its incorrect recorded-state control times
+out on both; its wrong-final-value control times out only on Ferrum.
+
+Complete iterator results are in `target/stdlib-im5-dual229/ferrum/iterator` and
+`target/stdlib-im5-dual226/silicon/iterator`; borrow and cross-crate resource
+results are still pending. The frozen source manifest and paired audit are in
+`/tmp/prusti-im5-dual226/source-manifest.json` and
 `/tmp/prusti-im5-dual229/audit.json`.
 
 The full stdlib matrix at the final pin remains outstanding. Use Ferrum for

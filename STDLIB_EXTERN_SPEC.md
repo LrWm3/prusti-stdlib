@@ -2503,8 +2503,19 @@ and passes all 121 controls (`target/stdlib-im5-dual226/silicon/iterator`). Its
 mismatches, and one internal error. The whole-prefix referent-value positive
 passes on both backends (135.40 seconds Ferrum, 103.57 seconds Silicon).
 The incorrect recorded-state control reaches the baseline limit on both;
-the earlier longer-budget acceptance remains separate evidence. Other suite
-and backend totals are pending, so this is not combined acceptance.
+the earlier longer-budget acceptance remains separate evidence.
+
+The corrected Ferrum iterator baseline completes with 284/320 client
+expectations matched and all 121 controls passing
+(`target/stdlib-im5-dual229/ferrum/iterator`). The paired classification is
+282 matches on both backends, 24 shared mismatches, 12 timeout-inconclusive
+pairs, and the two native-only reference-replacement failures identified above.
+The current replacement-return inputs are byte-identical; the other replacement
+pair differs only in standalone comments. Neither iterator run unexpectedly
+accepts a negative. Ferrum's full-prefix `false` control passes, but its
+wrong-final-value control reaches the baseline limit while Silicon rejects it.
+Borrow and cross-crate resource totals are pending, so this is not combined
+acceptance or full stdlib qualification.
 
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification

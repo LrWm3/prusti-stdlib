@@ -6,11 +6,16 @@
 pub use ferrum_silver as silver;
 pub mod counterexample;
 use ferrum_silver::ast::{
+    ast::Info,
     position::{IdentifierPosition, LineColumn, LineColumnPosition, Position},
     r#type::{Type, TypeVar},
 };
 use std::sync::Arc;
 use vir::CompType;
+
+fn annotation(name: &str) -> Info {
+    Info::Annotation(std::collections::HashMap::from([(name.into(), Vec::new())]))
+}
 
 #[derive(Debug)]
 pub enum ConversionError {
@@ -230,7 +235,7 @@ impl<'vir> TypeContext<'vir> {
             ast::Metadata,
             expression::{Exp, ExpKind, LocalVar},
         };
-        let meta = if matches!(
+        let mut meta = if matches!(
             expression.kind,
             vir::ExprKindData::Const(
                 vir::ConstData::Wildcard | vir::ConstData::NoPerm | vir::ConstData::FullPerm
@@ -374,6 +379,9 @@ impl<'vir> TypeContext<'vir> {
                 } else if !app.typ_var_map.is_empty() {
                     return Err(ConversionError::UnsupportedExpression);
                 } else {
+                    if app.reveal {
+                        meta.info = annotation("reveal");
+                    }
                     ExpKind::FuncApp(app.target.into(), args)
                 }
             }
@@ -773,6 +781,131 @@ mod tests {
                         .collect::<Vec<_>>(),
                     ["assert.failed:assertion.false"]
                 );
+                frontend.stop().unwrap();
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    #[test]
+    #[ignore = "requires real Z3; set FERRUM_TEST_Z3"]
+    fn opaque_functions_require_reveal_and_still_check_their_bodies() {
+        use vir::{CastType, FunctionIdn};
+        let z3 = std::env::var_os("FERRUM_TEST_Z3").expect("set FERRUM_TEST_Z3");
+        std::thread::Builder::new()
+            .stack_size(ferrum::VERIFICATION_STACK_SIZE)
+            .spawn(move || {
+                vir::init_vcx(vir::VirCtxt::new_without_tcx());
+                let cases = [
+                    ("transparent", false, false, false, false, true),
+                    ("hidden", true, false, false, false, false),
+                    ("revealed", true, true, false, false, true),
+                    ("wrong revealed value", true, true, true, false, false),
+                    ("incorrect opaque body", true, true, false, true, false),
+                ];
+                let programs = vir::with_vcx(|vcx| {
+                    cases.map(|(_, opaque, reveal, wrong_value, wrong_post, _)| {
+                        let argument = vcx.mk_local_decl("x", vir::TYPE_INT);
+                        let x = vcx.mk_local_ex(argument);
+                        let body = vcx
+                            .mk_bin_op_expr(vir::BinOpKind::Add, x, vcx.mk_int::<1>())
+                            .downcast_ty::<vir::Int>();
+                        let id = FunctionIdn::<vir::Int, vir::Int>::new(
+                            vir::ViperIdent::new("increment"),
+                            vir::TYPE_INT,
+                            vir::TYPE_INT,
+                        );
+                        let posts = if wrong_post {
+                            vcx.alloc_slice(&[vcx.mk_eq_expr(
+                                vcx.mk_result(vir::TYPE_INT),
+                                vcx.mk_bin_op_expr(vir::BinOpKind::Add, x, vcx.mk_int::<2>())
+                                    .downcast_ty::<vir::Int>(),
+                            )])
+                        } else {
+                            &[]
+                        };
+                        let mut function =
+                            vcx.mk_function(id, (argument,), &[], posts, None, Some(body));
+                        if opaque {
+                            function = vcx.opaque_function(function);
+                        }
+                        let mut call = id.call()(vcx.mk_int::<1>());
+                        if reveal {
+                            call = vcx.reveal_function(call);
+                        }
+                        let expected = if wrong_value {
+                            vcx.mk_int::<3>()
+                        } else {
+                            vcx.mk_int::<2>()
+                        };
+                        // An incorrect opaque body must be rejected even if
+                        // no method calls it or exposes its definition.
+                        let assertion = vcx.mk_assert_stmt(if wrong_post {
+                            vcx.mk_bool::<true>()
+                        } else {
+                            vcx.mk_eq_expr(call, expected)
+                        });
+                        let block = vcx.mk_cfg_block(
+                            &vir::CfgBlockLabelData::End,
+                            &[],
+                            vcx.alloc_slice(&[assertion]),
+                            &vir::TerminatorStmtData::Exit,
+                        );
+                        let method = vcx.mk_method_unchecked(
+                            "test",
+                            &[],
+                            &[],
+                            &[],
+                            &[],
+                            Some(vcx.alloc_slice(&[block])),
+                        );
+                        program_to_silver(vcx.mk_program(
+                            &[],
+                            &[],
+                            &[],
+                            &[],
+                            vcx.alloc_slice(&[function]),
+                            vcx.alloc_slice(&[method]),
+                        ))
+                        .unwrap()
+                    })
+                });
+                let args = vec![
+                    "--z3Exe".into(),
+                    z3.to_string_lossy().into_owned(),
+                    "--numberOfParallelVerifiers".into(),
+                    "1".into(),
+                    "--parallelizeBranches=false".into(),
+                    "--timeout=30".into(),
+                    "--disableTerminationPlugin".into(),
+                ];
+                let mut frontend = native_frontend(&args, Arc::new(NoopReporter)).unwrap();
+                for (program, (name, _, _, _, wrong_post, should_verify)) in
+                    programs.iter().zip(cases)
+                {
+                    let result = frontend.verify(program).unwrap();
+                    if should_verify {
+                        assert!(
+                            matches!(result, VerificationResult::Success),
+                            "{name}: {result:?}"
+                        );
+                    } else {
+                        let VerificationResult::Failure(errors) = result else {
+                            panic!("{name} must fail verification");
+                        };
+                        let expected = if wrong_post {
+                            "postcondition.violated:assertion.false"
+                        } else {
+                            "assert.failed:assertion.false"
+                        };
+                        assert_eq!(
+                            errors.iter().map(|e| e.full_id()).collect::<Vec<_>>(),
+                            [expected],
+                            "{name}"
+                        );
+                    }
+                }
                 frontend.stop().unwrap();
             })
             .unwrap()
@@ -2003,7 +2136,14 @@ pub fn program_to_silver(
                         .collect::<Result<_, _>>()?,
                     posts,
                     body: function.expr.map(|e| context.expression(&e)).transpose()?,
-                    meta: Metadata::default(),
+                    meta: Metadata {
+                        info: if function.opaque {
+                            annotation("opaque")
+                        } else {
+                            Info::NoInfo
+                        },
+                        ..Default::default()
+                    },
                 },
             ))
         })

@@ -2454,6 +2454,38 @@ its destination branch. The final Ferrum pin has not yet passed a complete
 stdlib matrix; adoption as the development backend does not close that gate
 or the outstanding IM proofs.
 
+The first build of the merged branch succeeds with both backends (checkpoint
+226; driver SHA-256 `db5c3235b40c666b32a65dfecab9e466fe7da293e15a92bc0f3732d375e30487`).
+Its initial Ferrum borrow run matches 90/109 client expectations and passes
+52/53 Rust/runtime/library controls; the library fails an existing unsupported
+partial-restoration case. Keep its five timeouts, unsupported-shape rejections,
+and the previously documented stale `call_wand_shifted_projection` expectation
+in the results. The corresponding Silicon run remains separate.
+
+Comparing emitted programs exposes an adapter omission: native conversion
+drops `FunctionData.opaque` and `FuncAppData.reveal`. These annotations control
+recursive observer expansion in the current encoder. Both generic-array
+programs lose the annotations on the native route and hit the 180-second
+baseline limit while Silicon verifies them. The imported adapter is therefore
+extended to preserve the existing VIR annotations using Ferrum's annotation
+metadata; the Ferrum pin and encoder contracts remain unchanged. A real-Z3
+regression verifies transparent and explicitly revealed calls, rejects access
+to a hidden body and a wrong revealed value, and checks an incorrect opaque
+function body even when unused (five scenarios in one test,
+`/tmp/prusti-im5-opacity228-test.log`). The first test draft also produced a
+correct secondary caller failure for the deliberately incorrect function
+contract; the final control omits that caller and isolates body checking.
+
+The original Ferrum iterator run is stopped after 51 completed clients and its
+results retained under `target/stdlib-im5-dual226`. Rebuild and rerun the native
+baseline with annotation preservation before relying on it for development.
+The unchanged Silicon baseline continues from its frozen checkpoint. Two
+separate native reference-replacement positives fail an implicit return
+permission postcondition while Silicon verifies byte-identical Viper inputs.
+Their complete logs and input hashes are preserved in
+`/tmp/prusti-im5-dual226/replacement-differences.json`; annotation preservation
+does not account for those differences, so they retain the Silicon gate.
+
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification
 suites at acceptance. Run PCG shape tests and the numbered corpus whenever

@@ -1,25 +1,85 @@
-# Current stdlib integration build checkpoint
+# Current stdlib integration checkpoint
 
-The current integration combines committed stdlib snapshot
-`708b0063c1ebc76521e89291d4fab16e3b63bcc3` with adapter `1b994e389` and pins
-Ferrum `f686fde563e0e971d20a46eb8dd14e083a11e801`. The separate working copy
-preserves uncommitted changes in the active stdlib checkout. The pcg submodule
-matches `c18a51899e37e0fa67f9b5f17f7d518ef2f5518c`.
+The final integration branch `codex/stage3-cleanup-fix` is based on Prusti
+commit `3f623122a0b1473c44d15c4d1a11200addb8a030` and pins Ferrum
+`5cbb29be28b45194e555d2e173ed39b1a64a80de`. It retains stdlib snapshot
+`708b0063c1ebc76521e89291d4fab16e3b63bcc3` and pcg
+`c18a51899e37e0fa67f9b5f17f7d518ef2f5518c`. The earlier matrix, map fix,
+and final integration are distinct checkpoints:
 
-Both locked nightly-2026-08-15 builds pass: `cargo build -p prusti
---no-default-features --features ferrum` and `cargo build -p prusti --features
-ferrum`. The dual build uses the configured JDK17 library path. Ferrum's exact
-code checkpoint passes all 826 library tests with real stdio and linked Z3;
-its production optimization settings remain unchanged.
+- Initial matrix: Prusti integration `13674e5e2e46eff8f6140bece1a988e0db22893e`
+  on `codex/stage3-verification`, with Ferrum
+  `f686fde563e0e971d20a46eb8dd14e083a11e801`. The source-hash and coverage
+  audit accounted for all 602 fixtures on each backend. The native-only and
+  dual build artifacts and client logs are retained separately by backend.
+- Map correction: Prusti `0ad015f11ac31ba76cbd942ee0c375e21b86b2a5` on
+  `codex/stage3-map-fix` fixes the `MapContains` encoding. The initial matrix
+  contained 21 affected client pairs. The complete corrected native hash
+  suite passed all 51 checks: 40 clients and 11 controls. This does not retroactively replace
+  the initial matrix outcomes.
+- Final cleanup integration: `3f623122a0b1473c44d15c4d1a11200addb8a030` pins
+  Ferrum `5cbb29be28b45194e555d2e173ed39b1a64a80de`, including the correction to repeated escaping of nested
+  cleanup-error strings. Locked production native-only and dual builds and
+  both launchers passed on nightly-2026-08-15. The real-Z3 `prusti-ferrum`
+  library suite passed 17 tests with no failures; Ferrum optimization overrides
+  applied only to the test build. An uninstrumented 60-second control returned
+  its verifier-timeout diagnostic without reaching the outer watchdog; it is
+  not an original-budget parity or performance result.
 
-Fresh verification of the 602 current client binaries across eight stdlib suites
-is pending. The harness now explicitly selects `--backend Ferrum` or
-`--backend Silicon` after clearing inherited Prusti options, keeps backend/run
-logs separate, saves results incrementally and records source/artifact hashes.
-Its two timeout-cleanup regressions pass. The JVM integration bundle SHA256 is
-`6d11d2b73efe97b97026050f13d966c5ec599cf70d43022346382e065a49cf7c`; it differs
-from the standalone pinned Silicon reference used for Ferrum compatibility tests.
-No performance claim is made from these build checks.
+The initial matrix produced the following client annotation matches; controls
+are counted separately. A mismatch includes timeouts, shared upstream or encoder
+limitations, and source-version differences, so it is not automatically a
+Ferrum defect.
+
+| Suite | Clients per backend | Native matched | JVM matched | Native controls passed / total | JVM controls passed / total |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| extern | 78 | 76 | 76 | 19 / 19 | 19 / 19 |
+| sequence | 15 | 15 | 15 | 7 / 7 | 7 / 7 |
+| vec | 14 | 14 | 14 | 7 / 7 | 7 / 7 |
+| collections | 22 | 21 | 21 | 5 / 5 | 5 / 5 |
+| borrow | 109 | 88 | 90 | 52 / 53 | 52 / 53 |
+| iterator | 310 | 269 | 275 | 117 / 118 | 118 / 118 |
+| hash | 40 | 19 | 40 | 10 / 11 | 11 / 11 |
+| resources | 14 | 14 | 14 | 9 / 9 | 9 / 9 |
+| **Total** | **602** | **516** | **545** | **226 / 229** | **228 / 229** |
+
+The paired initial classification was 511 cases meeting both expectations,
+35 shared failures, one shared stale-unsupported expectation supported by a
+false-assertion control, 32 timeout-inconclusive pairs, two confirmed
+source-version differences, and 21 map-encoding differences addressed by the
+later map correction. The native borrow, iterator and hash specification
+library controls failed, as did the JVM borrow library control; all runtime
+and remaining controls passed. The JVM integration bundle SHA-256 is
+`6d11d2b73efe97b97026050f13d966c5ec599cf70d43022346382e065a49cf7c`;
+it differs from the standalone pinned Silicon reference. Matching case
+outcomes alone do not establish identical Viper input.
+
+Final-integration serial retries used fresh targets, the same 180-second
+verifier limit and 300-second command limit, and retained the initial results.
+Of 16 native iterator client retries, four met expectations, nine reached the
+verifier limit and three completed with shared Prusti failures. Of 12 JVM
+iterator retries, eight met expectations, two reached the verifier limit and
+two completed with shared encoder failures. No retry hit the outer watchdog or
+unexpectedly accepted a negative fixture. Five original/retry Viper dumps were
+identical, 12 differed and 11 were unavailable; matching Rust fixtures alone do
+not establish equivalent inputs. The native iterator specification-library
+retry passed; its initial native run had reached the verifier limit.
+
+The borrow retry covered the 12 backend attempts that initially timed out
+across 10 cases. Native met expectations in five of seven; `open_from_pass`
+and `vec_lookup_inclusive_pass` again reached the verifier limit. JVM met
+expectations in three of five; `inclusive_exhausted_pass` again reached the
+verifier limit, and `vec_lookup_inclusive_pass` reported the shared unsupported
+restoration obligation at line 13:23 without timing out. Native reported the
+same diagnostic alongside its timeout, as in its initial run. No borrow retry
+hit the outer watchdog or unexpectedly accepted a negative fixture. All
+remaining timeouts are inconclusive; a shared encoder rejection is not a
+successful proof. No performance comparison follows from these runs.
+
+See Ferrum's [Prusti validation record](https://github.com/LrWm3/ferrum/blob/989f58ced5b8d1081e74c6cdbfcfe1e6d8a62cf1/porting/prusti-validation.md)
+for source comparison and reproducible evidence. The initial matrix summary,
+coverage audit, per-case logs and source/artifact hashes are retained under
+`/tmp/ferrum-prusti-stage3`; final retry records remain separate there.
 
 The remaining record below is historical and must not be read as fresh
 verification of the current integration.

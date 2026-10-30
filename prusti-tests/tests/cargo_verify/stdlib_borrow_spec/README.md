@@ -44,8 +44,9 @@ borrow retained across a symbolic-length loop. They include zero iterations,
 `continue`, early `break`, nested loops, and incorrect-value/false controls.
 The `loop_reference_*` cases check that reference framing permits assignments
 and mutable borrows of reference slots without preserving their old values.
-Unsupported generalized-to-concrete resource projection shifts are diagnosed
-explicitly by `call_wand_shifted_projection`.
+The `call_wand_shifted_projection_*` cases check restoration when a lifetime-free
+generic tuple element disappears from the resource projections, and reject an
+incorrect owner value afterward.
 
 The trusted ghost-only `scalar_index_model` is interpreted as `Some(i)` for a
 `usize` index `i` and `None` for other sealed `SliceIndex` types. The `usize`

@@ -103,6 +103,16 @@ hashes for each build. The immutable records are
 `/tmp/prusti-im5-dual229/audit-baseline-complete.json`, and
 `/tmp/prusti-im5-dual229/completion.json`.
 
+After freezing that audit, the stale projection fixture was replaced by
+`call_wand_shifted_projection_pass` and `call_wand_shifted_projection_wrong`.
+The latter changes the asserted value from 3 to 4 and expects the panic
+precondition error at that assertion. Both final repository fixtures pass their
+intended outcomes on frozen build 229, with four checks passing per backend
+(Rust compilation, runtime, positive, negative). Positive/negative times are
+9.72/0.71 seconds on Ferrum and 13.63/4.93 seconds on Silicon. Evidence is in
+`target/stdlib-im5-shift231/{ferrum,silicon}`. This changes only test expectations
+and coverage; the original baseline results above remain unchanged.
+
 The full stdlib matrix at the final pin remains outstanding. Use Ferrum for
 routine development, retain Silicon for changed specifications, negative tests
 and unexpected differences, and require dual-backend validation before merging.

@@ -1206,6 +1206,8 @@ substitution; shifted, merged, or expanded resource indices that the builder
 cannot represent are rejected explicitly. `call_wand_shifted_projection`
 covers a lifetime-free generic argument preceding a mutable reference.
 Extending the mapping alone does not establish generic resource support.
+This checkpoint's unsupported expectation is superseded by the positive and
+wrong-value controls in the 2026-10-30 adoption follow-up below.
 
 Validation on 2026-10-28: the full build passed; PCG passed four projection-map
 tests and eight existing function-shape tests. Focused borrow and iterator
@@ -2540,6 +2542,17 @@ differences, and require dual-backend validation before merging. The full
 stdlib matrix at the final pin, generic/wrapper loops, exact early-break
 referent framing, and Vec resource integration remain open; adoption does not
 complete IM5 or qualify a destination merge.
+
+After freezing the baseline, the stale `call_wand_shifted_projection`
+unsupported expectation is replaced by a positive and a wrong-value control.
+Both pass their exact outcomes at the promoted repository paths, with all
+four checks passing on each backend (`target/stdlib-im5-shift231/{ferrum,silicon}`,
+build 229). Positive/negative proof times are 9.72/0.71 seconds on Ferrum and
+13.63/4.93 seconds on Silicon, plus Rust/runtime checks. The wrong-value case
+changes only the asserted value from 3 to 4 and checks the resulting panic
+precondition diagnostic at that assertion. The baseline's original counts and
+unexpected acceptance are retained; this fixture correction changes no encoder
+or library contract and does not retroactively make the baseline pass.
 
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification

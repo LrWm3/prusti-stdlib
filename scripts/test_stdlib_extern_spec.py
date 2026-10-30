@@ -7,6 +7,7 @@ From the repository root, after building Prusti:
     ./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite collections
     ./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite borrow
     ./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite iterator
+    ./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite iterator_resources
     ./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite hash
     ./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite resources
 
@@ -29,17 +30,20 @@ import time
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--release", action="store_true", help="use release Prusti binaries")
-    parser.add_argument("--suite", choices=("extern", "sequence", "vec", "collections", "borrow", "iterator", "hash", "resources"), default="extern")
+    parser.add_argument("--suite", choices=("extern", "sequence", "vec", "collections", "borrow", "iterator", "iterator_resources", "hash", "resources"), default="extern")
     parser.add_argument("--case", action="append", help="select binary names by glob; may be repeated")
     parser.add_argument("--skip-library", action="store_true", help="verify selected clients without separately verifying the spec library")
     parser.add_argument("--timeout", type=int, default=180, help="verification time limit per generated program in seconds (default: 180)")
     parser.add_argument("--solver-timeout-ms", type=int, help="time/resource budget per solver assertion in milliseconds")
+    parser.add_argument("--solver-check-timeout-ms", type=int, help="budget per solver check, including wand matching, in milliseconds")
     parser.add_argument("--solver-time-bounds", action="store_true", help="use elapsed-time bounds instead of Z3 resource bounds")
     args = parser.parse_args()
     if args.timeout <= 0:
         parser.error("--timeout must be positive")
     if args.solver_timeout_ms is not None and args.solver_timeout_ms <= 0:
         parser.error("--solver-timeout-ms must be positive")
+    if args.solver_check_timeout_ms is not None and args.solver_check_timeout_ms <= 0:
+        parser.error("--solver-check-timeout-ms must be positive")
     command_timeout = max(300, args.timeout + 120)
     root = Path(__file__).resolve().parent.parent
     sequence = args.suite == "sequence"
@@ -127,6 +131,8 @@ def main():
         })
         if args.solver_timeout_ms is not None:
             env["PRUSTI_ASSERT_TIMEOUT"] = str(args.solver_timeout_ms)
+        if args.solver_check_timeout_ms is not None:
+            env["PRUSTI_EXTRA_VERIFIER_ARGS"] += " --checkTimeout {}".format(args.solver_check_timeout_ms)
         if args.solver_time_bounds:
             env["PRUSTI_EXTRA_VERIFIER_ARGS"] += " --proverEnableTimeBounds"
         compiled = run("rust-check", ["cargo", "check", "--bins"], env)
@@ -134,7 +140,7 @@ def main():
             if args.suite == "extern":
                 run("rust-core-only", ["cargo", "check", "-p", "stdlib_core_only"], env)
                 run("core-only", [str(prusti), "-p", "stdlib_core_only"], env)
-            library = {"extern": "stdlib_specs", "sequence": "sequence_specs", "vec": "vec_specs", "collections": "collection_specs", "borrow": "borrow_specs", "iterator": "iterator_specs", "hash": "key_specs", "resources": "resource_specs"}[args.suite]
+            library = {"extern": "stdlib_specs", "sequence": "sequence_specs", "vec": "vec_specs", "collections": "collection_specs", "borrow": "borrow_specs", "iterator": "iterator_specs", "iterator_resources": "iterator_resource_specs", "hash": "key_specs", "resources": "resource_specs"}[args.suite]
             if not args.skip_library:
                 run("spec-library", [str(prusti), "-p", library], env)
             positive = [p for p in sources if p.stem == "pass" or p.stem.endswith("_pass")]
@@ -180,7 +186,7 @@ def main():
                     results.append({"case": "viper-trigger-" + quantifier, "passed": passed, "seconds": 0})
                     print("Viper {} trigger: {} ({})".format(quantifier, "PASS" if passed else "FAIL", program), flush=True)
 
-    (log_dir / "results.json").write_text(json.dumps({"toolchain": toolchain, "case_patterns": args.case, "spec_library_selected": not args.skip_library, "verifier_timeout": args.timeout, "solver_timeout_ms": args.solver_timeout_ms, "solver_time_bounds": args.solver_time_bounds, "cases": results}, indent=2) + "\n")
+    (log_dir / "results.json").write_text(json.dumps({"toolchain": toolchain, "case_patterns": args.case, "spec_library_selected": not args.skip_library, "verifier_timeout": args.timeout, "solver_timeout_ms": args.solver_timeout_ms, "solver_check_timeout_ms": args.solver_check_timeout_ms, "solver_time_bounds": args.solver_time_bounds, "cases": results}, indent=2) + "\n")
     if not all(result["passed"] for result in results):
         raise SystemExit(1)
     scope = "Selected" if args.case or args.skip_library else "All"

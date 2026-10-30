@@ -2418,6 +2418,18 @@ loop fails its restoration annotation (342.06 seconds,
 `target/stdlib-im5-generic218-iterator-spec-logs`). Keep these as open gates;
 the observer API's acceptance does not imply acceptance of these loops.
 
+The complete concrete reference-update loop also verifies in a separate
+`no_std` library with explicit identity and final-value postconditions. Its
+client proves unchanged reference identities and all referent values equal
+to 7 using the exported contract. The library, positive, and false/wrong-value
+clients pass in 567.69, 66.37, 37.52, and 45.17 seconds, respectively, plus
+Rust/runtime checks (`target/stdlib-im5-cross212-iterator-spec-logs`, build
+209, fresh targets, 600-second program limit and 30-second solver time
+bounds). These sources are promoted into the separate `iterator_resources`
+suite; verification under the final repository paths follows the next rebuild.
+The runner also exposes `--solver-check-timeout-ms` and records that optional
+budget independently of the assertion budget. Its default remains unchanged.
+
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification
 suites at acceptance. Run PCG shape tests and the numbered corpus whenever

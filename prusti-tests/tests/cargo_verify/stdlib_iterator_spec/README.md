@@ -57,6 +57,14 @@ configuration and
 the fresh-run `IntoIterator` result are recorded in `STDLIB_EXTERN_SPEC.md`;
 the complete native batch has not yet passed consistently.
 
+`sequence_resource_states(&elements)` captures all indexed referent states
+in a ghost `Seq<ResourceState>`. It requires the corresponding permissions;
+the result is a value snapshot and gives no access to the heap. The
+`mut_sequence_states_*` cases check concrete and generic observations, length
+and pointwise agreement, missing permissions, stale snapshots after mutation,
+and rejection in executable code. This snapshot can be taken before creating
+an iterator, so a later invariant need not borrow the original owner again.
+
 A separate untrusted iterator stores an explicit borrowed tail and implements
 `next` with `mem::replace` and `split_at_mut`. Its regressions restore multiple
 simultaneously yielded elements, including non-`Copy` values, and handle

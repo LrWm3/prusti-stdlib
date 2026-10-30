@@ -149,6 +149,7 @@ pub enum PrustiBuiltin {
     MutSliceReferentValue,
     ResourceState,
     SequenceResourceState,
+    SequenceResourceStates,
     Seq(SeqOp),
     /// An operation on `Set` (`multiset: false`) or `Multiset` (`true`).
     AnySet {
@@ -169,6 +170,7 @@ impl PrustiBuiltin {
                 | Self::MutSliceReferentValue
                 | Self::ResourceState
                 | Self::SequenceResourceState
+                | Self::SequenceResourceStates
         )
     }
 
@@ -269,6 +271,7 @@ impl PrustiBuiltin {
                     "mut_slice_contents" => Self::MutSliceContents,
                     "resource_state" => Self::ResourceState,
                     "sequence_resource_state" => Self::SequenceResourceState,
+                    "sequence_resource_states" => Self::SequenceResourceStates,
                     "mut_slice_referent_value" => Self::MutSliceReferentValue,
                     "old_start" => Self::Spec(SpecBuiltin::ModeStart(Mode::Old)),
                     "old_end" => Self::Spec(SpecBuiltin::ModeEnd(Mode::Old)),
@@ -343,7 +346,8 @@ impl PrustiBuiltin {
             | Self::SnapNe
             | Self::MutSliceReferentValue
             | Self::ResourceState
-            | Self::SequenceResourceState => true,
+            | Self::SequenceResourceState
+            | Self::SequenceResourceStates => true,
             // `Call`/`Erased` are legitimate only inside a `ghost!` block's
             // dead arm, which is exempt from the spec-only rejection: a stray
             // executable `ghost_call` (i.e. not from a `ghost!` block) would
@@ -741,6 +745,34 @@ impl PrustiBuiltinEnc {
                 let sequence = ctxt.deref_operand(0)?;
                 let index = ctxt.index_to_int(ctxt.operands[1], ctxt.sig.inputs()[1])?;
                 collection.observe(sequence, index).upcast_ty()
+            }
+            PrustiBuiltin::SequenceResourceStates => {
+                if let Some(span) = ctxt.span {
+                    ctxt.handle_partial_op_error(
+                        "application.precondition:insufficient.permission",
+                        "insufficient permission to observe sequence resource states",
+                        span,
+                    );
+                }
+                use crate::encoders::ty::resource_collection::{
+                    ResourceSequenceStateEnc, ResourceStateBoxSequenceEnc,
+                };
+                let sequence_ty = BuiltinCtxt::deref(ctxt.sig.inputs()[0]);
+                let element = RustTyDecomposition::from_ty(
+                    BuiltinCtxt::adt_type_arg(sequence_ty, 0),
+                    ctxt.args.context(),
+                );
+                let collection = ctxt.deps.require_dep::<ResourceSequenceStateEnc>(element)?;
+                let sequence = ctxt.deref_operand::<vir::Seq>(0)?;
+                let states = collection.observe_elements(sequence);
+                let state_ty = RustTyDecomposition::from_ty(
+                    BuiltinCtxt::adt_type_arg(ctxt.sig.output(), 0),
+                    ctxt.args.context(),
+                );
+                let box_states = ctxt
+                    .deps
+                    .require_dep::<ResourceStateBoxSequenceEnc>(state_ty)?;
+                box_states.call()(states).upcast_ty()
             }
             PrustiBuiltin::Seq(op) => ctxt.encode_seq(op)?,
             PrustiBuiltin::AnySet { multiset, op } => ctxt.encode_any_set(multiset, op)?,

@@ -2362,6 +2362,62 @@ resource-state sequence before creating the iterator, and compares the tail
 to that pure snapshot. Generic/wrapper/cross-crate loops, Vec views, and full
 combined acceptance still follow; IM5 is not complete.
 
+The initial-state capture is now a specification-only builtin,
+`sequence_resource_states(&Seq<T>) -> Seq<ResourceState>`. Its checked recursive
+observer requires every indexed element resource, and its checked boxing
+function preserves length and each observed state. Saved states grant no
+permissions. Concrete/generic positives and executable-use, missing-permission,
+stale-state, and wrong-length rejections pass all nine checks with build 209
+(`target/stdlib-im5-observer210-iterator-spec-logs`, proof times 28.91, 64.05,
+21.00, 29.88, 25.98, and 33.79 seconds). The first observer run also generated
+unused aggregate conversion methods, whose postconditions failed in the
+missing-permission case. The observer now has its own encoder dependency;
+actual whole-array conversions still generate and verify their required
+methods. This preserves the observer body and contract exactly.
+
+The first complete native-prefix regression after that refactor fails with
+`apply.failed:wand.not.found` (337.00 seconds), while all three negative controls
+pass (430.69, 279.89, and 164.72 seconds,
+`target/stdlib-im5-regression211-iterator-spec-logs`). The emitted program differs
+from the accepted positive only by removal of two unused conversion methods,
+specification identifiers, and zero-sized closure addresses. A caller-only
+replay of the unaltered program passes (`/tmp/prusti-im5-apply214.log`); this is
+diagnostic evidence, not full acceptance. Silicon's independent `checkTimeout`
+defaults to 10 ms. A fresh complete positive with this check budget increased
+to 100 ms passes in 247.12 seconds, plus Rust/runtime checks
+(`target/stdlib-im5-check215-iterator-spec-logs`). Assertion and program limits
+remain 30 seconds and 600 seconds. This supports a matching-sensitivity
+hypothesis; it does not establish the cause or eliminate the recorded failure.
+
+Early-break framing is still unresolved. The initial snapshot avoids Rust's
+overlapping capture. Adding shallow-identity framing makes the postcondition
+well-formed, but build 204 then fails with a postcondition permission error
+(580.44 seconds, `target/stdlib-im5-partial208-iterator-spec-logs`). Splitting
+prefix and suffix postconditions and adding checked body assertions instead
+fails wand application with build 209
+(`target/stdlib-im5-partial213-iterator-spec-logs`). Neither run counts as an
+early-break proof. The next probes cover that suffix frame, generic state
+preservation, wrappers with two independent mutable references, and Vec views.
+
+The observer checkpoint is validated after cleanup and a complete rebuild
+(build 221). All nine promoted `mut_sequence_states_*` checks pass
+(`target/stdlib-im5-observer223-iterator-spec-logs`); concrete/generic proofs
+take 18.50/54.88 seconds and the four exact rejections take 28.60, 30.62,
+23.68, and 34.80 seconds. The whole-array state positive and both controls
+also pass with the observer refactor (363.42, 377.55, and 385.25 seconds,
+`target/stdlib-im5-array217-iterator-spec-logs`, build 209, 900-second program
+limit and the established solver resource bounds). No conversion body was
+omitted from those runs.
+
+The larger check budget does not close early-break framing: probe 216 times
+out at 600 seconds. Expressing the untouched tail as one state-sequence
+equality instead of a pointwise invariant also fails with an unpositioned
+`assert.failed:wand.not.found` (428.60 seconds,
+`target/stdlib-im5-partial222-iterator-spec-logs`). The generic state-preserving
+loop fails its restoration annotation (342.06 seconds,
+`target/stdlib-im5-generic218-iterator-spec-logs`). Keep these as open gates;
+the observer API's acceptance does not imply acceptance of these loops.
+
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification
 suites at acceptance. Run PCG shape tests and the numbered corpus whenever

@@ -1935,10 +1935,8 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                     let zero = self.vcx.mk_uint::<0>().lift();
                     let TyKind::Slice(element_ty) = slice_ty.kind() else { unreachable!() };
                     let element = RustTyDecomposition::from_ty(*element_ty, self.context);
-                    use crate::encoders::ty::resource_collection::{ResourceCollectionEnc, ResourceCollectionTask};
-                    let observer = self.deps.require_dep::<ResourceCollectionEnc>(
-                        ResourceCollectionTask::aggregate(element),
-                    )?;
+                    use crate::encoders::ty::resource_collection::ResourceSequenceStateEnc;
+                    let observer = self.deps.require_dep::<ResourceSequenceStateEnc>(element)?;
                     // Capture each heap-dependent observation once. The
                     // quantified relation below compares only pure sequences.
                     let source_states = observer.observe_elements(source_values);

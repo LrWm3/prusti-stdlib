@@ -25,7 +25,7 @@ SUITES = (
     "iterator_prefix_resources",
 )
 HEAVY_SUITES = frozenset((
-    "sequence", "resources", "iterator_resources", "iterator_generic_resources",
+    "sequence", "resources", "borrow", "iterator_resources", "iterator_generic_resources",
     "iterator_prefix_resources",
 ))
 HEAVY_ITERATORS = (

@@ -1093,6 +1093,14 @@ by applying the temporary wand. This is a pending experiment, not an assumption
 that those resources already exist: packaging the temporary wand must prove
 them. The broader generic call-expiry handoff remains a separate open problem.
 
+The paired borrow rerun also exhausted the 180-second whole-program limit in
+`inclusive_slice_pass` on Silicon (185.64 seconds including startup); Ferrum
+had exhausted it in `vec_lookup_inclusive_pass`. The next complete matrix puts
+the borrow suite under the existing 600-second generic-resource program budget,
+like sequence and resource suites. Assertion and solver-check limits remain
+30 seconds and 100 milliseconds. Those timed-out attempts remain failures;
+only a completed proof under the recorded new bounds can pass.
+
 The remaining generic borrow failures need a separate resource-handoff repair.
 In `swap_view`, the body applies the swap's nested-resource wand and then the
 `as_mut_slice` wands before return. This restores resources indexed by the

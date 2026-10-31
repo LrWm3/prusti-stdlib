@@ -2786,6 +2786,52 @@ not a repair already established by these runs. The separate early-break
 library/client draft is prepared but has not been run or accepted. Stop
 repeating whole-probe runs without a new encoding or proof obligation to test.
 
+**Snapshot capture and tail-step diagnostic (2026-10-31).** The short
+`early268` Ferrum trace contains 2,761 solver checks and 1,326 `unknown`
+responses, with repeated historical heap observations in restoration scripts.
+Many reported reasons are incomplete quantifier reasoning; this is not evidence
+of one slow query or a backend defect. The encoder now evaluates outer loop-wand
+captures once before packaging. It also materializes a call's argument/result
+snapshots and the post-call observations already bound outside its returned
+wands, then reuses those captures for expiry and retained loop obligations.
+Historical heap labels, selected obligation IDs, guarded reads, conversion
+statements, and quantified reads keep their original roles. These are checked
+assignments, with no additional assumptions or resource grants.
+
+The outer-capture-only build 269 passes the scalar prefix positive/wrong-value
+pair. On the unchanged pointwise early-break probe it reports failure to
+preserve the untouched-tail invariant at line 34 after 491.77 seconds, within
+the existing 600-second bound (`target/stdlib-im5-captures269/full-ferrum`).
+This narrows the previous timeout but does not establish the positive proof.
+Build 270 adds call captures; its generated early-break program contains 222
+pre-call and 31 post-call labelled reads, versus 502 and 238 before either
+change. This syntactic reduction is not a general performance claim.
+
+Build 270 passes 34 focused checks across Ferrum and Silicon: scalar prefix
+proofs, two live shared-reference yields, branch loops, and retained branch
+borrows, including their incorrect-value and false controls. Build 273 differs
+only by formatting, comments, and an equivalent return-type alias, and passes
+the ten checks for `mut_native_resource_tail_state_{pass,false,wrong}` across
+both backends. The new untrusted positive proves, for symbolic slice lengths,
+that `next` preserves every remaining referent's state and that writing the
+yielded referent preserves that state again. Runtime examples cover empty,
+single-element, and longer slices. Both negatives fail at their intended
+assertions. Full generated helper bodies are included, with fresh targets,
+caching disabled, overflow/panic checks, one verifier, Ferrum branch parallelism
+off, and 180/30/0.1-second program/assertion/check bounds. The audit of all 44
+checks is `target/stdlib-im5-captures273/qualification.json`.
+
+The revised larger early-break probe `early271` used the generic loop's
+source-index invariant. Its unfinished Ferrum run was interrupted in favor of
+the smaller tail-step diagnostic; `interrupted.json` records this and no
+Silicon run followed. The initial build-270 encode-only invocation used an
+invalid mode spelling; the corrected encode-only run succeeds and is not
+verification evidence. The remaining early-break problem is carrying the
+tail-state fact through the loop's combined restoration and invariant checks.
+Keep the current whole-loop probe in `known_limits`. Vec initialized-element
+ownership/index routing, the archived standalone controls, and combined IM5
+acceptance remain open; the full matrix and Ferrum upgrade remain deferred.
+
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification
 suites at acceptance. Run PCG shape tests and the numbered corpus whenever

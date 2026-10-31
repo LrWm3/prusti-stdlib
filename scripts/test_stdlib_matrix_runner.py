@@ -28,8 +28,14 @@ class MatrixCoverage(unittest.TestCase):
             root = Path(folder)
             bins = root / "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin"
             bins.mkdir(parents=True)
-            names = {"ordinary_pass", "ordinary_wrong", "mut_native_resource_early_pass",
-                     "mut_native_resource_pair_prefix_bad_state", "mut_native_resource_framing_pass"}
+            ordinary_names = {"ordinary_pass", "ordinary_wrong", "mut_direct_pass"}
+            resource_names = {"mut_native_resource_early_pass",
+                              "mut_native_resource_pair_prefix_bad_state",
+                              "mut_native_resource_framing_pass", "mut_generic_array_pass",
+                              "mut_generic_array_state_wrong", "mut_sequence_state_reborrow_false",
+                              "mut_element_nested_pass", "mut_native_mut_ref_restoration_wrong",
+                              "mut_native_restoration_wrong_suffix"}
+            names = ordinary_names | resource_names
             for name in names:
                 (bins / (name + ".rs")).write_text("")
             jobs = matrix.plan(root, ["iterator"], ["Ferrum", "Silicon"])
@@ -40,11 +46,12 @@ class MatrixCoverage(unittest.TestCase):
                 self.assertEqual(len(actual), len(names))
                 self.assertEqual(sum(job["library"] for job in selected), 1)
                 self.assertEqual([job["timeout"] for job in selected], [180, 600])
-                self.assertIn("mut_native_resource_framing_pass", selected[1]["cases"])
+                self.assertEqual(set(selected[0]["cases"]), ordinary_names)
+                self.assertEqual(set(selected[1]["cases"]), resource_names)
                 self.assertTrue(selected[1]["library"])
 
-            for source in bins.glob("mut_native_*.rs"):
-                source.unlink()
+            for name in resource_names:
+                (bins / (name + ".rs")).unlink()
             ordinary = matrix.plan(root, ["iterator"], ["Ferrum"])
             self.assertEqual(len(ordinary), 1)
             self.assertTrue(ordinary[0]["library"], "a reduced suite must still verify its library")

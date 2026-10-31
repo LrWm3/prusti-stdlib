@@ -30,6 +30,14 @@ HEAVY_SUITES = frozenset((
 ))
 HEAVY_ITERATORS = (
     "*resource*", "mut_native_generic_*",
+    # Reference-element and generic conversion proofs also use the resource
+    # budget when their names do not contain "resource". Earlier qualification
+    # includes array and reborrow proofs taking more than 180 seconds.
+    "mut_element_*", "mut_generic_*", "mut_sequence_state*",
+    "mut_native_mut_ref_*", "mut_native_shared_ref_*", "mut_native_holder_*",
+    "mut_vec_ref_*",
+    # These storage-restoration controls also have established long proofs.
+    "mut_native_restoration_continue_*", "mut_native_restoration_wrong_suffix",
 )
 
 

@@ -1129,6 +1129,29 @@ all six build-338 executable hashes exactly; `build339.json` records provenance.
 No earlier-build results are adopted. The stopped `final321/` dispatcher was
 retired after preserving its 791/826 completed checks in `superseded321.json`.
 
+The first fourteen `final339` jobs are complete: the initial twelve pass
+498/498 checks, borrow/Ferrum passes 155/164, and borrow/Silicon passes 156/164.
+All borrow negative clients produce exactly their expected diagnostics. Both
+backends time out on `vec_lookup_inclusive_pass` at 600 seconds. Ferrum alone
+adds an aggregate-helper failure in `vec_lookup_range_pass`; Silicon accepts
+that client. These results do not close the generic handoff or helper-stability
+issues below.
+
+The ordinary iterator job exposes another budget-classification omission:
+reference-element, generic-array and sequence-state tests do not necessarily
+contain `resource` in their names. Earlier accepted runs include generic-array
+proofs of 237–568 seconds and a reborrow control of 280 seconds. The next matrix
+plan puts these resource families, native reference/holder clients and Vec
+reference views under the existing 600-second resource budget. It also retains
+that budget for the historically long continue and wrong-suffix restoration
+controls. Ordinary storage/value clients keep 180 seconds. The partition is now
+193 ordinary and 152 heavy iterator clients per backend; total coverage remains
+665 clients, 1,330 client/backend pairs and 1,842 checks. Five runner/watchdog
+tests pass, including coverage, library selection and these newly classified
+families. `historical-heavy-iterator-evidence.json` records the timing evidence.
+The running frozen `final339` plan is unchanged, and its short-budget failures
+remain failures.
+
 A closer reading separates a second generic Vec issue from the current-owner
 handoff. In `open_vec_pass`, the first indexed opening fails at `_tmp14`, before
 any element is replaced. The generated `IndexMut::index_mut` contract returns

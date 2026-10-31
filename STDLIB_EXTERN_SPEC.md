@@ -2927,6 +2927,27 @@ trigger, preserving the invariant itself. A separate control-flow probe makes
 the impossible `None` branch below `position < limit <= len` checked
 unreachable; it compiles, runs, and encodes, but has no accepted proof yet.
 
+Adding the alternative saved-state trigger alone (`early296`) does not close
+the loop: Ferrum reports that the tail-state invariant might not be preserved
+after 452.85 seconds, with all helpers checked at the same diagnostic bounds.
+The next comparison separates pointwise-to-sequence observation from looping
+in a smaller untrusted helper, then revisits the original-position invariant
+used by the accepted generic state-preservation loop. Neither that proposed
+comparison nor the control-flow variant is an accepted early-break proof.
+
+The archived generic prefix false control is now closed on both backends and
+restored to `src/bin`. The false assertion follows the existing valid final
+restoration/identity/state assertions; build 291 rejects exactly that final
+claim in 173.59 seconds on Ferrum and 204.67 seconds on Silicon, with all
+helpers checked at the existing 600/30/0.1-second diagnostic bounds. The
+promoted source hash matches both runs (`target/stdlib-im5-controls294`).
+Ferrum's temporary runner misclassified the bare filename because it required
+a directory separator; an exact source-hash/diagnostic/file/line/status audit
+is saved as `ferrum/audited-results.json`, preserving the original results.
+Silicon passes directly with that location-matcher correction. The two
+archived pair controls have their intended Ferrum rejections and are still
+awaiting paired acceptance. The full stdlib matrix remains deferred.
+
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification
 suites at acceptance. Run PCG shape tests and the numbered corpus whenever

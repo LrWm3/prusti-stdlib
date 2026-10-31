@@ -30,10 +30,10 @@ fn visit<T>(values: &mut [T]) {
         }
     }
     drop(it);
-    prusti_assert!(false); // expected-error: assertion might not hold
     prusti_assert!(position == len);
     prusti_assert!(Seq::from_slice(&*values) == *original);
     prusti_assert!(sequence_resource_states(&Seq::from_slice(&*values)) == *initial_states);
+    prusti_assert!(false); // expected-error: assertion might not hold
 }
 
 struct Owned(u32);

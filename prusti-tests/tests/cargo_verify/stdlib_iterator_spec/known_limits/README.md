@@ -552,17 +552,27 @@ Ferrum (190.62 seconds) and Silicon (309.28 seconds) with build 229 and a
 restoration failure at 342.06 seconds remains recorded in the plan; the new
 result does not establish the cause of that earlier failure. Final-path
 validation passes for both cases on both backends. The separate
-`mut_native_resource_generic_prefix_false` control stays here: at its former
-`src/bin` path, Ferrum rejects the intended post-loop assertion in 152.87
-seconds, but Silicon instead fails the restoration annotation in 573.47
-seconds. That earlier-obligation error does not satisfy the expected
-diagnostic. These complete-program results use the same 600-second program,
+`mut_native_resource_generic_prefix_false` control originally failed its
+paired gate: Ferrum rejected the intended post-loop assertion in 152.87
+seconds, but Silicon instead failed the restoration annotation in 573.47
+seconds. That earlier-obligation error did not satisfy the expected
+diagnostic. These historical complete-program results use a 600-second program,
 30-second assertion, and 100 ms check budgets and are retained under
 `target/stdlib-im5-generic251/{ferrum,silicon}`. The wrong-state control is
 unconditional. The separate `iterator_generic_resources` suite now supplies
 nonempty concrete wrong-value controls for both `u32` and non-`Copy` referents,
-paired with successful positives on both backends; it does not resolve the
-direct-loop false control retained here.
+paired with successful positives on both backends.
+
+The direct-loop false control now returns to `src/bin`. Its final false claim
+follows the valid restoration, identity, and state assertions. Build 291
+rejects exactly that final assertion on Ferrum (173.59 seconds) and Silicon
+(204.67 seconds), with every generated helper selected and the same
+600/30/0.1-second bounds (`target/stdlib-im5-controls294`). The promoted source
+hash matches both runs. The temporary Ferrum harness required a slash before
+the filename, whereas rustc reported a crate-root filename; its original
+failed classification is retained alongside an audit of the exact diagnostic,
+filename, line, exit status, timeout status, and source hash. The Silicon run
+uses the corrected location matcher and passes directly.
 
 The `mut_native_resource_pair_prefix_bad_state` and
 `mut_native_resource_pair_prefix_wrong_first` binaries preserve two unresolved

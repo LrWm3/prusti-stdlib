@@ -2842,9 +2842,23 @@ at the same 180-second bounds (`target/stdlib-im5-tail277/qualification.json`):
 symbolic single-step suffix frame through expiry; it does not establish the
 whole early-break loop. A separate diagnostic starting from an arbitrary
 saved-state sequence and offset also passes Ferrum (21.84 seconds, `tail274`),
-but has not received paired acceptance. The next loop diagnostic checks the
-tail invariant explicitly before the backedge to distinguish an in-body
-failure from restoration/package interference.
+but has not received paired acceptance. The `early276` diagnostic adds an
+explicit tail invariant assertion after advancing the position, before the
+backedge. With build 273 and the existing 600-second diagnostic bound, Ferrum
+rejects that assertion after 392.72 seconds. The failure is already present
+inside the body; it is not solely the final backedge invariant check. This
+diagnostic remains unresolved and is not a passing negative test.
+
+Vec's `DerefMut` path exposed a separate PCG call-shape defect: normalizing
+`Self::Target` overwrote the element region's origin in `Self`, losing the
+dependency from the input element resources to the returned slice's outer
+borrow. PCG `b1ed5fe` preserves all normalized signature origins and checks
+their existing outlives bounds. Its new regression fails before the change
+with exactly that missing edge and passes afterward. Nine function-shape
+tests, four projection-map tests, the loop-coupling test, and all 250 numbered
+corpus inputs pass with one test worker (`target/stdlib-im5-pcg287`). The fix
+is pushed to `LrWm3/pcg`, branch `stdlib/call-wand-projections`; it does not by
+itself complete Vec resource integration or the whole early-break proof.
 
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification

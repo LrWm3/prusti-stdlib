@@ -1010,7 +1010,9 @@ The initial dispatcher was stopped between suites after preserving both extern
 results (90/97 each) and sequence/Ferrum (21/22). Fix validation uses a new build
 and copied executables in `/tmp/prusti-stdlib-matrix319-bin`. The extern suite now
 has two additional reference-resource regressions, with all 100 checks passing
-on Ferrum; paired validation is in progress under `fix319b/`. A runner manifest
+on each backend under `fix319b/`. The full plan therefore has 665 clients and
+1,330 client/backend pairs. Sequence/Vec wrapper validation is in progress.
+A runner manifest
 bug exposed by these newly added files has also been fixed and unit-tested.
 Completed evidence from `fix319/` is retained and validated before reuse.
 

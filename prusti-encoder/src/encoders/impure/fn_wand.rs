@@ -1227,6 +1227,21 @@ impl<'vir> WandEncOutput<'vir> {
                 .is_some()
         };
         let sig = self.fn_sig(vcx, None);
+        // Generic results also carry signature-only lifetime anchors. Those
+        // projections have no resource predicate and do not keep an input's
+        // storage borrowed. Only a resource-bearing result can hide the
+        // nested post-call resources of a mutable argument. In particular,
+        // mem::replace must return both its result's resources and the new
+        // resources in the destination.
+        let borrowed_storage = edges
+            .iter()
+            .filter(|(source, target)| {
+                source.region_idx().index() == 0
+                    && target.mir_local() == mir::RETURN_PLACE
+                    && has_resources(*target)
+            })
+            .map(|(source, _)| source.mir_local())
+            .collect::<FxHashSet<_>>();
         let visible = |node: WandLhsKey| {
             if node.mir_local() == mir::RETURN_PLACE {
                 return true;
@@ -1239,17 +1254,18 @@ impl<'vir> WandEncOutput<'vir> {
             }
             // An input's nested resources cannot also be returned directly
             // while its outer storage remains borrowed by the result.
-            !edges.iter().any(|(source, target)| {
-                source.mir_local() == node.mir_local()
-                    && source.region_idx().index() == 0
-                    && target.mir_local() == mir::RETURN_PLACE
-            })
+            !borrowed_storage.contains(&node.mir_local())
         };
         let wands = wands
             .into_iter()
-            .map(|mut wand| {
+            .filter_map(|mut wand| {
                 wand.lhs.retain(|node| visible(*node));
-                wand
+                // A consumed argument with no visible output does not have
+                // an expiry stage. Return its resources directly instead of
+                // attaching an unrelated pledge to a vacuous self-edge.
+                // This also keeps an unused generic marker from making an
+                // otherwise unambiguous pledge appear to need a selector.
+                (!wand.lhs.is_empty()).then_some(wand)
             })
             .collect::<Vec<_>>();
         // A resource-free LHS without an expiry obligation encodes as `true`.

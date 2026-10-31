@@ -484,7 +484,7 @@ replacements in `src/bin` where available:
 
 | Binary | Required proof | Current evidence |
 | --- | --- | --- |
-| `im5_early_break_frame` | Set exactly the first `limit` referents to 7 and preserve every suffix value and element identity. | Current pointwise-tail probe times out on Ferrum at 600 seconds (`early267`, build 229). The original probe failed with `assert.failed:wand.not.found` on Silicon (428.60 seconds, build 221). |
+| `im5_early_break_frame` | Set exactly the first `limit` referents to 7 and preserve every suffix value and element identity. | Historical probe superseded by `mut_native_resource_early_pass`: the revised whole proof passes Ferrum/Silicon in 297.78/353.53 seconds with build 291 (`early300`). Consistency and separate-crate controls are being qualified. |
 | `im5_vec_resource_loop` | Update every referent through `Vec<&mut u32>::as_mut_slice()`, then prove the update through the Vec again. | Superseded by `mut_vec_resource_loop_{pass,false,wrong}` in `src/bin`. Build 291 proves the positive on Ferrum in 162.07 seconds; the paired build 293 run accepts all controls and the Silicon positive within 180 seconds. |
 | `im5_vec_ref_read` | Read an arbitrary valid referent through `&mut Vec<&mut u32>`, without a slice view or iterator. | Superseded by accepted `mut_vec_ref_read_pass`/`wrong` tests in `src/bin`; paired build 285 passes after adding Vec element resources. |
 | `im5_vec_ref_view` | Update a referent through `as_mut_slice`, then read its value through the Vec. | Superseded by accepted `mut_vec_ref_view_*` tests in `src/bin`; paired build 285 passes. Direct `DerefMut` and generic cross-crate views also pass after PCG `b1ed5fe` and build 291. |
@@ -518,7 +518,7 @@ with a per-element invariant and a pure `tail[j]` trigger. It also times out
 600-second program, 30-second assertion and 100 ms check bounds, with every
 generated helper checked. Final prefix/suffix postconditions are unchanged.
 The original and intermediate sources are saved in their run directories;
-these failures remain unresolved, and the current form is not promoted.
+these historical failures are superseded by the revised `early300` proof below.
 
 After rebuilding the current branch with Ferrum, run a single probe with a
 fresh Cargo target, for example:
@@ -600,5 +600,18 @@ claim in 278.26/330.71 seconds. These are full-program runs at the same
 `target/stdlib-im5-controls294/qualification.json` records all three restored
 controls, the original Ferrum path-matcher classification and its exact-error
 audit, and the direct Silicon results. This closes the archived controls;
-the early-break referent-state invariant remains open, and the full stdlib
-matrix remains deferred.
+the revised early-break positive also passes as described below. Its consistency
+and separate-crate controls are being qualified; the full matrix remains deferred.
+
+The whole early-break proof now passes on both backends (`early300`, build
+291). The original-index tail invariant, explicit lengths tying scalar
+bounds to immutable ghost sequences, and checked suffix-state assertions
+before and after `drop(it)` establish the unchanged final postconditions.
+The preceding original-index-only run timed out (`early298`); adding only
+the lengths still failed the final old-value claim (`early299`). Those
+failures remain recorded in the plan. The passing source is promoted as
+[`mut_native_resource_early_pass`](../src/bin/mut_native_resource_early_pass.rs),
+with only its introductory comment changed. The paired audit is in
+`target/stdlib-im5-early300/qualification.json`; all generated helpers were
+checked with the existing 600/30/0.1-second bounds. This supersedes the archived
+source above, which remains available to reproduce its historical failure.

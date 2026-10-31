@@ -51,15 +51,16 @@ shallow identities. The four-argument form additionally records a
 `Seq<ResourceState>` captured while each yielded element is accessible.
 `mut_native_resource_prefix_*` proves that a symbolic traversal sets every
 referenced value to 7 and rejects an incorrect recorded state, a wrong final
-value, and `false` after traversal. Exact early-break suffix framing and
-Vec views remain open. A separate untrusted
-`iterator_resources` library already covers the concrete single-reference
-loop across crates. Solver
-configuration and
-the fresh-run `IntoIterator` result are recorded in `STDLIB_EXTERN_SPEC.md`;
-the complete native batch has not yet passed consistently.
+value, and `false` after traversal. Vec views and whole reference-element Vec
+loops now pass focused paired checks. `mut_native_resource_early_pass` also
+proves exact prefix updates and unchanged suffix referents on both backends;
+its nonempty consistency control also passes both backends. Separate-crate
+slice/Vec qualification remains open. The untrusted
+`iterator_resources` library covers single-reference and two-reference wrapper
+loops across crates. Solver configuration and current evidence are recorded
+in `STDLIB_EXTERN_SPEC.md`; the full stdlib matrix is deferred.
 
-The `mut_native_resource_pair_prefix_{pass,false,wrong_second}` cases extend
+The `mut_native_resource_pair_prefix_*` cases extend
 the symbolic full traversal to structs containing two independent mutable
 references. The positive proves unchanged element identities and values 7
 and 8 in the respective fields at an arbitrary valid index. Both backends
@@ -77,12 +78,11 @@ Run this focused group with the combined-proof limits:
 ```
 
 Use `--backend Silicon` for paired validation. The first-field wrong-value
-and fabricated-state controls remain in `known_limits`: their original
-runs encounter wand-matching errors or a timeout, as recorded in the plan.
-These unresolved controls and the longer proof budgets limit this checkpoint;
-the complete wrapper and IM5 gates are not declared finished.
+and fabricated-state controls have returned from `known_limits` after passing
+both backends with build 291. Earlier wand-matching errors and timeouts remain
+recorded as failed historical evidence (`target/stdlib-im5-controls294`).
 
-The `mut_native_resource_generic_prefix_{pass,wrong_state}` cases
+The `mut_native_resource_generic_prefix_{pass,false,wrong_state}` cases
 exercise whole-prefix preservation for `&mut [T]`, without `Copy` or equality
 bounds. The positive captures the initial referent-state sequence and proves
 that both it and the element identities survive a symbolic native traversal.
@@ -90,9 +90,9 @@ Runtime cases include empty input, owned non-`Copy` values, shared references,
 mutable references, and zero-sized elements. The wrong-state control
 incorrectly claims the final state sequence differs from its initial value.
 Both cases reach their expected outcomes on Ferrum and Silicon with build 229
-(`target/stdlib-im5-generic251`). The separate post-loop false control remains
-in `known_limits`: Ferrum rejects its assertion, but Silicon fails an earlier
-restoration obligation. Select the accepted group with
+(`target/stdlib-im5-generic251`). The post-loop false control also passes both
+backends with build 291 after placing its false claim after the valid final
+restoration assertions (`target/stdlib-im5-controls294`). Select this group with
 `--case 'mut_native_resource_generic_prefix_*'` and the same proof bounds
 shown above.
 

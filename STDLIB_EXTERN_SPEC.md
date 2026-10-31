@@ -2995,6 +2995,31 @@ all valid restoration/value assertions before the impossible claim. This
 closes the whole-loop consistency gate. The separate-crate slice/Vec suite is
 now undergoing paired qualification; it is still pending at this checkpoint.
 
+The first separate-crate run (`early-cross301`) is not accepted. The library
+times out at the existing 600-second program limit (612.39 seconds command
+time); the slice positive fails suffix readback and the Vec positive fails a
+nested shared-view observation. Its six controls reach their annotated
+assertions, but those results do not compensate for the missing positive and
+library proofs. The failed Rust-only imports and the verification failures
+remain preserved in distinct evidence directories.
+
+An explicit pointwise suffix resource-state postcondition, following the
+accepted generic preservation contract, lets the slice client verify on
+Ferrum (`early-client304`, 9.00 seconds). Explicit ghost captures also establish
+Vec identity readback. Its actual suffix value still fails. Checked reads
+show the value holds before and after the updater call through the slice,
+but the relation is lost before reading through the restored Vec (`305`/`306`).
+Capturing the entire view state as another diagnostic instead encounters an
+internal `apply.failed:insufficient.permission` error (`307`); this is failed
+evidence, not a control. The generated program applies the updater's nested
+input restoration wand immediately before the Vec view's restoration wand;
+the updater currently has no expiry-state pledge on that input. A separate
+prototype adds the established pointwise `after_expiry(values[_])` frame,
+relating the original source to its `after_call` identities. This is a checked
+contract hypothesis, not an assumed encoder repair. The stronger library
+without that pledge is separately undergoing paired verification (`308`).
+No new production encoder change or full-matrix run has been made.
+
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification
 suites at acceptance. Run PCG shape tests and the numbered corpus whenever

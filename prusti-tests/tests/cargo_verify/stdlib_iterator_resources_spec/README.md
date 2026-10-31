@@ -30,10 +30,11 @@ The expanded suite passes all 11 checks on both backends with the rebuilt
 build-229 driver and the bounds above. Results, source hashes, and the audit
 are under `target/stdlib-im5-pair-cross248`. Both untrusted library bodies and
 every generated conversion helper are checked. This establishes the listed
-cross-crate proofs; the standalone wrapper controls under `known_limits`
-retain their separate unresolved results.
+cross-crate proofs. The formerly archived standalone wrapper controls also
+pass both backends with build 291 (`target/stdlib-im5-controls294`).
 
 This suite is separate from the broader iterator library so the combined
 resource proofs can be checked within their own program budget. The plan in
-`STDLIB_EXTERN_SPEC.md` records acceptance results and outstanding generic,
-early-break, wrapper controls, and Vec cases.
+`STDLIB_EXTERN_SPEC.md` records current acceptance results and the remaining
+combined qualification. Generic and Vec focused gates now pass; the full
+stdlib matrix remains deferred.

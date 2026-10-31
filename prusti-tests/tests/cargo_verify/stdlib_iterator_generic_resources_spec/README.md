@@ -37,5 +37,6 @@ failure remains recorded in the plan. The additional non-`Copy` pair also
 passes its four focused checks on both backends, with the helper unchanged.
 The source/artifact audit is in
 `target/stdlib-im5-generic-cross263/qualification.json`. This establishes the
-listed generic/cross-crate proofs; early-break and Vec support remain separate
-open work.
+listed generic/cross-crate proofs. Vec and the whole early-break positive now
+also pass focused paired checks; current combined qualification is recorded
+in `STDLIB_EXTERN_SPEC.md`. The full stdlib matrix remains deferred.

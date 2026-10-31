@@ -37,10 +37,18 @@ runs one verifier with Ferrum branch parallelism disabled. This focused suite
 does not rerun the full stdlib matrix. Current evidence is recorded in
 `STDLIB_EXTERN_SPEC.md`.
 
-Build 291 passes all 12 checks on Silicon, including the untrusted library
-(194.80 seconds) and every generated helper. Ferrum passes the two client
-positives and six controls, plus Rust/runtime checks, but its library proof
-times out at the 600-second bound. This suite is not yet qualified on both
-backends. Source copies and exact results are preserved in
-`target/stdlib-im5-early-cross312/qualification.json`. The full stdlib matrix
-remains deferred.
+The initial paired run passes all 12 checks on Silicon, including the untrusted
+library (194.80 seconds), while Ferrum times out on that library. A subsequent
+Ferrum run with reason-unknown reporting and an SMT log passes all 12 checks;
+its library takes 254.02 seconds. Generated programs differ only by comments
+and a bijective renaming of specification-helper UUIDs. The cause of the timing
+variation is not established; the earlier timeout remains failed evidence in
+`target/stdlib-im5-early-cross312`. No backend or encoder change was required.
+
+All 12 checks per backend pass with rebuilt build 291 at the bounds above.
+The source/artifact and exact-negative-diagnostic audit is in
+`target/stdlib-im5-early-cross314/qualification.json`. The standalone whole-loop
+positive and nonempty partial-traversal false control are
+`mut_native_resource_early_{pass,false}` in the iterator fixture. These results
+close the remaining combined focused proof gate; full stdlib matrix and
+final-pin merge qualification remain deferred.

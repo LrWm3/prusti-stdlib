@@ -476,15 +476,15 @@ All three pass; logs and exact diagnostics are retained under
 in Viper. The subsequent concrete Rust state-prefix and cross-crate proofs
 are recorded in `STDLIB_EXTERN_SPEC.md`; this model alone does not close IM5.
 
-### Remaining IM5 loop probes
+### Historical IM5 loop probes
 
-These checked-in probes preserve the remaining combined proof targets. They
+These checked-in probes preserve the earlier combined proof targets. They
 are retained here as historical probes. The table identifies accepted
 replacements in `src/bin` where available:
 
 | Binary | Required proof | Current evidence |
 | --- | --- | --- |
-| `im5_early_break_frame` | Set exactly the first `limit` referents to 7 and preserve every suffix value and element identity. | Historical probe superseded by `mut_native_resource_early_pass`: the revised whole proof passes Ferrum/Silicon in 297.78/353.53 seconds with build 291 (`early300`). Consistency and separate-crate controls are being qualified. |
+| `im5_early_break_frame` | Set exactly the first `limit` referents to 7 and preserve every suffix value and element identity. | Historical probe superseded by `mut_native_resource_early_pass`: the revised whole proof passes Ferrum/Silicon in 297.78/353.53 seconds with build 291 (`early300`). Its nonempty consistency control and separate-crate slice/Vec controls also pass both backends (`early302`/`early-cross314`). |
 | `im5_vec_resource_loop` | Update every referent through `Vec<&mut u32>::as_mut_slice()`, then prove the update through the Vec again. | Superseded by `mut_vec_resource_loop_{pass,false,wrong}` in `src/bin`. Build 291 proves the positive on Ferrum in 162.07 seconds; the paired build 293 run accepts all controls and the Silicon positive within 180 seconds. |
 | `im5_vec_ref_read` | Read an arbitrary valid referent through `&mut Vec<&mut u32>`, without a slice view or iterator. | Superseded by accepted `mut_vec_ref_read_pass`/`wrong` tests in `src/bin`; paired build 285 passes after adding Vec element resources. |
 | `im5_vec_ref_view` | Update a referent through `as_mut_slice`, then read its value through the Vec. | Superseded by accepted `mut_vec_ref_view_*` tests in `src/bin`; paired build 285 passes. Direct `DerefMut` and generic cross-crate views also pass after PCG `b1ed5fe` and build 291. |
@@ -601,7 +601,8 @@ claim in 278.26/330.71 seconds. These are full-program runs at the same
 controls, the original Ferrum path-matcher classification and its exact-error
 audit, and the direct Silicon results. This closes the archived controls;
 the revised early-break positive also passes as described below. Its consistency
-and separate-crate controls are being qualified; the full matrix remains deferred.
+and separate-crate slice/Vec controls also pass both backends; the full matrix
+remains deferred.
 
 The whole early-break proof now passes on both backends (`early300`, build
 291). The original-index tail invariant, explicit lengths tying scalar

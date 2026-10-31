@@ -54,8 +54,9 @@ referenced value to 7 and rejects an incorrect recorded state, a wrong final
 value, and `false` after traversal. Vec views and whole reference-element Vec
 loops now pass focused paired checks. `mut_native_resource_early_pass` also
 proves exact prefix updates and unchanged suffix referents on both backends;
-its nonempty consistency control also passes both backends. Separate-crate
-slice/Vec qualification remains open. The untrusted
+its consistency and separate-crate slice/Vec controls also pass both backends.
+The [prefix-resource suite](../stdlib_iterator_prefix_resources_spec/README.md)
+exports the exact partial-update and expiry contracts. The untrusted
 `iterator_resources` library covers single-reference and two-reference wrapper
 loops across crates. Solver configuration and current evidence are recorded
 in `STDLIB_EXTERN_SPEC.md`; the full stdlib matrix is deferred.

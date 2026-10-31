@@ -948,12 +948,17 @@ collection models. Do not promise deterministic iteration order.
 
 ## Mutable-iterator follow-up plan
 
-**Status:** IM0 and the IM1 standalone proof-model gate are complete. IM2,
-carrying that value relation through Rust loop encoding, is in progress. Work
-began from Prusti `22ea24a6b` and PCG `a4eb802`. The completed native gate supplies
-construction, forward advancement, lengths, simultaneous yields, early
-iterator destruction, and ownership restoration. It does not establish the
-two extensions below. Keep that support claim unchanged until their gates pass.
+**Current status (2026-10-31):** IM0–IM4 implementation and focused proof gates
+are complete, and the combined IM5 proofs and matching controls pass on both
+Ferrum and Silicon. Native loops now prove whole-prefix values and exact
+early-break suffix framing for reference elements, including separate-crate
+slice/Vec clients. Generic state preservation, non-`Copy` referents, two-reference
+wrappers, empty/zero-sized cases, and the previously archived controls have
+paired focused evidence. The full stdlib matrix at the final Ferrum pin remains
+explicitly deferred at the user's request; this is focused qualification, not
+final matrix or merge qualification. Ferrum remains pinned to `afdf10c`, with
+one worker and branch parallelism off. The sections below preserve the work's
+chronological evidence, beginning at Prusti `22ea24a6b` and PCG `a4eb802`.
 
 The execution order is IM0, IM1, IM2, IM3, IM4, then IM5. Functional loops
 first use owned elements with stable snapshots. Reference support then adds
@@ -964,10 +969,10 @@ The final gate combines both extensions.
 |---|---|---|---|
 | IM0 | Minimal reproducers and resource/state inventory | Native core gate | Complete: [17 probes and the resource ledger](prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/README.md#im0-native-loop-values-and-references-inside-elements) record the observed failures and controls. |
 | IM1 | Proven loop restoration summary | IM0 | Complete: the standalone summary, negative checks, and untrusted Rust expiry-pledge controls pass. |
-| IM2 | Functional native iterator loops | IM1 | Rust clients prove whole-slice updates and exact early-break prefix/suffix behavior for symbolic lengths. |
-| IM3 | Concrete reference-containing slice elements | IM0; implemented after IM2 | Reads, writes, framing, and expiry work for shared references, mutable references, and reference-bearing structs/enums. |
-| IM4 | Generic and cross-crate reference resources | IM3 | Generic definitions retain the same referent permissions under substitution and through Vec/slice views. |
-| IM5 | Combined acceptance and support update | IM2, IM4 | Symbolic iterator loops over reference-containing elements prove final values and framing across crate boundaries. |
+| IM2 | Functional native iterator loops | IM1 | Focused gate complete: Rust clients prove whole-slice updates and exact early-break prefix/suffix behavior for symbolic lengths. |
+| IM3 | Concrete reference-containing slice elements | IM0; implemented after IM2 | Focused gate complete: reads, writes, framing, and expiry work for shared references, mutable references, and reference-bearing structs/enums. |
+| IM4 | Generic and cross-crate reference resources | IM3 | Focused gate complete: generic definitions retain the same referent permissions under substitution and through Vec/slice views. |
+| IM5 | Combined acceptance and support update | IM2, IM4 | Focused paired proofs complete: symbolic reference-element loops prove final values and framing across crates. Full stdlib matrix and final-pin merge qualification are deferred. |
 
 ### IM0: Reproduce and locate the missing information
 
@@ -3048,13 +3053,61 @@ qualification gap is Ferrum's complete library proof; a solver trace is the
 next step. Do not mark dual-backend IM5 qualification complete on the strength
 of the client-only Ferrum checks. The full stdlib matrix stays deferred.
 
-Run focused paired tests during each step, then the full iterator and borrow
-suites and relevant sequence, Vec, collection, and external-specification
-suites at acceptance. Run PCG shape tests and the numbered corpus whenever
-PCG changes. Use fresh targets, disabled caching, overflow/panic checks, and
-the current 180-second limit with one parallel verifier. A timeout, crash,
-unsupported-feature error, or wrong diagnostic is an unresolved gate, not a
-successful negative proof. Reproduce solver failures before changing limits.
+**Combined focused qualification complete (2026-10-31).** The separate
+`iterator_prefix_resources` suite passes all 12 checks per backend, including
+its untrusted `no_std` library, both runtime clients, arbitrary-index slice/Vec
+positives, and six exact-diagnostic controls. Its library uses the accepted
+whole-loop proof and preserves the same prefix-value, suffix-old-value, and
+identity postconditions. Its pointwise resource-state postcondition exposes
+the suffix frame to callers. Its checked `after_expiry(*values)` pledge preserves states
+when the nested input borrow expires before the caller restores a backing Vec.
+Without that pledge, the slice readback can pass while the later Vec readback
+fails. The pledge uses `Seq::from_slice` in `after_call`, following the supported
+slice-reborrow contract pattern. It verifies in 254.02/194.80 seconds
+(Ferrum/Silicon). The Vec client obtains a mutable slice view, calls the
+separately verified prefix updater, and proves both identities and actual
+referent values through the restored Vec. Wrong-prefix, wrong-suffix, and
+false claims are rejected on nonempty paths for both container forms.
+
+The accepted source/artifact audit is
+`target/stdlib-im5-early-cross314/qualification.json`; standalone early-break
+positive/consistency audits are in `early300` and `early302`. All use rebuilt
+build 291, all generated helpers, fresh targets, disabled caching,
+overflow/panic checks, and 600/30/0.1-second bounds, with one worker and Ferrum
+branch parallelism off. Two initial Rust-only Vec client launches in
+`early-cross301` failed because a specification-only helper was imported/captured in ordinary Rust;
+they remain separate failed evidence. The accepted client captures its sequence
+through the existing public `as_slice` observation. No encoder or Ferrum change
+was made during this final proof qualification. The accepted Ferrum library
+run enabled `--reportReasonUnknown` and an SMT prover log. The earlier ordinary
+Ferrum run timed out and remains failed evidence. The generated programs are
+identical after removing comments and applying a bijective renaming of eleven
+fresh specification-helper UUIDs. This establishes equivalent obligations,
+not the cause of the timing difference; do not claim a backend performance fix
+or consistent timing from this rerun. Silicon's accepted run is unchanged.
+
+These results complete the remaining IM implementation and focused proof
+items. They join the paired generic/non-`Copy` library checks (`generic-cross263`),
+wrapper update library/clients (`pair-cross248`), Vec view and whole-loop checks
+(`vec291`/`vec293`), borrow regressions (`vec293`), and all archived controls
+(`controls294`). Empty and zero-sized cases are covered by the generic/native
+suites; partial/zero/full stopping points are covered by the early-break suite.
+No claim is made for arbitrary nested collections, interior mutability,
+callbacks/adapters, or unrestricted generic lifetime decomposition. The full
+stdlib matrix and final-pin merge qualification remain explicitly deferred;
+Ferrum stays at `afdf10c`, with Silicon retained for specifications, negatives,
+unexpected differences, and eventual merge validation.
+
+The focused paired proof work above is complete. The full iterator/borrow and
+relevant sequence, Vec, collection, and external-specification matrix remains
+deferred at the user's request; retain it for eventual final-pin merge
+qualification. Continue using Ferrum for routine checks and Silicon for changed
+specifications, negatives, and unexpected differences. Run PCG shape tests and
+the numbered corpus when PCG changes. Keep fresh targets, disabled caching,
+overflow/panic checks, and one verifier. Ordinary focused cases retain their
+180-second bound; the combined resource groups use the documented 600-second
+bound. Timeouts, crashes, unsupported features, and wrong diagnostics remain
+failed evidence, never successful negative proofs.
 
 Commit and push each working step in logical chunks: proof probes and model,
 loop encoding, concrete resource support, generic/cross-crate support, then
@@ -3135,8 +3188,8 @@ unsupported; a hosted CI run is not claimed.
 | P3-B: core hash collection operations | P3-A, P2-B expiry support | Conditional map/set contracts and mutable value restoration | Passed locally within the modeled key domain, including generic, non-`Copy`, collision, and negative clients. |
 | **M3: HashMap/HashSet phase complete** | P3-A, P3-B, P2-B expiry support | Map/set contracts and mutable lookup | Passed locally: 51 hash checks cover the modeled core operations and mutable lookup with explicit key laws and same-type queries. |
 | `IterMut` | P2-B and iterator models | Yielded-reference tracking and owner restoration | Core contracts bundled: native construction, forward next, exact length, mutable-slice IntoIterator, simultaneous yields, and source restoration. Whole-prefix loop values and reference-containing elements remain outside this gate. |
-| Functional `IterMut` loops (IM1–IM2) | Native core gate, IM0 | Prefix summaries and functional loop restoration obligations | In progress: symbolic scalar traversal/early-break proofs and reference-state full traversals pass. Exact early-break referent framing and combined IM5 acceptance remain open. |
-| Reference-containing slice/Vec elements (IM3–IM4) | Native core gate, IM0 | Indexed referent resources and generic lifetime-resource interfaces | Focused proofs pass for concrete/generic slice resources, generic state preservation including non-`Copy` referents, cross-crate single-/two-reference update loops, Vec views, native Vec reference-element loops, and the formerly archived controls on both backends. Exact early-break framing and combined IM5 acceptance remain open; the full matrix is deferred. |
+| Functional `IterMut` loops (IM1–IM2) | Native core gate, IM0 | Prefix summaries and functional loop restoration obligations | Focused paired gates pass: symbolic scalar/reference traversal, exact early-break prefix/suffix values, shallow identities, and nonempty consistency controls. Resource loops use explicit state summaries and checked expiry assertions; the longest groups use the documented 600-second proof bound. |
+| Reference-containing slice/Vec elements (IM3–IM4) | Native core gate, IM0 | Indexed referent resources and generic lifetime-resource interfaces | Focused paired gates pass for concrete/generic resources, generic preservation including non-`Copy` referents, single-/two-reference update loops, Vec views, complete Vec loops, exact partial updates through separate-crate slice/Vec clients, and all formerly archived controls. Combined IM5 focused qualification is complete; the full stdlib matrix is deferred. |
 | Adapters, closures, callbacks, general `collect` | Iterator and higher-order contracts | Separate closure/callback and composition work | Deferred from all three gates. |
 | Interior mutability and general nested/recursive collections | Snapshot and ownership extensions beyond IM3–IM5 | Additional modeling and permission support | Deferred; the reference-element plan does not establish unrestricted nested-generic support. |
 | Entry APIs, hash-collection iteration, heterogeneous lookup | M3 and additional models | API-specific state, representative, and borrowed-key contracts | Deferred from M3. |

@@ -2554,6 +2554,17 @@ precondition diagnostic at that assertion. The baseline's original counts and
 unexpected acceptance are retained; this fixture correction changes no encoder
 or library contract and does not retroactively make the baseline pass.
 
+The remaining generic state-preserving, exact early-break, and Vec reference
+loop probes are now retained under the iterator suite's `known_limits` directory
+as `im5_generic_state_loop`, `im5_early_break_frame`, and
+`im5_vec_resource_loop`. Their Rust checks and runtime cases pass at these
+repository paths (`/tmp/prusti-im5-known238-*.log`). The corrected temporary Vec
+probe also completes encoding with build 229 in 32.27 seconds
+(`/tmp/prusti-im5-vec237-encode.log`); this was explicitly `encode-only`, with
+no backend proof. The original generic/early-break proof failures above remain
+open. The directory README provides full-program reproduction commands and
+distinguishes runtime/encoding evidence from verification acceptance.
+
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification
 suites at acceptance. Run PCG shape tests and the numbered corpus whenever

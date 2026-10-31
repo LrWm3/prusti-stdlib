@@ -169,3 +169,15 @@ path = "im4_holder_restoration_false.rs"
 [[bin]]
 name = "im4_holder_restoration_wrong"
 path = "im4_holder_restoration_wrong.rs"
+
+[[bin]]
+name = "im5_generic_state_loop"
+path = "im5_generic_state_loop.rs"
+
+[[bin]]
+name = "im5_early_break_frame"
+path = "im5_early_break_frame.rs"
+
+[[bin]]
+name = "im5_vec_resource_loop"
+path = "im5_vec_resource_loop.rs"

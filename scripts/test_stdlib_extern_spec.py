@@ -292,11 +292,13 @@ def main():
                     expected = message if kind == "parse" else "[Prusti: {}] {}".format(category, message)
                     location = r"--> [^\n]*[/\\]" + re.escape(source.name) + ":" + str(line) + ":"
                 case_env = env.copy()
-                if args.suite != "extern" and source in positive:
-                    case_env["PRUSTI_DUMP_VIPER_PROGRAM"] = "true"
-                    case_env["PRUSTI_LOG_DIR"] = str(log_dir / "verifier" / source.stem)
-                    program = Path(case_env["PRUSTI_LOG_DIR"]) / "viper_program/program-check.vpr"
-                    program.unlink(missing_ok=True)
+                # Negative clients can expose an additional generated-helper
+                # failure. Preserve their exact program independently, just as
+                # for positives, so that failure can be investigated later.
+                case_env["PRUSTI_DUMP_VIPER_PROGRAM"] = "true"
+                case_env["PRUSTI_LOG_DIR"] = str(log_dir / "verifier" / source.stem)
+                program = Path(case_env["PRUSTI_LOG_DIR"]) / "viper_program/program-check.vpr"
+                program.unlink(missing_ok=True)
                 run(source.stem, [str(prusti), "--bin", source.stem], case_env, expected, location, notes)
 
             if sequence and any(source.stem == "triggers_pass" for source in positive):

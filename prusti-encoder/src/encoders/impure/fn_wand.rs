@@ -117,7 +117,50 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
             .map(|a| self.vcx.mk_old_expr(a.impure_snap));
         let args = PledgeExpr::pledge_args(result, args);
 
-        for wand_data in self.wands.viper_wands() {
+        let wands = self.wands.viper_wands();
+        // Immediate opaque resources must survive packaging.
+        // Hide them in a checked temporary wand so a restoration script can
+        // only consume the matching permissions from its own antecedent.
+        // Their resource keys are frozen at the package's entry heap. Keep
+        // concrete storage on its existing path; reserving it introduces
+        // unnecessary quantified wand proofs for ordinary reference borrows.
+        let retained = if wands.is_empty() {
+            Vec::new()
+        } else {
+            self.wands
+                .output_resource_nodes(self.vcx)
+                .into_iter()
+                .filter(|node| {
+                    let regions: IndexVec<_, GeneralizedLifetime<'vir>> = self
+                        .vcx
+                        .tcx()
+                        .extract_regions(node.ty(self.wands.fn_sig(self.vcx, None)));
+                    matches!(
+                        regions.get(node.region_idx()),
+                        Some(GeneralizedLifetime::RegionsIn(_))
+                    )
+                })
+                .filter_map(|node| {
+                    self.wands.encode_predicates_for_function_shape_node(
+                        self.vcx,
+                        self.deps,
+                        node,
+                        None,
+                        Some(vir::OldLabel::Label(label)),
+                        None,
+                        |i| args[i],
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        let retained = (!retained.is_empty()).then(|| {
+            self.vcx
+                .mk_wand(self.vcx.mk_bool::<true>(), self.vcx.mk_conj(&retained))
+        });
+        if let Some(retained) = retained {
+            wand_packages.push(self.vcx.mk_package_stmt(retained, &[]));
+        }
+        for wand_data in wands {
             let ctxt = self.pcg_ctxt();
             let opaque_action = |edge: &BorrowPcgEdge<'vir>| match edge.kind() {
                 BorrowPcgEdgeKind::BorrowPcgExpansion(expansion) => {
@@ -229,6 +272,9 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
                 self.vcx
                     .mk_package_stmt(wand, self.vcx.alloc_slice(&package_script)),
             );
+        }
+        if let Some(retained) = retained {
+            wand_packages.push(self.vcx.mk_apply_stmt(retained));
         }
         Ok(wand_packages)
     }

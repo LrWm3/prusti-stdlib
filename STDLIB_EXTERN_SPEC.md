@@ -1025,13 +1025,14 @@ After paired validation, commit the fixes and run the complete matrix against
 the final source snapshot and build. Preserve earlier failed runs; do not merge
 old-build results into a claim of final-build matrix qualification.
 
-The full corrected run is active under `final321/`, using the frozen
+The first corrected run is preserved under `final321/`, using the frozen
 `b238ad198` checkout and the rebuilt `f25f9616f` encoder (the intervening change
 only adjusts the matrix budget and this document). `build321.json` records the
 six executable hashes; `adoption321.json` checks the identical fixture sources
 and build before reusing the 200 paired extern checks. All remaining jobs run
 serially from that snapshot. The sequence/Ferrum rerun at the 600-second bound
-has passed 22/22. Qualification is still pending the remaining jobs.
+has passed 22/22. This incomplete run is superseded by a complete rerun of all
+24 jobs after the encoder repairs below; it is not final-build qualification.
 
 The first twelve corrected jobs (extern, sequence, vec, collections, resources,
 and hash on both backends) passed all 498 checks. Borrow/Ferrum completed with
@@ -1111,6 +1112,14 @@ The full runner now classifies all 39 resource/generic iterator clients as
 heavy, and verifies the iterator library once per backend with that group.
 Ordinary clients retain 180 seconds. The partition test covers the previously
 misclassified framing case and library coverage when a suite has no heavy cases.
+
+Build 338's opaque-only reservation passes `frame_pass` on Ferrum and Silicon
+(40.34/44.54 seconds). The implementation is retained: both the reservation and
+the original restoration wands are proved, and applying the temporary wand
+returns the immediate resources after packaging. The existing selector and
+iterator framing controls are being checked on both backends at 600 seconds
+before the next complete matrix. No specification, type bound, or negative
+expectation is weakened.
 
 Helper stability remains unresolved: `inclusive_wrong_frame` emitted exactly
 the same Viper bytes in builds 336 and 337, but Ferrum accepted only the intended

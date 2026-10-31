@@ -483,7 +483,7 @@ are deliberately outside the accepted `src/bin` suite:
 
 | Binary | Required proof | Current evidence |
 | --- | --- | --- |
-| `im5_early_break_frame` | Set exactly the first `limit` referents to 7 and preserve every suffix value and element identity. | The original probe fails with `assert.failed:wand.not.found` on Silicon (428.60 seconds, build 221). |
+| `im5_early_break_frame` | Set exactly the first `limit` referents to 7 and preserve every suffix value and element identity. | Current pointwise-tail probe times out on Ferrum at 600 seconds (`early267`, build 229). The original probe failed with `assert.failed:wand.not.found` on Silicon (428.60 seconds, build 221). |
 | `im5_vec_resource_loop` | Update every referent through `Vec<&mut u32>::as_mut_slice()`, then prove the update through the Vec again. | The corrected temporary probe encodes with build 229; no successful full proof is claimed. |
 | `im5_vec_ref_read` | Read an arbitrary valid referent through `&mut Vec<&mut u32>`, without a slice view or iterator. | Both backends report missing permission at the read with build 229. |
 | `im5_vec_ref_view` | Update a referent through `as_mut_slice`, then read its value through the Vec. | Both backends report missing permission at the final Vec read with build 229. |
@@ -503,6 +503,18 @@ as an internal error. These are positive probes with unresolved proofs.
 The generated `m_read` precondition owns the Vec storage but has no indexed
 referent resources. This isolates a Vec ownership-model gap before iteration;
 raising the loop timeout cannot supply the missing permissions.
+
+The early-break baseline at build 229 instead fails the increment's overflow
+obligation after 239.22 seconds (`target/stdlib-im5-early264`). Checking
+`position < limit` after the break guard and computing the next position
+before `next` times out (`early265`, 653.19 seconds including frontend work).
+The current probe additionally replaces whole-tail state-sequence equality
+with a per-element invariant and a pure `tail[j]` trigger. It also times out
+(`early267`, 612.42 seconds including frontend work). Both use the same
+600-second program, 30-second assertion and 100 ms check bounds, with every
+generated helper checked. Final prefix/suffix postconditions are unchanged.
+The original and intermediate sources are saved in their run directories;
+these failures remain unresolved, and the current form is not promoted.
 
 After rebuilding the current branch with Ferrum, run a single probe with a
 fresh Cargo target, for example:

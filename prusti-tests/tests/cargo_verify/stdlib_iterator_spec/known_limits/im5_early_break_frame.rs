@@ -31,15 +31,21 @@ fn visit(values: &mut [&mut u32], limit: usize) {
         body_invariant!(*prefix == (*original)[..position]);
         body_invariant!(mut_slice_len(&*mut_iter_tail(&it)) == len - position);
         body_invariant!(mut_slice_contents(&*mut_iter_tail(&it)) == (*original)[position..]);
-        body_invariant!(sequence_resource_states(&mut_slice_contents(&*mut_iter_tail(&it))) ==
-            (*initial_states)[position..]);
+        body_invariant!({
+            let tail = mut_slice_contents(&*mut_iter_tail(&it));
+            forall(move |j: Int| (Int::from(0) <= j && j < tail.len()) ==>
+                sequence_resource_state(&tail, j) == *(*initial_states)[Int::from(position) + j],
+                triggers = [(tail[j],)])
+        });
         if position == limit { break; }
+        prusti_assert!(position < limit);
+        let next_position = position + 1;
         match it.next() {
             Some(value) => {
                 **value = 7;
                 states = ghost! { (*states).append(Seq::single(resource_state(&*value))) };
                 prefix = ghost! { (*prefix).append(Seq::single_ref(&*value)) };
-                position += 1;
+                position = next_position;
             }
             None => break,
         }

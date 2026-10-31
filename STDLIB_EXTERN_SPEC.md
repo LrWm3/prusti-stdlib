@@ -2760,8 +2760,31 @@ resources used by slices. Slice-view construction and expiry must transfer
 and return those resources; shared snapshots must not manufacture them.
 Preserve the conservative raw-pointer ownership guard. First close the two
 small probes with wrong-value/false controls, then the native Vec loop and
-framing checks. In parallel with this diagnosis, a focused Ferrum run of the
-unchanged exact early-break probe is in progress; no full matrix is scheduled.
+framing checks. No full matrix is scheduled.
+
+The focused early-break run fails the `position += 1` overflow obligation
+after 239.22 seconds (`target/stdlib-im5-early264`, build 229). The original
+source and full Viper program are preserved. A checked `position < limit`
+assertion immediately after the break guard, followed by computing the next
+position before `next`, times out in `m_visit` at the unchanged 600-second
+program bound (653.19 seconds including compilation/encoding; `early265`).
+That run does not establish the restoration proof. The next probe keeps the
+checked arithmetic and expresses the untouched tail as per-element resource
+state equality with a pure `tail[j]` trigger, following the successful generic
+proof. It preserves the original prefix/suffix postconditions and is still
+unresolved: `early267` also times out in `m_visit` at 600 seconds (612.42
+seconds including compilation/encoding). All variants pass the
+zero/partial/full runtime cases. No timeout or earlier failure is counted as
+acceptance. The current pointwise probe stays in `known_limits`; source
+snapshots and generated programs for the preceding forms remain under their
+run directories.
+
+The next early-break step is a narrower diagnostic of the generated wand and
+its captured heap observations, followed by a checked encoder change only if
+that diagnostic supports it. Materializing outer captures remains a hypothesis,
+not a repair already established by these runs. The separate early-break
+library/client draft is prepared but has not been run or accepted. Stop
+repeating whole-probe runs without a new encoding or proof obligation to test.
 
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification
@@ -2851,7 +2874,7 @@ unsupported; a hosted CI run is not claimed.
 | **M3: HashMap/HashSet phase complete** | P3-A, P3-B, P2-B expiry support | Map/set contracts and mutable lookup | Passed locally: 51 hash checks cover the modeled core operations and mutable lookup with explicit key laws and same-type queries. |
 | `IterMut` | P2-B and iterator models | Yielded-reference tracking and owner restoration | Core contracts bundled: native construction, forward next, exact length, mutable-slice IntoIterator, simultaneous yields, and source restoration. Whole-prefix loop values and reference-containing elements remain outside this gate. |
 | Functional `IterMut` loops (IM1–IM2) | Native core gate, IM0 | Prefix summaries and functional loop restoration obligations | In progress: symbolic scalar traversal/early-break proofs and reference-state full traversals pass. Exact early-break referent framing and combined IM5 acceptance remain open. |
-| Reference-containing slice/Vec elements (IM3–IM4) | Native core gate, IM0 | Indexed referent resources and generic lifetime-resource interfaces | In progress: concrete and generic slice resources, generic state-preserving loops, and cross-crate single-/two-reference update loops pass focused proofs. Vec resource integration, unresolved controls, and combined IM5 acceptance remain open. |
+| Reference-containing slice/Vec elements (IM3–IM4) | Native core gate, IM0 | Indexed referent resources and generic lifetime-resource interfaces | In progress: concrete/generic slice resources, generic cross-crate state preservation including non-`Copy` referents, and cross-crate single-/two-reference update loops pass focused proofs. Vec resource integration, unresolved controls, and combined IM5 acceptance remain open. |
 | Adapters, closures, callbacks, general `collect` | Iterator and higher-order contracts | Separate closure/callback and composition work | Deferred from all three gates. |
 | Interior mutability and general nested/recursive collections | Snapshot and ownership extensions beyond IM3–IM5 | Additional modeling and permission support | Deferred; the reference-element plan does not establish unrestricted nested-generic support. |
 | Entry APIs, hash-collection iteration, heterogeneous lookup | M3 and additional models | API-specific state, representative, and borrowed-key contracts | Deferred from M3. |

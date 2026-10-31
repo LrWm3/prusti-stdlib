@@ -2963,6 +2963,29 @@ the observation step outside a loop, not the full early-break invariant.
 The next whole-loop attempt uses the original-position invariant from the
 accepted generic state-preservation proof, rather than a tail-local index.
 
+The whole early-break positive now passes on both backends with build 291:
+297.78 seconds on Ferrum and 353.53 seconds on Silicon (`early300`). It keeps
+the original exact prefix-value, suffix-old-value, and shallow-identity
+postconditions. The proof adds explicit lengths for the original snapshots,
+entry resource states, and completed prefix; expresses the tail-state
+invariant in original-source indices; and checks the suffix state immediately
+before iterator destruction and again against the restored source afterward.
+These are verified obligations, not assumptions or new ownership grants.
+The original-index variant alone timed out (`early298`, 611.69 seconds command
+time); adding only the lengths moved the reported failure to the final suffix
+old-value assertion (`early299`, 508.51 seconds). Both failures remain failed
+evidence. No additional encoder or backend change was required for `early300`.
+
+The positive is promoted as `mut_native_resource_early_pass`; only its opening
+comment differs from the paired source. Its audit is
+`target/stdlib-im5-early300/qualification.json`. All generated helpers were
+checked at the existing 600/30/0.1-second diagnostic bounds, with one worker,
+fresh targets, caching disabled, overflow/panic checks, and Ferrum branch
+parallelism off. Empty, zero-prefix, partial-prefix, and complete traversal
+runtime cases pass. A nonempty partial-traversal false control and a separate
+untrusted library with slice/Vec positive and wrong-prefix/suffix clients are
+prepared next. Those gates are not yet accepted; the full matrix stays deferred.
+
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification
 suites at acceptance. Run PCG shape tests and the numbered corpus whenever

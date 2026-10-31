@@ -1139,6 +1139,39 @@ isolated alias-normalization experiment is being inspected; it is not part of
 `final339/` or an accepted repair. Returning an additional group also requires
 checking its restoration dependencies and negative permission controls.
 
+The inspection confirms two normalization sites: the top-level signature
+projection lookup and recursive descent into its referent. Build 342 preserves
+the opaque group through both sites, but that alone does not establish a sound
+contract. The signature graph also needs to retain dependencies from the
+associated type's arguments to its output resources. PCG `19327b5` adds that
+conservative capture relation without changing Rust's outlives relation. New
+`IndexMut` and `Iterator::Item` regressions fail before the change and pass
+afterward; the 250 numbered inputs, eleven shape cases, four projection-map
+cases, loop-coupling case and seven opaque-body cases pass (`pcg344-after.log`).
+The PCG commit is pushed to the fork, but the root pin remains `269cb9a` pending
+integration validation.
+
+Rebuilt candidate 345 combines those graph edges with the normalization repair.
+Encoding `open_vec_pass` and a new mutable-reference-element control exposes
+`empty dependent resource restoration` before any solver runs. The new graph
+has two independent target sets and a source that depends on their union;
+stratification leaves that source with restored frames but no original target.
+Removing the rejection is not yet justified: consuming an opaque output to
+restore one source can discard permissions needed by the later source.
+The candidate remains an experiment. Its frozen binaries, source patch and
+failed encode-only attempts are retained under `build345.json`,
+`source345.patch` and `encode345/`.
+
+The next handoff experiment checks a smaller scalar projection first. Its
+outer wand must return current-owner resources together with a continuation
+from those resources to the entry-owner resources. Both the immediate resource
+reservation and the continuation must be packaged with checked proofs. The
+positive, false-assertion and missing-current-resource models are queued after
+the matrix and associated-output probes, using the same single worker on both
+backends. A successful model would still need caller-side continuation
+tracking, conditional and loop composition, and a separate indexed-replacement
+proof before it could repair the broader generic collection failures.
+
 Helper stability remains unresolved: `inclusive_wrong_frame` emitted exactly
 the same Viper bytes in builds 336 and 337, but Ferrum accepted only the intended
 negative in 43.56 seconds in the first and added an aggregate-helper failure in

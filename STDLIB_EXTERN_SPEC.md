@@ -3020,6 +3020,34 @@ contract hypothesis, not an assumed encoder repair. The stronger library
 without that pledge is separately undergoing paired verification (`308`).
 No new production encoder change or full-matrix run has been made.
 
+The final separate-crate contract adds the pointwise suffix-state postcondition
+and a checked `after_expiry(*values)` frame from the entry source identities to
+their `after_call` identities. `*values` selects the concrete nested lifetime;
+`values[_]` selects an opaque generic group and is not appropriate here.
+`Seq::from_slice` supplies the supported snapshot inside `after_call`.
+Both simpler slice and Vec client positives now pass Ferrum (`early-client311`).
+The Vec client captures its identity snapshots explicitly; it needs no extra
+per-element diagnostic reads or whole-view state capture.
+
+At the repository paths, the complete `iterator_prefix_resources` suite passes
+all 12 checks on Silicon, including the untrusted library and its expiry pledge
+(194.80 seconds), two runtime positives, both arbitrary-index client proofs,
+and six exact negative diagnostics. Ferrum passes all 11 non-library checks,
+but its library verification times out at 600 seconds (612.56 seconds command
+time). All use unchanged build 291 and the full generated helper bodies, fresh
+targets, disabled caching, overflow/panic checks, one worker, and existing
+600/30/0.1-second bounds; Ferrum branch parallelism is off. The immutable source
+copies and honest backend qualification are in
+`target/stdlib-im5-early-cross312`. The earlier `308` library run was deliberately
+interrupted when the missing expiry pledge was identified; it is not acceptance
+evidence. The `309`/`310` selector/temporal errors also remain failed diagnostics.
+
+This closes the cross-crate functional proof on Silicon and validates its
+client contract and controls on both backends. The sole remaining focused
+qualification gap is Ferrum's complete library proof; a solver trace is the
+next step. Do not mark dual-backend IM5 qualification complete on the strength
+of the client-only Ferrum checks. The full stdlib matrix stays deferred.
+
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification
 suites at acceptance. Run PCG shape tests and the numbered corpus whenever

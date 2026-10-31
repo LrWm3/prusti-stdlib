@@ -1025,6 +1025,14 @@ After paired validation, commit the fixes and run the complete matrix against
 the final source snapshot and build. Preserve earlier failed runs; do not merge
 old-build results into a claim of final-build matrix qualification.
 
+The full corrected run is active under `final321/`, using the frozen
+`b238ad198` checkout and the rebuilt `f25f9616f` encoder (the intervening change
+only adjusts the matrix budget and this document). `build321.json` records the
+six executable hashes; `adoption321.json` checks the identical fixture sources
+and build before reusing the 200 paired extern checks. All remaining jobs run
+serially from that snapshot. The sequence/Ferrum rerun at the 600-second bound
+has passed 22/22. Qualification is still pending the remaining jobs.
+
 ### IM0: Reproduce and locate the missing information
 
 Keep the existing positive and negative native iterator cases as controls.

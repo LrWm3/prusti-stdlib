@@ -1137,6 +1137,15 @@ adds an aggregate-helper failure in `vec_lookup_range_pass`; Silicon accepts
 that client. These results do not close the generic handoff or helper-stability
 issues below.
 
+The fifteenth job, ordinary iterator/Ferrum, completes with 389/421 checks
+passing: 19 positive failures and 13 negative-diagnostic mismatches. None of
+those negative clients is accepted; eleven report extra conversion/precondition
+errors, and the two wrong-loop-invariant clients fail earlier while restoring
+owned Vec resources. Silicon has started and accepts both concrete replacement
+positives rejected by Ferrum. The optional-element positive fails on both,
+while the nested-element positive exhausts the ordinary 180-second bound on
+both. Final totals and remaining failures still require the complete run.
+
 The ordinary iterator job exposes another budget-classification omission:
 reference-element, generic-array and sequence-state tests do not necessarily
 contain `resource` in their names. Earlier accepted runs include generic-array
@@ -1163,6 +1172,20 @@ but deferred without verification, so the backend change can be assessed
 independently. See [the upgrade record](prusti-ferrum/VALIDATION.md) for provenance
 and the acceptance gate. The committed pin remains `afdf10c` until that gate
 has been reviewed.
+
+The optional-tail family has a separate, concrete conversion gap. The existing
+minimal `mut_take_slice_pass` takes an `Option<&mut [u32]>` through
+`mem::replace`. Its generated whole-slice resource pack requires element type
+facts, but the nested-reference conversion does not invoke the checked typing
+traversal used for incoming collection storage. Candidate 350 adds that
+traversal, with the slice's actual extent, after converting the referent's
+physical predicate and before packing its resources. It restores the original
+physical predicate afterward. No precondition or resource obligation is removed.
+The candidate builds, and the minimal positive, negative and generic region
+positive encode successfully with the additional checked calls. These are
+encode-only results, not verified passes. Paired minimal tests against builds
+349 and 350 are queued after the upgrade gate; broader array/reference
+regressions run only if the candidate passes the minimal gate on both backends.
 
 A closer reading separates a second generic Vec issue from the current-owner
 handoff. In `open_vec_pass`, the first indexed opening fails at `_tmp14`, before

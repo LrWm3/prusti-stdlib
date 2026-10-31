@@ -1396,19 +1396,44 @@ impl<'vir> WandEncOutput<'vir> {
                 };
                 *selected
             } else {
-                if resource_count > 1 {
-                    return Err(WandEncError::Unsupported(
-                        "pledges on a function whose result contains borrows that expire \
-                         separately require an explicit input expiry selector"
-                            .into(),
-                    ));
-                }
                 if wands.is_empty() {
                     return Err(WandEncError::Unsupported(
                         "expiry pledge has no borrowed input to restore".into(),
                     ));
                 }
-                0
+                if resource_count > 1 {
+                    // An opaque payload introduces its own restoration stage,
+                    // but does not make the enclosing borrow's expiry ambiguous.
+                    // Preserve implicit pledges for a unique concrete lifetime
+                    // stage (e.g. Holder<'a, T>::take -> &'a mut T). Independent
+                    // concrete stages still need an explicit input selector.
+                    let concrete = wands[..resource_count]
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, wand)| {
+                            wand.rhs.iter().any(|source| {
+                                let node: FunctionShapeNode<Generalized> = (*source).into();
+                                let regions: IndexVec<_, GeneralizedLifetime<'vir>> =
+                                    vcx.tcx().extract_regions(node.ty(sig));
+                                matches!(
+                                    regions.get(node.region_idx()),
+                                    Some(GeneralizedLifetime::Region(_))
+                                )
+                            })
+                        })
+                        .map(|(index, _)| index)
+                        .collect::<Vec<_>>();
+                    let [selected] = concrete.as_slice() else {
+                        return Err(WandEncError::Unsupported(
+                            "pledges on a function whose result contains borrows that expire \
+                             separately require an explicit input expiry selector"
+                                .into(),
+                        ));
+                    };
+                    *selected
+                } else {
+                    0
+                }
             };
             wands[selected].pledges.push(*pledge);
         }

@@ -1116,10 +1116,28 @@ misclassified framing case and library coverage when a suite has no heavy cases.
 Build 338's opaque-only reservation passes `frame_pass` on Ferrum and Silicon
 (40.34/44.54 seconds). The implementation is retained: both the reservation and
 the original restoration wands are proved, and applying the temporary wand
-returns the immediate resources after packaging. The existing selector and
-iterator framing controls are being checked on both backends at 600 seconds
-before the next complete matrix. No specification, type bound, or negative
+returns the immediate resources after packaging. The selector and iterator framing controls pass all 21 checks on each backend
+at 600 seconds, including exact negative diagnostics. Together with the paired
+three-check frame runs, this is 48/48 focused checks. No specification, type bound, or negative
 expectation is weakened.
+
+The complete rerun is now active under `final339/`: 24 jobs, 665 clients
+(1,330 client/backend pairs), and 1,842 checks including libraries, runtime
+positives and auxiliary controls. The frozen source is `225eb7714`, with PCG
+`269cb9a` and Ferrum `afdf10c`. Rebuilding the clean committed branch reproduced
+all six build-338 executable hashes exactly; `build339.json` records provenance.
+No earlier-build results are adopted. The stopped `final321/` dispatcher was
+retired after preserving its 791/826 completed checks in `superseded321.json`.
+
+A closer reading separates a second generic Vec issue from the current-owner
+handoff. In `open_vec_pass`, the first indexed opening fails at `_tmp14`, before
+any element is replaced. The generated `IndexMut::index_mut` contract returns
+the result's physical storage but no opaque resource group for its associated
+output type. Recursing into the referent normalizes `Index::Output` to
+`SliceIndex::Output`, which may lose the original projection identity. An
+isolated alias-normalization experiment is being inspected; it is not part of
+`final339/` or an accepted repair. Returning an additional group also requires
+checking its restoration dependencies and negative permission controls.
 
 Helper stability remains unresolved: `inclusive_wrong_frame` emitted exactly
 the same Viper bytes in builds 336 and 337, but Ferrum accepted only the intended

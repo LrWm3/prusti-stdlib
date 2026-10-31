@@ -1101,6 +1101,24 @@ like sequence and resource suites. Assertion and solver-check limits remain
 30 seconds and 100 milliseconds. Those timed-out attempts remain failures;
 only a completed proof under the recorded new bounds can pass.
 
+Build 337 passes `frame_pass` on both backends (41.10/51.71 seconds). Its
+concrete iterator-framing positive exceeded the focused 180-second bound.
+Older evidence already used 600 seconds for that case, with successful runs
+at 168.56, 228.47 and 298.77 seconds; this does not establish a performance
+regression from the reservation. Build 338 narrows the reservation to opaque
+generic resource outputs and validates the iterator controls at 600 seconds.
+The full runner now classifies all 39 resource/generic iterator clients as
+heavy, and verifies the iterator library once per backend with that group.
+Ordinary clients retain 180 seconds. The partition test covers the previously
+misclassified framing case and library coverage when a suite has no heavy cases.
+
+Helper stability remains unresolved: `inclusive_wrong_frame` emitted exactly
+the same Viper bytes in builds 336 and 337, but Ferrum accepted only the intended
+negative in 43.56 seconds in the first and added an aggregate-helper failure in
+139.03 seconds in the second, under identical bounds. The program hash and
+results are recorded in `inclusive-helper-stability337.json`. The failed run
+is not replaced by the earlier pass, and the cause is not yet established.
+
 The remaining generic borrow failures need a separate resource-handoff repair.
 In `swap_view`, the body applies the swap's nested-resource wand and then the
 `as_mut_slice` wands before return. This restores resources indexed by the

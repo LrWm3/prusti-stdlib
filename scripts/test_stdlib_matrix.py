@@ -29,8 +29,7 @@ HEAVY_SUITES = frozenset((
     "iterator_prefix_resources",
 ))
 HEAVY_ITERATORS = (
-    "mut_native_resource_prefix_*", "mut_native_resource_generic_prefix_*",
-    "mut_native_resource_pair_prefix_*", "mut_native_resource_early_*",
+    "*resource*", "mut_native_generic_*",
 )
 
 
@@ -67,8 +66,8 @@ def plan(root, suites, backends):
             heavy = [name for name in cases if any(
                 fnmatch.fnmatchcase(name, pattern) for pattern in HEAVY_ITERATORS
             )]
-            groups = [("ordinary", [name for name in cases if name not in heavy], 180, True),
-                      ("heavy", heavy, 600, False)]
+            groups = [("ordinary", [name for name in cases if name not in heavy], 180, not heavy),
+                      ("heavy", heavy, 600, True)]
         else:
             groups = [(None, cases, 600 if suite in HEAVY_SUITES else 180, True)]
         for group, selected, timeout, library in groups:

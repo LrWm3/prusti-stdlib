@@ -29,7 +29,7 @@ class MatrixCoverage(unittest.TestCase):
             bins = root / "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin"
             bins.mkdir(parents=True)
             names = {"ordinary_pass", "ordinary_wrong", "mut_native_resource_early_pass",
-                     "mut_native_resource_pair_prefix_bad_state"}
+                     "mut_native_resource_pair_prefix_bad_state", "mut_native_resource_framing_pass"}
             for name in names:
                 (bins / (name + ".rs")).write_text("")
             jobs = matrix.plan(root, ["iterator"], ["Ferrum", "Silicon"])
@@ -40,6 +40,14 @@ class MatrixCoverage(unittest.TestCase):
                 self.assertEqual(len(actual), len(names))
                 self.assertEqual(sum(job["library"] for job in selected), 1)
                 self.assertEqual([job["timeout"] for job in selected], [180, 600])
+                self.assertIn("mut_native_resource_framing_pass", selected[1]["cases"])
+                self.assertTrue(selected[1]["library"])
+
+            for source in bins.glob("mut_native_*.rs"):
+                source.unlink()
+            ordinary = matrix.plan(root, ["iterator"], ["Ferrum"])
+            self.assertEqual(len(ordinary), 1)
+            self.assertTrue(ordinary[0]["library"], "a reduced suite must still verify its library")
 
     def test_resume_rejects_missing_duplicate_changed_or_wrong_build_results(self):
         job = {"suite": "vec", "backend": "Ferrum", "cases": ["pass", "wrong"],

@@ -1011,7 +1011,12 @@ results (90/97 each) and sequence/Ferrum (21/22). Fix validation uses a new buil
 and copied executables in `/tmp/prusti-stdlib-matrix319-bin`. The extern suite now
 has two additional reference-resource regressions, with all 100 checks passing
 on each backend under `fix319b/`. The full plan therefore has 665 clients and
-1,330 client/backend pairs. Sequence/Vec wrapper validation is in progress.
+1,330 client/backend pairs. Sequence passed 22/22 on Ferrum at 180 seconds
+(library command: 184.52 seconds including startup), while Silicon exhausted
+the program bound in the generated resource-conversion helpers (187.82-second
+command). The matrix now assigns this generic Vec resource suite the existing
+600-second heavy-proof budget on both backends. Assertion/check bounds remain
+unchanged; the timed-out attempt is preserved and does not count as a pass.
 A runner manifest
 bug exposed by these newly added files has also been fixed and unit-tested.
 Completed evidence from `fix319/` is retained and validated before reuse.

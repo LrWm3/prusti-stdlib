@@ -40,8 +40,9 @@ fn visit(values: &mut [Pair<'_, '_>], index: usize) {
     if index < len {
         let first = *values[index].first;
         let second = *values[index].second;
-        prusti_assert!(first == 8); // expected-error: assertion might not hold
+        prusti_assert!(first == 7);
         prusti_assert!(second == 8);
+        prusti_assert!(first == 8); // expected-error: assertion might not hold
     }
 }
 

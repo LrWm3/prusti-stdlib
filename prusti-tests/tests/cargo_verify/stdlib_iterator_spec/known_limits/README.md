@@ -575,9 +575,9 @@ filename, line, exit status, timeout status, and source hash. The Silicon run
 uses the corrected location matcher and passes directly.
 
 The `mut_native_resource_pair_prefix_bad_state` and
-`mut_native_resource_pair_prefix_wrong_first` binaries preserve two unresolved
-controls for the two-reference wrapper loop. Before moving here, they were
-run at `src/bin` with the same source contents and the full generated program:
+`mut_native_resource_pair_prefix_wrong_first` binaries were archived after
+these failures on the two-reference wrapper loop. The historical runs used
+their former `src/bin` paths and the full generated program:
 
 | Control | Silicon, default 10 ms check budget | Ferrum, 100 ms check budget |
 | --- | --- | --- |
@@ -589,5 +589,16 @@ bounds, and one worker; Ferrum branch parallelism is disabled. Logs are under
 `target/stdlib-im5-pair236/silicon` and `target/stdlib-im5-pair240/ferrum`.
 The annotations retain the intended diagnostics; the unrelated errors and
 timeout do not satisfy them. The positive, post-loop false, and wrong-second
-controls pass on both backends and remain in `src/bin`. These results do not
-close the complete wrapper gate or establish a fix for wand matching.
+controls pass on both backends and remain in `src/bin`.
+
+Both archived controls now return to `src/bin` with paired acceptance on
+build 291. The fabricated-state test rejects the restoration annotation in
+352.25/334.72 seconds (Ferrum/Silicon). The wrong-first-field test checks the
+valid final values before its incorrect first-field claim, and rejects that
+claim in 278.26/330.71 seconds. These are full-program runs at the same
+600/30/0.1-second bounds, with one worker and matching promoted source hashes.
+`target/stdlib-im5-controls294/qualification.json` records all three restored
+controls, the original Ferrum path-matcher classification and its exact-error
+audit, and the direct Silicon results. This closes the archived controls;
+the early-break referent-state invariant remains open, and the full stdlib
+matrix remains deferred.

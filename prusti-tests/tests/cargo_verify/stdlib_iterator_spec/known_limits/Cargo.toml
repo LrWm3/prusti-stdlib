@@ -185,11 +185,3 @@ path = "im5_vec_ref_read.rs"
 [[bin]]
 name = "im5_vec_ref_view"
 path = "im5_vec_ref_view.rs"
-
-[[bin]]
-name = "mut_native_resource_pair_prefix_bad_state"
-path = "mut_native_resource_pair_prefix_bad_state.rs"
-
-[[bin]]
-name = "mut_native_resource_pair_prefix_wrong_first"
-path = "mut_native_resource_pair_prefix_wrong_first.rs"

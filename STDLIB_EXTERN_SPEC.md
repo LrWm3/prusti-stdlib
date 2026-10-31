@@ -2945,8 +2945,23 @@ Ferrum's temporary runner misclassified the bare filename because it required
 a directory separator; an exact source-hash/diagnostic/file/line/status audit
 is saved as `ferrum/audited-results.json`, preserving the original results.
 Silicon passes directly with that location-matcher correction. The two
-archived pair controls have their intended Ferrum rejections and are still
-awaiting paired acceptance. The full stdlib matrix remains deferred.
+archived pair controls now also pass both backends and return to `src/bin`.
+The fabricated-state summary is rejected at the restoration annotation in
+352.25/334.72 seconds (Ferrum/Silicon); the wrong-first-field claim is rejected
+at its final assertion in 278.26/330.71 seconds. The latter checks both valid
+field values first. The same full-program bounds apply, and the promoted
+sources match both runs. All eight checks (Rust checks and six intended
+negative diagnostics) are recorded in `target/stdlib-im5-controls294/qualification.json`.
+The full stdlib matrix remains deferred.
+
+Ferrum verifies both variants of the smaller `observer297` diagnostic in
+10.64 seconds with all generated helpers and a 180-second program limit.
+Each assumes pointwise source states at an arbitrary offset and proves that
+capturing the whole state sequence preserves that equality; one uses only
+an element trigger and the other adds a saved-state trigger. This establishes
+the observation step outside a loop, not the full early-break invariant.
+The next whole-loop attempt uses the original-position invariant from the
+accepted generic state-preservation proof, rather than a tail-local index.
 
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification
@@ -3036,7 +3051,7 @@ unsupported; a hosted CI run is not claimed.
 | **M3: HashMap/HashSet phase complete** | P3-A, P3-B, P2-B expiry support | Map/set contracts and mutable lookup | Passed locally: 51 hash checks cover the modeled core operations and mutable lookup with explicit key laws and same-type queries. |
 | `IterMut` | P2-B and iterator models | Yielded-reference tracking and owner restoration | Core contracts bundled: native construction, forward next, exact length, mutable-slice IntoIterator, simultaneous yields, and source restoration. Whole-prefix loop values and reference-containing elements remain outside this gate. |
 | Functional `IterMut` loops (IM1–IM2) | Native core gate, IM0 | Prefix summaries and functional loop restoration obligations | In progress: symbolic scalar traversal/early-break proofs and reference-state full traversals pass. Exact early-break referent framing and combined IM5 acceptance remain open. |
-| Reference-containing slice/Vec elements (IM3–IM4) | Native core gate, IM0 | Indexed referent resources and generic lifetime-resource interfaces | Focused proofs pass for concrete/generic slice resources, generic state preservation including non-`Copy` referents, cross-crate single-/two-reference update loops, Vec views, and native Vec reference-element loops on both backends. Archived controls and combined IM5 acceptance remain open. |
+| Reference-containing slice/Vec elements (IM3–IM4) | Native core gate, IM0 | Indexed referent resources and generic lifetime-resource interfaces | Focused proofs pass for concrete/generic slice resources, generic state preservation including non-`Copy` referents, cross-crate single-/two-reference update loops, Vec views, native Vec reference-element loops, and the formerly archived controls on both backends. Exact early-break framing and combined IM5 acceptance remain open; the full matrix is deferred. |
 | Adapters, closures, callbacks, general `collect` | Iterator and higher-order contracts | Separate closure/callback and composition work | Deferred from all three gates. |
 | Interior mutability and general nested/recursive collections | Snapshot and ownership extensions beyond IM3–IM5 | Additional modeling and permission support | Deferred; the reference-element plan does not establish unrestricted nested-generic support. |
 | Entry APIs, hash-collection iteration, heterogeneous lookup | M3 and additional models | API-specific state, representative, and borrowed-key contracts | Deferred from M3. |

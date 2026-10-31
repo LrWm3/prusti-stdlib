@@ -2891,10 +2891,17 @@ its six `DerefMut` failures are retained as failed historical evidence.
 These focused runs use fresh Cargo targets, all generated helpers, disabled
 caching, one verifier, branch parallelism off, a 180-second program bound,
 30-second assertion bounds, and 100-millisecond solver-check bounds. The
-native reference-element Vec loop positive also passes on Ferrum (162.07
-seconds), but its first two controls timed out. Revised controls check the
-same complete restoration/readback path before the impossible claim; their
-paired qualification is in progress. Exact early-break suffix framing and
+native reference-element Vec loop now passes on both backends, including
+complete prefix values, element identities, and readback through the restored
+Vec at an arbitrary valid index. Its first Ferrum controls timed out; revised
+controls check the same complete restoration/readback path before the
+impossible claim. Ferrum positive/false/wrong-value times are
+162.07/131.36/148.97 seconds; Silicon times are 100.62/101.37/95.84 seconds.
+The controls reject exactly their annotated final assertions. The accepted
+tests are `mut_vec_resource_loop_{pass,false,wrong}`; evidence is in
+`target/stdlib-im5-vec291/loop-ferrum` (positive only) and
+`target/stdlib-im5-vec293/loop-{ferrum,silicon}`. Earlier timeouts remain
+failed evidence, not controls. Exact early-break suffix framing and
 the archived generic/pair controls remain open. The full stdlib matrix is
 explicitly deferred at the user's request, including final-pin merge
 qualification; no focused result below should be read as that matrix pass.
@@ -2987,7 +2994,7 @@ unsupported; a hosted CI run is not claimed.
 | **M3: HashMap/HashSet phase complete** | P3-A, P3-B, P2-B expiry support | Map/set contracts and mutable lookup | Passed locally: 51 hash checks cover the modeled core operations and mutable lookup with explicit key laws and same-type queries. |
 | `IterMut` | P2-B and iterator models | Yielded-reference tracking and owner restoration | Core contracts bundled: native construction, forward next, exact length, mutable-slice IntoIterator, simultaneous yields, and source restoration. Whole-prefix loop values and reference-containing elements remain outside this gate. |
 | Functional `IterMut` loops (IM1–IM2) | Native core gate, IM0 | Prefix summaries and functional loop restoration obligations | In progress: symbolic scalar traversal/early-break proofs and reference-state full traversals pass. Exact early-break referent framing and combined IM5 acceptance remain open. |
-| Reference-containing slice/Vec elements (IM3–IM4) | Native core gate, IM0 | Indexed referent resources and generic lifetime-resource interfaces | In progress: concrete/generic slice resources, generic cross-crate state preservation including non-`Copy` referents, and cross-crate single-/two-reference update loops pass focused proofs. Vec resource integration, unresolved controls, and combined IM5 acceptance remain open. |
+| Reference-containing slice/Vec elements (IM3–IM4) | Native core gate, IM0 | Indexed referent resources and generic lifetime-resource interfaces | Focused proofs pass for concrete/generic slice resources, generic state preservation including non-`Copy` referents, cross-crate single-/two-reference update loops, Vec views, and native Vec reference-element loops on both backends. Archived controls and combined IM5 acceptance remain open. |
 | Adapters, closures, callbacks, general `collect` | Iterator and higher-order contracts | Separate closure/callback and composition work | Deferred from all three gates. |
 | Interior mutability and general nested/recursive collections | Snapshot and ownership extensions beyond IM3–IM5 | Additional modeling and permission support | Deferred; the reference-element plan does not establish unrestricted nested-generic support. |
 | Entry APIs, hash-collection iteration, heterogeneous lookup | M3 and additional models | API-specific state, representative, and borrowed-key contracts | Deferred from M3. |

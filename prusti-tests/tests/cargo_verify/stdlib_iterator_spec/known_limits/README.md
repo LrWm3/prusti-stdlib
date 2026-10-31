@@ -479,14 +479,15 @@ are recorded in `STDLIB_EXTERN_SPEC.md`; this model alone does not close IM5.
 ### Remaining IM5 loop probes
 
 These checked-in probes preserve the remaining combined proof targets. They
-are deliberately outside the accepted `src/bin` suite:
+are retained here as historical probes. The table identifies accepted
+replacements in `src/bin` where available:
 
 | Binary | Required proof | Current evidence |
 | --- | --- | --- |
 | `im5_early_break_frame` | Set exactly the first `limit` referents to 7 and preserve every suffix value and element identity. | Current pointwise-tail probe times out on Ferrum at 600 seconds (`early267`, build 229). The original probe failed with `assert.failed:wand.not.found` on Silicon (428.60 seconds, build 221). |
-| `im5_vec_resource_loop` | Update every referent through `Vec<&mut u32>::as_mut_slice()`, then prove the update through the Vec again. | The corrected temporary probe encodes with build 229; no successful full proof is claimed. |
-| `im5_vec_ref_read` | Read an arbitrary valid referent through `&mut Vec<&mut u32>`, without a slice view or iterator. | Both backends report missing permission at the read with build 229. |
-| `im5_vec_ref_view` | Update a referent through `as_mut_slice`, then read its value through the Vec. | Both backends report missing permission at the final Vec read with build 229. |
+| `im5_vec_resource_loop` | Update every referent through `Vec<&mut u32>::as_mut_slice()`, then prove the update through the Vec again. | Superseded by `mut_vec_resource_loop_{pass,false,wrong}` in `src/bin`. Build 291 proves the positive on Ferrum in 162.07 seconds; the paired build 293 run accepts all controls and the Silicon positive within 180 seconds. |
+| `im5_vec_ref_read` | Read an arbitrary valid referent through `&mut Vec<&mut u32>`, without a slice view or iterator. | Superseded by accepted `mut_vec_ref_read_pass`/`wrong` tests in `src/bin`; paired build 285 passes after adding Vec element resources. |
+| `im5_vec_ref_view` | Update a referent through `as_mut_slice`, then read its value through the Vec. | Superseded by accepted `mut_vec_ref_view_*` tests in `src/bin`; paired build 285 passes. Direct `DerefMut` and generic cross-crate views also pass after PCG `b1ed5fe` and build 291. |
 
 The early-break runtime checks zero, partial, and full traversal; the Vec
 runtime checks empty and nonempty input. Rust compilation and both runtimes pass at these
@@ -494,15 +495,18 @@ repository paths. The trusted `main` functions supply runtime exercises only;
 each symbolic `visit` body remains untrusted. These checks do not establish
 the required proofs, and the earlier proof results predate these paths.
 
-The two minimal Vec probes pass Rust compilation and runtime checks at their
-repository paths. Full-program Ferrum checks fail in 6.68/1.97 seconds and
-Silicon checks fail in 11.73/7.97 seconds, respectively, at the 180-second
-program bound (`target/stdlib-im5-vec262/{ferrum,silicon}`). Both report
-`application.precondition:insufficient.permission`, currently backtranslated
-as an internal error. These are positive probes with unresolved proofs.
-The generated `m_read` precondition owns the Vec storage but has no indexed
-referent resources. This isolates a Vec ownership-model gap before iteration;
-raising the loop timeout cannot supply the missing permissions.
+The two minimal Vec probes originally passed Rust compilation and runtime
+checks but failed full-program Ferrum checks in 6.68/1.97 seconds and Silicon
+checks in 11.73/7.97 seconds, respectively, at the 180-second program bound
+(`target/stdlib-im5-vec262/{ferrum,silicon}`). Both reported
+`application.precondition:insufficient.permission`, backtranslated at that
+checkpoint as an internal error. Those failures were not accepted proofs.
+The original generated `m_read` precondition owned the Vec storage but had
+no indexed referent resources. That isolated a Vec ownership-model gap before
+iteration. Commit `4eb4ca695` adds an owned logical initialized-element slice,
+checked resource conversions, and referent-state contracts for borrowed views.
+Its direct-read and view replacements pass on both backends; this historical
+failure was not repaired by increasing a timeout.
 
 The early-break baseline at build 229 instead fails the increment's overflow
 obligation after 239.22 seconds (`target/stdlib-im5-early264`). Checking

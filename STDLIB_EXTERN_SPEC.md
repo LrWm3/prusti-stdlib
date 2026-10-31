@@ -2986,6 +2986,15 @@ runtime cases pass. A nonempty partial-traversal false control and a separate
 untrusted library with slice/Vec positive and wrong-prefix/suffix clients are
 prepared next. Those gates are not yet accepted; the full matrix stays deferred.
 
+The nonempty partial-traversal consistency control also passes both backends:
+`mut_native_resource_early_false` rejects exactly its final false assertion in
+320.40/320.72 seconds (Ferrum/Silicon), with build 291 and unchanged full-program
+bounds (`target/stdlib-im5-early302/qualification.json`). It requires
+`0 < limit < len`, retains the positive's original postconditions, and checks
+all valid restoration/value assertions before the impossible claim. This
+closes the whole-loop consistency gate. The separate-crate slice/Vec suite is
+now undergoing paired qualification; it is still pending at this checkpoint.
+
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification
 suites at acceptance. Run PCG shape tests and the numbered corpus whenever

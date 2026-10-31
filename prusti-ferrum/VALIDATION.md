@@ -1,3 +1,42 @@
+# Permission-map upgrade candidate 85fc9d8 (qualification pending)
+
+During the complete stdlib matrix, the pinned backend rejects
+`mut_element_replace_pass` and `mut_element_replace_return_pass` at their
+implicit resource postconditions. Upstream now has a targeted repair,
+`85fc9d8534cc325834feb31293b8d642db1511bd`, which preserves independent
+permission-map definitions after wand packaging. It also includes stable
+allocation ordering and preservation of heap-dependent snapshot triggers.
+The [upstream review](https://github.com/LrWm3/ferrum/blob/ba666a763bc3887984342315efdc4fdc7c76bd20/porting/stdlib-permission-review.md)
+records the two replacement positives, their false control, and a fresh paired
+positive/wrong-second prefix check. Those runs use an older Prusti checkpoint;
+they motivate qualification here, rather than qualify this branch.
+
+This branch was rebuilt with all three Ferrum dependencies pinned to that
+revision, using `./x.py build --all --locked --features prusti/ferrum` and
+nightly-2026-08-15. No encoder change is included in this candidate. Build 349
+is frozen under `/tmp/prusti-stdlib-matrix349-bin`, with source snapshot
+`/tmp/prusti-stdlib-probe349` at `d2678d5c0` plus the dependency-only patch.
+The driver's SHA-256 is
+`8b040a3fb36198837657a25b22b6c31b2bffdf6cef86995d784c015c6b8f69ff`.
+`target/stdlib-matrix-20261031-1236/build349.json` records the build and six
+executable hashes. The committed pin is still `afdf10c` pending the new tests.
+
+The queued gate first checks the adapter's ordinary and real-Z3 tests with
+one CPU and one test thread. Paired Rust checks then cover concrete replacement,
+nested and optional reference elements, the full Pair prefix positive and
+negatives (including wrong-second), native resource framing, older iterator
+models, and borrow/helper controls. All generated bodies remain checked;
+negative controls must match their exact expected diagnostics. The existing
+600-second resource program budget, 30-second assertion and 100-millisecond
+check limits apply, with one verifier and branch parallelism disabled.
+
+The frozen full matrix at `afdf10c` continues without interruption. It and
+the earlier alias/handoff diagnostics finish before this gate uses the worker.
+Build 348's proposed broader resource reservation is preserved as an unverified
+experiment; it is deferred so this backend repair can be evaluated independently.
+Neither the new pin nor that reservation is accepted merely because it builds.
+The full matrix at the eventual accepted revision remains required.
+
 # Performance upgrade to 2df948c deferred after qualification
 
 The user authorized upgrading Ferrum after the generic-loop checkpoint

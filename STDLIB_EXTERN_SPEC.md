@@ -1152,6 +1152,18 @@ families. `historical-heavy-iterator-evidence.json` records the timing evidence.
 The running frozen `final339` plan is unchanged, and its short-budget failures
 remain failures.
 
+The concrete replacement failures have a relevant upstream backend repair:
+Ferrum `85fc9d8` preserves independent permission-map definitions when a wand
+package closes. Its upstream review also rechecks the Pair wrong-second
+negative that blocked the earlier performance upgrade. Build 349 rebuilds
+this branch with that pin and no encoder changes; current-branch adapter and
+paired Rust qualification are queued after the baseline and handoff probes.
+The broader concrete-resource reservation proposed in build 348 is preserved
+but deferred without verification, so the backend change can be assessed
+independently. See [the upgrade record](prusti-ferrum/VALIDATION.md) for provenance
+and the acceptance gate. The committed pin remains `afdf10c` until that gate
+has been reviewed.
+
 A closer reading separates a second generic Vec issue from the current-owner
 handoff. In `open_vec_pass`, the first indexed opening fails at `_tmp14`, before
 any element is replaced. The generated `IndexMut::index_mut` contract returns

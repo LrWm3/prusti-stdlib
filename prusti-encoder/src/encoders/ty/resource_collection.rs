@@ -418,10 +418,17 @@ impl TaskEncoder for ResourceCollectionEnc {
                 );
                 let statements = vcx.alloc_slice(&[
                     vcx.mk_local_decl_stmt(frame_decl, Some(revealed_sequence_state(source, i))),
+                    // Establish the pre-state observation while its quantified
+                    // permissions are still present. Once unpacked, rebuilding
+                    // this equality can require equating entire heap maps.
+                    vcx.mk_assert_stmt(
+                        vcx.mk_eq_expr(frame, vcx.mk_old_expr(sequence_state(source, i))),
+                    ),
                     vcx.mk_if_stmt(vir::expr! { (i) < (length) }, vcx.alloc_slice(&body), &[]),
                     // Retain the aggregate equality as a proof fact before
                     // checking pointwise observations of the completed state.
                     vcx.mk_assert_stmt(vcx.mk_eq_expr(revealed_sequence_state(target, i), frame)),
+                    vcx.mk_assert_stmt(vcx.mk_eq_expr(sequence_state(target, i), frame)),
                 ]);
                 let block = vcx.mk_cfg_block(
                     &vir::CfgBlockLabelData::Start,

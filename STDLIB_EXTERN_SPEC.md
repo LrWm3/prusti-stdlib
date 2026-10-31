@@ -1187,6 +1187,18 @@ encode-only results, not verified passes. Paired minimal tests against builds
 349 and 350 are queued after the upgrade gate; broader array/reference
 regressions run only if the candidate passes the minimal gate on both backends.
 
+The owned-loop failures expose a different graph issue: one opaque input flows
+to several loop outputs, but the graph leaves separate restoration edges that
+each demand that same input resource. PCG `8fce1e6` couples those outputs into
+one obligation when they share a single opaque input. The new regression fails
+before the change and passes afterward with NLL and Polonius. The 250-input
+corpus, nine shape tests, four projection-map tests, both loop tests and seven
+opaque-body tests pass. The change is pushed to the PCG fork; the main project
+still pins `269cb9a` until paired Rust validation succeeds. Build 351 isolates
+this graph repair from the pending typing change in build 350. Its gate checks
+the owned-loop positives, both wrong-invariant negatives, an added explicit
+`false` after iteration, and existing mutable-iterator controls on both backends.
+
 A closer reading separates a second generic Vec issue from the current-owner
 handoff. In `open_vec_pass`, the first indexed opening fails at `_tmp14`, before
 any element is replaced. The generated `IndexMut::index_mut` contract returns

@@ -23,6 +23,15 @@ fn advance(values: &mut [&mut u32]) {
         None => {}
     }
     drop(it);
+    prusti_assert!(mut_slice_contents(&values) == *original);
+    prusti_assert!({
+        let source = mut_slice_contents(&values);
+        forall(move |j: Int| (Int::from(1) <= j && j < source.len()) ==>
+            sequence_resource_state(&source, j) == *(*initial_states)[j],
+            triggers = [(source[j],)])
+    });
+    prusti_assert!(forall(|j: Int| (Int::from(1) <= j && j < Int::from(mut_slice_len(&values))) ==>
+        *mut_slice_referent_value(&values, j) == old(*mut_slice_referent_value(&values, j))));
 }
 
 #[trusted]

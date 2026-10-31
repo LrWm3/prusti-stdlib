@@ -2832,6 +2832,20 @@ Keep the current whole-loop probe in `known_limits`. Vec initialized-element
 ownership/index routing, the archived standalone controls, and combined IM5
 acceptance remain open; the full matrix and Ferrum upgrade remain deferred.
 
+The tail-step positive now also proves shallow slice identity, pointwise
+resource-state preservation for the suffix, and unchanged actual suffix values
+after dropping the iterator. Its new `tail_state_restored_wrong` control claims
+the previous element's saved state and is rejected at that assertion. The
+canonical pair passes eight checks across Ferrum and Silicon with build 273
+at the same 180-second bounds (`target/stdlib-im5-tail277/qualification.json`):
+35.51/71.52 seconds on Ferrum and 33.08/34.53 on Silicon. This establishes the
+symbolic single-step suffix frame through expiry; it does not establish the
+whole early-break loop. A separate diagnostic starting from an arbitrary
+saved-state sequence and offset also passes Ferrum (21.84 seconds, `tail274`),
+but has not received paired acceptance. The next loop diagnostic checks the
+tail invariant explicitly before the backedge to distinguish an in-body
+failure from restoration/package interference.
+
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification
 suites at acceptance. Run PCG shape tests and the numbered corpus whenever

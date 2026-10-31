@@ -181,3 +181,11 @@ path = "im5_early_break_frame.rs"
 [[bin]]
 name = "im5_vec_resource_loop"
 path = "im5_vec_resource_loop.rs"
+
+[[bin]]
+name = "mut_native_resource_pair_prefix_bad_state"
+path = "mut_native_resource_pair_prefix_bad_state.rs"
+
+[[bin]]
+name = "mut_native_resource_pair_prefix_wrong_first"
+path = "mut_native_resource_pair_prefix_wrong_first.rs"

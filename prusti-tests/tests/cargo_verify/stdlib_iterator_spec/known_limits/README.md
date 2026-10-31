@@ -517,3 +517,21 @@ These commands check the full generated program, including conversion
 helpers. Use the exact diagnostic and location to assess a negative control;
 a timeout, crash, or unrelated error is not evidence that its assertion was
 rejected correctly.
+
+The `mut_native_resource_pair_prefix_bad_state` and
+`mut_native_resource_pair_prefix_wrong_first` binaries preserve two unresolved
+controls for the two-reference wrapper loop. Before moving here, they were
+run at `src/bin` with the same source contents and the full generated program:
+
+| Control | Silicon, default 10 ms check budget | Ferrum, 100 ms check budget |
+| --- | --- | --- |
+| Fabricated state `(7, 9)` after writes `(7, 8)` | Internal `apply.failed:wand.not.found` (190.04 s). | Correct restoration-annotation rejection (542.61 s). |
+| Incorrect first-field value | Internal `apply.failed:wand.not.found` (242.50 s). | Verifier timeout at 600 s (608.30 s command time). |
+
+Both runs use build 229, a 600-second program limit, 30-second solver time
+bounds, and one worker; Ferrum branch parallelism is disabled. Logs are under
+`target/stdlib-im5-pair236/silicon` and `target/stdlib-im5-pair240/ferrum`.
+The annotations retain the intended diagnostics; the unrelated errors and
+timeout do not satisfy them. The positive, post-loop false, and wrong-second
+controls pass on both backends and remain in `src/bin`. These results do not
+close the complete wrapper gate or establish a fix for wand matching.

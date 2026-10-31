@@ -52,10 +52,35 @@ shallow identities. The four-argument form additionally records a
 `mut_native_resource_prefix_*` proves that a symbolic traversal sets every
 referenced value to 7 and rejects an incorrect recorded state, a wrong final
 value, and `false` after traversal. Exact early-break suffix framing, generic
-and cross-crate combined loops, and their Vec views remain open. Solver
+combined loops, and their Vec views remain open. A separate untrusted
+`iterator_resources` library already covers the concrete single-reference
+loop across crates. Solver
 configuration and
 the fresh-run `IntoIterator` result are recorded in `STDLIB_EXTERN_SPEC.md`;
 the complete native batch has not yet passed consistently.
+
+The `mut_native_resource_pair_prefix_{pass,false,wrong_second}` cases extend
+the symbolic full traversal to structs containing two independent mutable
+references. The positive proves unchanged element identities and values 7
+and 8 in the respective fields at an arbitrary valid index. Both backends
+also reject `false` after restoration and an incorrect second-field value.
+The final field observations use ordinary Rust reads followed by scalar
+assertions; nested mutable dereferences in pure assertions remain unsupported.
+
+Run this focused group with the combined-proof limits:
+
+```sh
+./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite iterator \
+  --backend Ferrum --skip-library --case 'mut_native_resource_pair_prefix_*' \
+  --timeout 600 --solver-timeout-ms 30000 --solver-check-timeout-ms 100 \
+  --solver-time-bounds
+```
+
+Use `--backend Silicon` for paired validation. The first-field wrong-value
+and fabricated-state controls remain in `known_limits`: their original
+runs encounter wand-matching errors or a timeout, as recorded in the plan.
+These unresolved controls and the longer proof budgets limit this checkpoint;
+the complete wrapper and IM5 gates are not declared finished.
 
 `sequence_resource_states(&elements)` captures all indexed referent states
 in a ghost `Seq<ResourceState>`. It requires the corresponding permissions;

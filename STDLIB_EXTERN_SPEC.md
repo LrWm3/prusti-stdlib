@@ -2565,6 +2565,48 @@ no backend proof. The original generic/early-break proof failures above remain
 open. The directory README provides full-program reproduction commands and
 distinguishes runtime/encoding evidence from verification acceptance.
 
+The two-reference wrapper probe now proves a symbolic full traversal for
+`Pair<'a, 'b> { first: &'a mut u32, second: &'b mut u32 }`. It preserves all
+element identities and proves first/second referent values 7/8 at an arbitrary
+valid index. The initial final assertions used unsupported nested mutable
+dereferences in pure code (probe 232). Ordinary Rust scalar reads preserve the
+same assertion and encode successfully. The corrected probe times out at the
+180-second baseline (probe 233), then passes its complete Ferrum proof in
+369.50 seconds with the established 600-second program and 30-second solver
+time limits (probe 235). All generated conversion bodies remain checked.
+
+At repository paths, the focused paired runs use the rebuilt build-229 driver
+(`68d24cd16b0f2f12afc6d8363b41fd629dee98f26d3b12656f70aff214e72ef3`),
+fresh targets, disabled caching, overflow/panic checks, and one worker.
+Ferrum branch parallelism remains off. Both use 600-second program and
+30-second solver time limits; Silicon uses its default 10 ms check budget,
+while the Ferrum run uses the separately configured 100 ms budget:
+
+| Wrapper case | Silicon (`pair236`) | Ferrum (`pair240`) |
+| --- | --- | --- |
+| Full positive | Pass, 132.59 s. | Pass, 178.84 s. |
+| False after restoration | Intended assertion rejection, 95.21 s. | Intended assertion rejection, 361.51 s. |
+| Wrong second-field value | Intended assertion rejection, 191.86 s. | Intended assertion rejection, 349.79 s. |
+| Fabricated recorded state | Internal `apply.failed:wand.not.found`, 190.04 s. | Intended restoration rejection, 542.61 s. |
+| Wrong first-field value | Internal `apply.failed:wand.not.found`, 242.50 s. | Timeout at 600 s; command time 608.30 s. |
+
+Logs and source hashes are in `target/stdlib-im5-pair236/silicon` and
+`target/stdlib-im5-pair240/ferrum`. The positive programs coincide after
+renaming seven generated specification identifiers and removing standalone
+comments. The differing budgets and generated names preclude attributing
+their timing difference solely to the backend or the check budget.
+
+The three cases with exact outcomes on both backends are retained as
+`mut_native_resource_pair_prefix_{pass,false,wrong_second}` in `src/bin`.
+The two unresolved controls move, without source edits, to `known_limits`;
+their original failures remain part of the evidence. No encoder or contract
+was changed for these proofs. The full wrapper gate remains open. Next,
+verify an untrusted cross-crate wrapper helper with explicit resource-state
+postconditions, so value/consistency clients need not repeat the entire loop
+proof. A prepared prototype passes Rust runtime and encoding checks only;
+its library and client proofs are still required. Materializing outer heap
+captures remains a diagnostic hypothesis, not an implemented fix.
+
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification
 suites at acceptance. Run PCG shape tests and the numbered corpus whenever

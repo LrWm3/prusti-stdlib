@@ -2906,6 +2906,27 @@ the archived generic/pair controls remain open. The full stdlib matrix is
 explicitly deferred at the user's request, including final-pin merge
 qualification; no focused result below should be read as that matrix pass.
 
+The final focused borrow regression run also passes all 20 checks across
+Ferrum and Silicon: independent call wands, retained branches, and shifted
+projection restoration, including their negative controls
+(`target/stdlib-im5-vec293/borrow-{ferrum,silicon}`). The accepted Vec loop and
+borrow results are collected in that directory's `loop-qualification.json`.
+
+The `early292` diagnostic adds checked intermediate state equalities without
+changing the early-break postconditions. It captures the current suffix from
+`original[position..]` (the iterator-tail helper is specification-only), then
+compares its saved states with the entry states before calling `next`. Ferrum
+rejects this first comparison after 411.53 seconds, before either iterator
+advancement or referent mutation, using build 291 and the existing 600-second
+diagnostic bound with all helpers checked. This exposes a separate gap in
+connecting the pointwise invariant to a whole-state observation; it does not
+establish that mutation or restoration is incorrect. The generated invariant
+has only a tail-element lookup trigger, whereas this failed goal compares
+saved-state lookups. The next diagnostic adds an alternative saved-state
+trigger, preserving the invariant itself. A separate control-flow probe makes
+the impossible `None` branch below `position < limit <= len` checked
+unreachable; it compiles, runs, and encodes, but has no accepted proof yet.
+
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification
 suites at acceptance. Run PCG shape tests and the numbered corpus whenever

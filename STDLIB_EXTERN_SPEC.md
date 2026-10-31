@@ -954,9 +954,9 @@ Ferrum and Silicon. Native loops now prove whole-prefix values and exact
 early-break suffix framing for reference elements, including separate-crate
 slice/Vec clients. Generic state preservation, non-`Copy` referents, two-reference
 wrappers, empty/zero-sized cases, and the previously archived controls have
-paired focused evidence. The full stdlib matrix at the final Ferrum pin remains
-explicitly deferred at the user's request; this is focused qualification, not
-final matrix or merge qualification. Ferrum remains pinned to `afdf10c`, with
+paired focused evidence. The user authorized the full stdlib matrix on
+2026-10-31; it is now running, with failures to be fixed before qualification.
+This remains focused qualification until that gate passes. Ferrum stays pinned to `afdf10c`, with
 one worker and branch parallelism off. The sections below preserve the work's
 chronological evidence, beginning at Prusti `22ea24a6b` and PCG `a4eb802`.
 
@@ -972,7 +972,38 @@ The final gate combines both extensions.
 | IM2 | Functional native iterator loops | IM1 | Focused gate complete: Rust clients prove whole-slice updates and exact early-break prefix/suffix behavior for symbolic lengths. |
 | IM3 | Concrete reference-containing slice elements | IM0; implemented after IM2 | Focused gate complete: reads, writes, framing, and expiry work for shared references, mutable references, and reference-bearing structs/enums. |
 | IM4 | Generic and cross-crate reference resources | IM3 | Focused gate complete: generic definitions retain the same referent permissions under substitution and through Vec/slice views. |
-| IM5 | Combined acceptance and support update | IM2, IM4 | Focused paired proofs complete: symbolic reference-element loops prove final values and framing across crates. Full stdlib matrix and final-pin merge qualification are deferred. |
+| IM5 | Combined acceptance and support update | IM2, IM4 | Focused paired proofs complete: symbolic reference-element loops prove final values and framing across crates. Full stdlib matrix and final-pin merge qualification are in progress. |
+
+### Full matrix qualification (2026-10-31, in progress)
+
+`scripts/test_stdlib_matrix.py` runs all eleven fixture suites on Ferrum and
+Silicon, serially, with one verifier and Ferrum branch parallelism disabled.
+The initial plan contains 663 clients (1,326 client/backend pairs), plus 22
+library runs, Rust checks, runtime positives and the existing extra controls.
+The runner checks exact coverage, source and driver hashes, bounds and backend
+settings before accepting a completed job for resume. Completed failures
+retain their coverage but never count as successful qualification.
+
+The baseline uses a detached source snapshot at `d749dd359` and executables
+copied after rebuilding this branch with `./x.py build --all --locked
+--features prusti/ferrum`. Build provenance, the coverage plan, per-case logs
+and results are under `target/stdlib-matrix-20261031-1236/`. Ordinary jobs retain
+the 180-second program bound; the resource suites and previously qualified
+heavy iterator prefix/early-break cases retain 600 seconds. Both use 30-second
+assertion and 100-millisecond solver-check bounds. No helpers are filtered.
+
+The background supervisor monitors initially at 10, 30 and 60 seconds, then
+backs off from five minutes to at most an hour while healthy. Child completion
+wakes it immediately; newly observed failures reset the interval. It continues
+through failed jobs to preserve a complete baseline. The snapshot keeps fixes
+on `main` from changing an in-flight suite.
+
+The first extern suite has matching failures on both backends: conditional
+expiry fixtures need input selectors, and generic `mem::replace` clients lose
+the indirect resource permission for the second returned tuple field. Diagnose
+and fix these without narrowing the generic type domain or weakening negative
+diagnostics. Rebuild changed encoder code, validate fixes on both backends, then
+qualify the final sources and build; preserve the original failed evidence.
 
 ### IM0: Reproduce and locate the missing information
 

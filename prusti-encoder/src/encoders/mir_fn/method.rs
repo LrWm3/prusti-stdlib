@@ -445,6 +445,7 @@ impl TaskEncoder for MethodEnc {
                     tmp_ctr: 0,
                     label_ctr: 0,
                     call_labels: Default::default(),
+                    call_wand_captures: Default::default(),
                     wandless_calls: Default::default(),
                     from_to_vars: Default::default(),
                     loop_snapshot_frames: Vec::new(),

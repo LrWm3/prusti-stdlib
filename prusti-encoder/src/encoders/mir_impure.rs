@@ -172,6 +172,9 @@ where
     pub tmp_ctr: usize,
     pub label_ctr: usize,
     pub call_labels: FxHashMap<mir::BasicBlock, (&'vir str, &'vir str)>,
+    /// Call-time observations, shared by expiry scripts and retained loop
+    /// obligations. Conversion statements still execute only on expiry.
+    pub call_wand_captures: FxHashMap<mir::BasicBlock, Vec<super::impure::fn_wand::CallWand<'vir>>>,
     /// Blocks whose call terminator was not encoded as an impure method call
     /// (pure functions, intrinsics, `prusti_contracts` builtins) and thus
     /// created no wand to apply on expiry.
@@ -1176,6 +1179,13 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
+        if let Some(wands) = self.call_wand_captures.get(&call.location().block) {
+            return Ok(wands
+                .iter()
+                .filter(|(id, ..)| ids.contains(id))
+                .cloned()
+                .collect());
+        }
         let (_, dest_snap, _, _) = self.encode_place_with_snap((*destination).into())?;
         let wand_args = std::iter::once(Ok(dest_snap))
             .chain(
@@ -1197,6 +1207,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             call_ctx,
             &extra,
             Some(&ids),
+            false,
             self,
         )
     }
@@ -4031,6 +4042,25 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                                 );
                                 self.stmt(vcx.mk_inhale_stmt(expr));
                             }
+                        }
+                        let (callee, call_ctx) =
+                            self.gargs(caller_substs).resolve_method(func_def_id);
+                        let wands = self.deps.require_dep::<WandEnc>(WandEncTask {
+                            data: pcg::borrow_pcg::FunctionData::new(callee),
+                        })?;
+                        if !wands.viper_wands().is_empty() {
+                            let (_, dest_snap, _, _) =
+                                self.encode_place_with_snap((*destination).into())?;
+                            let wand_args = std::iter::once(Ok(dest_snap))
+                                .chain(
+                                    args.iter()
+                                        .map(|arg| self.encode_operand_snap_immediate(&arg.node)),
+                                )
+                                .collect::<EncodeResult<'vir, Vec<_>, E>>()?;
+                            let captured = wands.selected_call_wands(
+                                &wand_args, label_pre, label_post, call_ctx, &extra, None, true, self,
+                            )?;
+                            self.call_wand_captures.insert(location.block, captured);
                         }
                     }
                     Ok(())

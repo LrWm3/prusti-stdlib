@@ -33,7 +33,14 @@ use prusti_rustc_interface::{
     span::def_id::DefId,
 };
 use task_encoder::{EncodeFullError, EncodeFullResult, TaskEncoder, TaskEncoderDependencies};
-use vir::{CastType, HasType};
+use vir::{CastType, Foldable, Folder, HasType};
+
+pub(crate) type CallWand<'vir> = (
+    usize,
+    vir::Wand<'vir>,
+    Vec<vir::Stmt<'vir>>,
+    Vec<vir::Stmt<'vir>>,
+);
 
 /// Encodes the magic wands given a function signature.
 pub struct WandEnc;
@@ -521,6 +528,7 @@ impl<'vir> WandEncOutput<'vir> {
                 call_ctx,
                 extra_pledges,
                 None,
+                false,
                 visitor,
             )?
             .into_iter()
@@ -530,6 +538,8 @@ impl<'vir> WandEncOutput<'vir> {
 
     /// The index identifies an obligation in this function's retained wand
     /// list, before substitution or omission of empty instantiated wands.
+    /// `materialize` is used at the call site: the caller must retain the
+    /// returned wands so expiry and loop invariants use those same captures.
     pub(crate) fn selected_call_wands<E: TaskEncoder>(
         &self,
         arguments: &[vir::ExprSnap<'vir>],
@@ -538,37 +548,42 @@ impl<'vir> WandEncOutput<'vir> {
         call_ctx: GArgs<'vir>,
         extra_pledges: &[PledgeExpr<'vir>],
         selected: Option<&[usize]>,
+        materialize: bool,
         visitor: &mut ImpureEncVisitor<'vir, '_, E>,
-    ) -> EncodeResult<
-        'vir,
-        Vec<(
-            usize,
-            vir::Wand<'vir>,
-            Vec<vir::Stmt<'vir>>,
-            Vec<vir::Stmt<'vir>>,
-        )>,
-        E,
-    > {
-        let result = visitor
-            .vcx
-            .mk_local_labelled_old_expr(arguments[mir::RETURN_PLACE.as_usize()], label_post);
-        let args = (1..arguments.len()).map(|l| {
-            visitor
-                .vcx
-                .mk_local_labelled_old_expr(arguments[l], label_pre)
-        });
+    ) -> EncodeResult<'vir, Vec<CallWand<'vir>>, E> {
+        if self.wands.is_empty() {
+            return Ok(Vec::new());
+        }
+        let vcx = visitor.vcx;
+        let mut capture = |value: vir::ExprSnap<'vir>| {
+            if materialize {
+                let local = visitor.new_tmp(value.ty());
+                visitor.stmt(visitor.vcx.mk_pure_assign_stmt(local, value));
+                local
+            } else {
+                value
+            }
+        };
+        let result =
+            vcx.mk_local_labelled_old_expr(arguments[mir::RETURN_PLACE.as_usize()], label_post);
+        let result = capture(result);
+        let args = (1..arguments.len())
+            .map(|l| capture(vcx.mk_local_labelled_old_expr(arguments[l], label_pre)))
+            .collect::<Vec<_>>();
         let args = PledgeExpr::pledge_args(result, args);
         let mut wands = Vec::new();
         for (id, wand_data) in self.wands.iter().enumerate() {
             if selected.is_some_and(|ids| !ids.contains(&id)) {
                 continue;
             }
-            let Some(wand) = self.mk_wand(
+            let bindings = materialize
+                .then(|| &*visitor.vcx.alloc(std::cell::RefCell::new(Vec::new())));
+            let Some(mut wand) = self.mk_wand(
                 wand_data,
                 args,
                 Some(label_pre),
                 Some(label_post),
-                None,
+                bindings,
                 Some(call_ctx),
                 extra_pledges,
                 visitor.vcx,
@@ -576,6 +591,29 @@ impl<'vir> WandEncOutput<'vir> {
             ) else {
                 continue;
             };
+            if let Some(bindings) = bindings {
+                // Capture in dependency order. These are the same post-call
+                // observations bound outside the callee's returned wand; no
+                // read is moved out of its quantifier or expiry heap.
+                struct Substitute<'vir>(FxHashMap<&'vir str, vir::ExprDyn<'vir>>);
+                impl<'vir> Folder<'vir, (), !> for Substitute<'vir> {
+                    fn fold_expr(&mut self, e: vir::ExprDyn<'vir>) -> Option<vir::ExprDyn<'vir>> {
+                        if let vir::ExprKindData::Local(local) = e.kind {
+                            self.0.get(local.name).copied()
+                        } else {
+                            e.super_fold_with(self)
+                        }
+                    }
+                }
+                let mut substitute = Substitute(FxHashMap::default());
+                for &(decl, value) in bindings.borrow().iter() {
+                    let value = value.fold_with(&mut substitute).unwrap_or(value);
+                    let local = visitor.new_tmp(value.ty());
+                    visitor.stmt(visitor.vcx.mk_pure_assign_stmt(local, value));
+                    substitute.0.insert(decl.name, local.as_dyn());
+                }
+                wand = wand.fold_with(&mut substitute).unwrap_or(wand);
+            }
             let signature = RustSignature::new(self.function_data.def_id());
             let mut convert = |node: FunctionShapeNode<Generalized>,
                                pack|

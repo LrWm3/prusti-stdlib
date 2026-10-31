@@ -36,7 +36,14 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         if package && !edge_to_loop {
             return Ok(());
         }
-        let mut old_outer = WandOldOuter::Label(label);
+        // Only the outer package can read these captures immediately. Nested
+        // package-script expressions may depend on resources supplied by the
+        // wand antecedent and must keep their labelled observations.
+        let mut old_outer = if package && footprint.is_none() {
+            WandOldOuter::Capture(label)
+        } else {
+            WandOldOuter::Label(label)
+        };
         let (wand, rhs) = self.coupled_wand(edge, &mut old_outer)?;
         let wand =
             self.with_restoration_wand(wand, edge, &mut old_outer, !package, footprint.is_some())?;
@@ -76,7 +83,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             self.stmt(stmt);
             return Ok(());
         }
-        let WandOldOuter::Label(label) = &mut old_outer else {
+        let (WandOldOuter::Label(label) | WandOldOuter::Capture(label)) = &mut old_outer else {
             unreachable!()
         };
         let label = *label.get_or_insert_with(|| self.new_label("outer_package"));

@@ -47,6 +47,10 @@ use crate::encoders::{
 pub(crate) enum WandOldOuter<'vir> {
     LetBind(Vec<LetBind<'vir>>),
     Label(Option<&'vir str>),
+    /// Evaluate outer-heap observations once before packaging a loop wand.
+    /// These assignments retain the original heap label and check the same
+    /// read permissions as the labelled expressions they replace.
+    Capture(Option<&'vir str>),
 }
 
 impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
@@ -1200,6 +1204,13 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             WandOldOuter::Label(label) => {
                 let label = *label.get_or_insert_with(|| self.new_label("outer_package"));
                 self.vcx.mk_local_labelled_old_expr(expr, label)
+            }
+            WandOldOuter::Capture(label) => {
+                let label = *label.get_or_insert_with(|| self.new_label("outer_package"));
+                let value = self.vcx.mk_local_labelled_old_expr(expr, label);
+                let captured = self.new_tmp(value.ty());
+                self.stmt(self.vcx.mk_pure_assign_stmt(captured, value));
+                captured
             }
         }
     }

@@ -1199,6 +1199,21 @@ this graph repair from the pending typing change in build 350. Its gate checks
 the owned-loop positives, both wrong-invariant negatives, an added explicit
 `false` after iteration, and existing mutable-iterator controls on both backends.
 
+Following the user's Ferrum update, the upstream checkpoint-349 review confirms
+that all three Ferrum-only failures verify with `85fc9d8`, including the range
+helper positive; its exact inclusive-frame negative also succeeds in two fresh
+runs. The subsequent `09a28fb`/`0e048a4` changes fix raw Viper frontend overhead,
+not the injected-AST Rust path. Build 352 rebuilds this branch with `0e048a4`
+and no encoder changes. Builds 353 and 354 independently rebuild candidates 350
+and 351 with that same pin. Their unstarted older dispatchers were retired;
+the new paired gates follow the complete matrix and alias probes using one
+worker. The handoff models also had a duplicate local/let-bound name, now
+renamed before their first verification attempt. Original models and all
+earlier artifacts remain preserved. No parser rejection, incomplete replay,
+or upstream benchmark exit status is counted as a local verified pass. See
+[the current upgrade record](prusti-ferrum/VALIDATION.md) for provenance and
+the targeted upstream evidence.
+
 A closer reading separates a second generic Vec issue from the current-owner
 handoff. In `open_vec_pass`, the first indexed opening fails at `_tmp14`, before
 any element is replaced. The generated `IndexMut::index_mut` contract returns

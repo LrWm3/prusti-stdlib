@@ -1,41 +1,63 @@
-# Permission-map upgrade candidate 85fc9d8 (qualification pending)
+# Current upgrade candidate 0e048a4 (qualification pending)
 
-During the complete stdlib matrix, the pinned backend rejects
-`mut_element_replace_pass` and `mut_element_replace_return_pass` at their
-implicit resource postconditions. Upstream now has a targeted repair,
-`85fc9d8534cc325834feb31293b8d642db1511bd`, which preserves independent
-permission-map definitions after wand packaging. It also includes stable
-allocation ordering and preservation of heap-dependent snapshot triggers.
-The [upstream review](https://github.com/LrWm3/ferrum/blob/ba666a763bc3887984342315efdc4fdc7c76bd20/porting/stdlib-permission-review.md)
-records the two replacement positives, their false control, and a fresh paired
-positive/wrong-second prefix check. Those runs use an older Prusti checkpoint;
-they motivate qualification here, rather than qualify this branch.
+Ferrum `0e048a420c081f4c442dd04277bb016346de4e10` includes the permission-map
+repair in `85fc9d8`, stable allocation ordering, preserved heap-dependent
+snapshot triggers, and two subsequent Viper-text frontend repairs. The
+[upstream follow-up](https://github.com/LrWm3/ferrum/blob/0f2a563e5e112a7cca59e42f09d63470ceb6b137/porting/stdlib-followup-review.md)
+rechecks our checkpoint 349 in fresh requests: `vec_lookup_range_pass`,
+`mut_element_replace_pass`, and `mut_element_replace_return_pass` verify at
+`85fc9d8`; the replacement-false and inclusive-frame negatives reach exactly
+their expected assertions. The inclusive negative also retains the exact Viper
+bytes from the earlier unstable comparison. Those targeted results support the
+upgrade; they do not qualify the full matrix or establish general solver
+stability. The upstream benchmark's strict dependency-event check failed after
+rebuilding an invalidated cache, so its wall times are not accepted performance
+measurements.
 
-This branch was rebuilt with all three Ferrum dependencies pinned to that
-revision, using `./x.py build --all --locked --features prusti/ferrum` and
-nightly-2026-08-15. No encoder change is included in this candidate. Build 349
-is frozen under `/tmp/prusti-stdlib-matrix349-bin`, with source snapshot
-`/tmp/prusti-stdlib-probe349` at `d2678d5c0` plus the dependency-only patch.
-The driver's SHA-256 is
-`8b040a3fb36198837657a25b22b6c31b2bffdf6cef86995d784c015c6b8f69ff`.
-`target/stdlib-matrix-20261031-1236/build349.json` records the build and six
-executable hashes. The committed pin is still `afdf10c` pending the new tests.
+The later frontend changes avoid repeated nested ADT receiver checking
+(`09a28fb`) and share immutable type-substitution maps (`0e048a4`). They repair
+raw Viper replay overhead. Prusti's injected-AST adapter bypasses that frontend;
+these changes do not establish faster Rust verification through the adapter.
 
-The queued gate first checks the adapter's ordinary and real-Z3 tests with
-one CPU and one test thread. Paired Rust checks then cover concrete replacement,
-nested and optional reference elements, the full Pair prefix positive and
-negatives (including wrong-second), native resource framing, older iterator
-models, and borrow/helper controls. All generated bodies remain checked;
-negative controls must match their exact expected diagnostics. The existing
-600-second resource program budget, 30-second assertion and 100-millisecond
-check limits apply, with one verifier and branch parallelism disabled.
+This branch has been rebuilt with all three Ferrum dependencies pinned to
+`0e048a4`, using `./x.py build --all --locked --features prusti/ferrum` and
+nightly-2026-08-15. Build 352 includes the committed encoder and PCG `269cb9a`,
+without either pending encoder/PCG experiment. Its source is frozen at
+`/tmp/prusti-stdlib-probe352`, based on `4927ecfb0` plus a dependency-only patch.
+Executables are under `/tmp/prusti-stdlib-matrix352-bin`; the driver's SHA-256 is
+`fad7742d27b936ffe9c9cf9ba9862eb421c0c70ac004080715e29360345c78f0`.
+`target/stdlib-matrix-20261031-1236/build352.json` records all six hashes.
+All 18 adapter tests are compiled but have not yet executed. The standalone
+CLI was built from the same Ferrum pin into an external target directory;
+Rust validation uses the rebuilt Prusti binaries.
 
-The frozen full matrix at `afdf10c` continues without interruption. It and
-the earlier alias/handoff diagnostics finish before this gate uses the worker.
-Build 348's proposed broader resource reservation is preserved as an unverified
-experiment; it is deferred so this backend repair can be evaluated independently.
-Neither the new pin nor that reservation is accepted merely because it builds.
-The full matrix at the eventual accepted revision remains required.
+The serial gate runs ordinary and real-Z3 adapter tests with one CPU and one
+test thread, then paired raw diagnostics and Rust checks. Rust coverage includes
+concrete replacement, optional/nested elements, the full Pair prefix positive
+and wrong-second negative, native framing, iterator models, and borrow/helper
+controls. Every generated body remains checked. Negative controls must match
+exact expected diagnostics. Resource clients retain the 600-second program,
+30-second assertion and 100-millisecond check bounds, one verifier, and branch
+parallelism disabled.
+
+The handoff models had a local named `current` colliding with a let-bound name
+inside the wand. That local has been renamed before verification; the original
+models are retained. Syntax rejection supplies no permission-proof result.
+The corrected positive, false-assertion and missing-resource models are part
+of the paired diagnostics in this gate.
+
+Builds 353 and 354 rebase the independent nested-typing and opaque-loop-coupling
+candidates onto the same final Ferrum pin. Their separate paired gates follow
+build 352. Earlier unstarted dispatchers 346/349/350/351 were stopped while
+waiting, and their artifacts remain preserved. None produced proof results.
+The broader concrete reservation in build 348 also remains deferred and
+unverified.
+
+The frozen full matrix at `afdf10c` continues unchanged, before these focused
+gates use the single worker. Its old-backend failures are baseline evidence,
+not regressions on current Ferrum. The committed pin remains `afdf10c` until
+this branch's gate is reviewed, and a full matrix on the eventual accepted
+source and build is still required before merge.
 
 # Performance upgrade to 2df948c deferred after qualification
 

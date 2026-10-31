@@ -1033,6 +1033,95 @@ and build before reusing the 200 paired extern checks. All remaining jobs run
 serially from that snapshot. The sequence/Ferrum rerun at the 600-second bound
 has passed 22/22. Qualification is still pending the remaining jobs.
 
+The first twelve corrected jobs (extern, sequence, vec, collections, resources,
+and hash on both backends) passed all 498 checks. Borrow/Ferrum completed with
+146/164 checks passing and Borrow/Silicon with 147/164. Their failures include an assignment graph cycle, implicit
+pledges made ambiguous by opaque payload stages, premature restoration of
+generic collection resources, and an aggregate conversion-helper proof whose
+failures vary with client context and backend. Silicon accepts the inclusive
+positive rejected by Ferrum, but reports the same helper failure in
+`range_wrong_frame`. A wrong-assertion client that also reports a helper failure
+is counted as failed, despite reporting its intended error. Both baseline
+results are retained; the dispatcher is paused at the suite boundary while
+focused fixes use the single verifier.
+
+The assignment cycle has a small PCG reproducer: replace an indexed generic
+element, then request the input's return dependencies. A historical expansion
+source was redirected to the replacement value, making an earlier aggregate
+snapshot depend on its later expansion. The repair must distinguish historical
+target places from live future targets; testing also caught and rejected an
+overbroad version that broke the existing nested-reborrow corpus case 216.
+Validation includes both NLL and Polonius, the numbered corpus, and paired Rust
+positives/negatives. No failure family is closed until its Rust proofs pass.
+
+PCG `269cb9a` implements that repair and passes all 250 numbered cases, nine
+function-shape cases, four call-projection-map cases, the loop-coupling case,
+and seven opaque-body cases, including the new indexed-replacement regression
+under both borrow checkers (`pcg329.log`). The rebuilt Rust clients now encode
+past the cycle, exposing permission-proof failures that remain separately open.
+The root pin is committed independently of the ongoing encoder proof repairs.
+
+Build 330 tests two further repairs: attaching an implicit pledge to a unique
+concrete-lifetime stage despite an additional opaque payload stage, and proving
+the resource-conversion observation equality before changing its permissions.
+Build 332 additionally reads the current array directly after its physical fold
+and distinguishes saved element resources by the expansion's lifetime label.
+Previously, opening the same slot again replaced the first opening's capture,
+so both historical closures used the second resource identity. Frozen builds,
+patches and paired results are retained under `fix330/` and `fix332/`; these
+focused jobs do not replace the complete matrix qualification.
+
+Trials 331–335 simplified the current snapshot, added an explicit equality to
+the canonical sequence element, changed permission-query order, and checked a
+fresh indexed opening directly. They did not resolve the positive failures and
+have been removed. The positionless error reports only the failing resource,
+which also occurs in the return-wand footprint: the initial opening was not the
+failing assertion. Two historical expansions can refer to the same unchanged
+element, and conjoining their exposed footprints demands its permission twice.
+Build 336 retains the distinct opening captures and checks footprint parts with
+separate assertions. It still checks every restoration action and the complete
+wand consequent. This does not establish complete qualification; a genuine
+missing resource must continue to fail.
+
+Build 336 passes `frame_pass` on Silicon, while Ferrum advances past the
+footprint assertion and fails the current-resource postcondition. Both still
+reject the generic Vec-view positives; the three framing negatives pass on
+both. Build 337 tests a checked temporary `true --* immediate_resources` wand
+around return-wand packaging. Its purpose is to reserve immediate output
+resources while the restoration script uses its antecedent, then return them
+by applying the temporary wand. This is a pending experiment, not an assumption
+that those resources already exist: packaging the temporary wand must prove
+them. The broader generic call-expiry handoff remains a separate open problem.
+
+The remaining generic borrow failures need a separate resource-handoff repair.
+In `swap_view`, the body applies the swap's nested-resource wand and then the
+`as_mut_slice` wands before return. This restores resources indexed by the
+entry sequence, while the function's postcondition needs resources indexed by
+the current sequence. `replace_index`, `replace_lookup`, and the abstract
+`Borrowed` caller expose the same distinction between the current owner's
+resources and the obligation to restore entry resources. Both backends report
+missing permissions, so changing solver budgets cannot repair this failure.
+
+An NLL experiment keeping opaque projections live until explicit destruction
+only moved the early applications to `StorageDead`; it was discarded. A sound
+handoff must retain the continuation from current resources to entry resources
+while restoring ownership of the current collection. Simply returning both
+groups, suppressing expiry applications, or keeping the returned element's
+resources alone is insufficient: an indexed borrow also encapsulates the
+untouched collection elements. Work on this repair must first establish that
+composition in a small checked encoding, then cover native and cross-crate
+swap/replacement, generic trait reborrows, and the existing iterator early-drop
+and wrong-referent controls. Until that succeeds, these positives remain failed
+matrix entries; they must not be trusted or restricted to reference-free types.
+
+Relevant design background is Gorse's [Extended Support for Borrowing and
+Lifetimes in Prusti](https://ethz.ch/content/dam/ethz/special-interest/infk/chair-program-method/pm/documents/Education/Theses/Lorenz_Gorse_MS_Report.pdf),
+sections 3.6.7 and 4.1. It describes nested expiration tools and capturing parent
+wand observations with let-bindings, and discusses the additional permission
+enumeration problem for structures containing references. These are design
+inputs for the handoff investigation, not evidence that the current encoding
+or a proposed extension is correct.
+
 ### IM0: Reproduce and locate the missing information
 
 Keep the existing positive and negative native iterator cases as controls.

@@ -2682,6 +2682,30 @@ parallelism off, and Silicon checks for changed specifications, negatives,
 and backend differences. Compare matching sources and bounds; upstream
 benchmark results do not qualify this branch or the full stdlib matrix.
 
+The upgrade candidate tested all three Ferrum crates at
+`2df948c9014de33b7baa13599eaf9d5078906b28`. A fresh locked build of this branch
+succeeds; checkpoint 255 has driver SHA-256
+`3a7f358ab4da6d1ccf265472c5693210897a976ea868d4f0d322e426371e461e`.
+All seven adapter unit tests and eleven real-Z3 integration tests pass,
+including opaque/reveal behavior and helper body checking. The selected
+iterator/borrow comparison matches ten client expectations on the candidate
+versus nine on the old pin; the remaining old-pin case reproduces an existing
+conversion-helper timeout, while the candidate rejects its intended assertion.
+Both pass all seven Rust/runtime controls. The full cross-crate resource suite
+also passes all eleven checks with every untrusted library and conversion
+body checked. The heavy prefix run passes both positives and two negatives,
+but the Pair wrong-second control fails at loop restoration instead of its
+intended assertion. A fresh old-pin run reaches the intended rejection with
+unchanged source and bounds. The candidate is therefore not adopted; the
+manifest and lockfile are restored to `afdf10c`, and both builds plus evidence
+are preserved. The user then directed work back to the remaining IM items,
+skipping full verification. The pending Silicon comparison and an exploratory
+build at `4cda819` were interrupted, with no proof/build qualification claimed.
+Resume focused IM development on the last qualified pin. Investigate trigger
+completeness or qualify an earlier performance revision before retrying the
+upgrade, then rerun the current gates and retain dual-backend validation before
+merging. Detailed evidence is recorded in `prusti-ferrum/VALIDATION.md`.
+
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification
 suites at acceptance. Run PCG shape tests and the numbered corpus whenever

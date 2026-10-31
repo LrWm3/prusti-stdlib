@@ -1,3 +1,104 @@
+# Performance upgrade to 2df948c deferred after qualification
+
+The user authorized upgrading Ferrum after the generic-loop checkpoint
+`1587799a8`. Candidate `2df948c9014de33b7baa13599eaf9d5078906b28` was rebuilt
+and tested, but is **not adopted**: a previously accepted negative control
+fails at the wrong obligation. The dependency manifest and lockfile have
+been restored exactly to `afdf10cf59106c38d09df32939f1aa9c77d0b989`.
+The candidate changed only the three Ferrum Git revisions in those files.
+PCG remains at `c18a51899e37e0fa67f9b5f17f7d518ef2f5518c`.
+
+This revision includes structural-term hash caching, reduced path-condition
+copying, stable emission ordering, and the now-default selective snapshot
+summary triggers. The experimental `groundPermissionSummaries` and
+`separateMethodSolver` options remain disabled. Use one verifier worker and
+keep branch parallelism off. The upstream
+[trigger report](https://github.com/LrWm3/ferrum/blob/2df948c9014de33b7baa13599eaf9d5078906b28/porting/performance-summary-triggers.md)
+and [sample of this branch](https://github.com/LrWm3/ferrum/blob/2df948c9014de33b7baa13599eaf9d5078906b28/porting/performance-trigger-stdlib-sample.md)
+motivate this candidate; they do not qualify the current full stdlib matrix.
+
+Prusti was rebuilt from this `main` checkout with
+`./x.py build --all --locked --features prusti/ferrum`, using
+nightly-2026-08-15. The six frozen executables are under
+`/tmp/prusti-im5-checkpoint255`; provenance is in
+`/tmp/prusti-im5-upgrade255/build.json`. The rebuilt driver's SHA-256 is
+`3a7f358ab4da6d1ccf265472c5693210897a976ea868d4f0d322e426371e461e`.
+The prior checkpoint 229 remains available for comparison.
+
+All seven adapter unit tests and all eleven real-Z3 integration tests pass.
+The integration tests run sequentially with single-CPU affinity so Ferrum's
+default worker count is one. They cover opaque/revealed function behavior,
+body checking, wands, collections, ADTs, source positions and counterexamples.
+Logs are `/tmp/prusti-im5-upgrade255-adapter-{unit,z3}.log`.
+
+The checks compare the old and candidate binaries on unchanged iterator and
+borrow fixtures and validate recent combined resource proofs at their
+established bounds. They require exact negative diagnostics, full helper-body
+checking, fresh targets and disabled outer caching. Selected source and
+artifact hashes are under `target/stdlib-im5-upgrade255`; pre-existing failures
+remain recorded. No full-matrix or general performance claim is made.
+
+The matching smoke runs are complete: the candidate passes all ten client
+expectations and seven Rust/runtime controls. The old pin passes nine clients
+and all controls, reproducing its existing 180-second timeout in
+`range_wrong_frame`'s generated `resource_unpack_aggregate_3379c9af52ac4b15`
+helper. The candidate reaches that control's intended assertion rejection in
+8.36 seconds. The timeout remains an unresolved baseline observation, not a
+negative pass or a completed performance measurement.
+
+The nested iterator positive takes 9.90 seconds on the old pin and 5.12 on
+the candidate with byte-identical Viper input; the array positive also has
+identical input (6.94/6.87 seconds). These are single observations on a shared
+host. The full cross-crate resource suite passes all eleven checks on the
+candidate, including both untrusted library bodies and every conversion
+helper. Its library takes 368.25 seconds versus 342.97 in the prior accepted
+run, so these observations do not establish a uniform improvement.
+
+Results and source comparisons are under
+`target/stdlib-im5-upgrade255/{baseline,candidate}` and
+`target/stdlib-im5-upgrade255/smoke-comparison.json`. The source manifest covers
+549 fixture, contract and harness files, excluding generated targets.
+The previous cross-crate evidence is retained at
+`target/stdlib-im5-pair-cross248`; unchanged client source hashes and all
+eleven outcomes match the new run.
+
+The standalone prefix run passes both positive proofs, the generic wrong-state
+control and the Pair false-assertion control, but does **not** pass
+`mut_native_resource_pair_prefix_wrong_second`. It reports loop restoration at
+line 18 after 460.82 seconds, instead of the expected assertion at line 44.
+This is an unresolved qualification failure, not a successful negative test.
+The run checks all generated bodies with 600-second program, 30-second
+assertion and 100-millisecond check bounds. A fresh comparison using the old
+frozen binary and unchanged current source reaches the exact expected
+assertion rejection in 268.87 seconds at the same bounds. Its results are in
+`baseline/prefix-wrong-second`; the candidate mismatch remains in
+`candidate/prefix`. All 549 source-manifest hashes still match. This is an
+observed qualification regression; emitted-program variability and solver
+behavior have not been isolated as causes. The fresh Silicon check was
+interrupted when the user directed work back to IM; it has no proof outcome.
+
+Upstream's subsequent, documentation-only
+[timeout investigation](https://github.com/LrWm3/ferrum/blob/26282c2/porting/timeout-followup.md)
+also records incomplete-quantifier failures with selective triggers on a
+different linked-list fixture and remaining allocation-order variability.
+Neither finding establishes the cause of this Prusti control's failure. Do
+not adopt the new pin merely from the faster smoke results.
+
+The old and candidate frozen binaries, candidate dependency patch, logs and
+source manifest remain available for follow-up. A build of earlier performance
+revision `4cda819` was also interrupted at the user's direction; it was not
+qualified. Both dependency files are restored to the old pin. Cancellation
+details are in `target/stdlib-im5-upgrade255/interrupted.json`.
+Routine IM work resumes on the old pin with focused checks, without the full
+verification matrix. When revisiting the upgrade, compare selective triggers
+on/off on the full failing program,
+retaining every result and exact diagnostics; alternatively qualify an earlier
+performance revision before the changed trigger default. Any selected
+revision/configuration needs fresh current iterator/borrow and heavy resource
+qualification. The full stdlib matrix and dual-backend validation remain
+required before merging a later upgrade. No archived known-limit control was
+promoted and no timeout or wrong-obligation rejection counts as a pass.
+
 # Stdlib encoder adoption at afdf10c
 
 The `stdlib/opaque-resource-encoder` branch integrates the tested adapter through

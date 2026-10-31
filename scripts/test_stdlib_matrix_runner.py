@@ -2,6 +2,7 @@ import copy
 import importlib.util
 from pathlib import Path
 import tempfile
+import subprocess
 import unittest
 
 
@@ -11,6 +12,17 @@ spec.loader.exec_module(matrix)
 
 
 class MatrixCoverage(unittest.TestCase):
+    def test_source_manifest_includes_new_regression_sources(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            bins = root / "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin"
+            bins.mkdir(parents=True)
+            source = bins / "new_pass.rs"
+            source.write_text("fn main() {}\n")
+            hashes = matrix.source_manifest(root, ["extern"])
+            self.assertEqual(hashes[source.relative_to(root).as_posix()], matrix.digest(source))
+
     def test_partition_keeps_every_client_once_and_one_library_per_backend(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -52,6 +64,7 @@ class MatrixCoverage(unittest.TestCase):
         changed = dict(hashes)
         changed[next(iter(changed))] = "changed-source"
         self.assertFalse(matrix.assess(data, job, changed, "driver")["complete"])
+        self.assertFalse(matrix.assess(data, job, {}, "driver")["complete"])
         broken = copy.deepcopy(data)
         broken["cases"][-1]["passed"] = False
         report = matrix.assess(broken, job, hashes, "driver")

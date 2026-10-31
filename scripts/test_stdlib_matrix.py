@@ -112,7 +112,8 @@ def assess(data, job, source_hashes, driver_hash):
     )
     prefix = f"prusti-tests/tests/cargo_verify/stdlib_{job['suite']}_spec/src/bin/"
     hashes_match = all(
-        case.get("source_sha256") == source_hashes[prefix + case["case"] + ".rs"]
+        case.get("source_sha256") == source_hashes.get(prefix + case["case"] + ".rs")
+        and prefix + case["case"] + ".rs" in source_hashes
         for case in cases if case["case"] in job["cases"]
     )
     return {"complete": actual == expected and metadata and hashes_match,
@@ -124,7 +125,9 @@ def assess(data, job, source_hashes, driver_hash):
 
 
 def source_manifest(root, suites):
-    tracked = subprocess.check_output(["git", "ls-files", "-z"], cwd=root).decode().split("\0")
+    tracked = subprocess.check_output(
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"], cwd=root,
+    ).decode().split("\0")
     prefixes = ["prusti-contracts/", "rust-toolchain", "viper-toolchain",
                 "scripts/test_stdlib_extern_spec.py"]
     prefixes += [f"prusti-tests/tests/cargo_verify/stdlib_{suite}_spec/" for suite in suites]

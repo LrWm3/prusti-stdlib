@@ -998,12 +998,25 @@ wakes it immediately; newly observed failures reset the interval. It continues
 through failed jobs to preserve a complete baseline. The snapshot keeps fixes
 on `main` from changing an in-flight suite.
 
-The first extern suite has matching failures on both backends: conditional
-expiry fixtures need input selectors, and generic `mem::replace` clients lose
-the indirect resource permission for the second returned tuple field. Diagnose
-and fix these without narrowing the generic type domain or weakening negative
-diagnostics. Rebuild changed encoder code, validate fixes on both backends, then
-qualify the final sources and build; preserve the original failed evidence.
+The first extern suite had seven matching failures on each backend. Investigation
+found two encoder defects: an unused consumed generic marker created a spurious
+expiry stage, and a resource-free lifetime anchor on a generic result hid the
+mutable destination's retained resources. The latter also affected the sequence
+library's `Vec<T>` replacement. Explicit input selectors were initially suspected
+to be necessary, but the existing conditional specifications are valid and have
+been retained unchanged. No generic type bounds or negative diagnostics changed.
+
+The initial dispatcher was stopped between suites after preserving both extern
+results (90/97 each) and sequence/Ferrum (21/22). Fix validation uses a new build
+and copied executables in `/tmp/prusti-stdlib-matrix319-bin`. The extern suite now
+has two additional reference-resource regressions, with all 100 checks passing
+on Ferrum; paired validation is in progress under `fix319b/`. A runner manifest
+bug exposed by these newly added files has also been fixed and unit-tested.
+Completed evidence from `fix319/` is retained and validated before reuse.
+
+After paired validation, commit the fixes and run the complete matrix against
+the final source snapshot and build. Preserve earlier failed runs; do not merge
+old-build results into a claim of final-build matrix qualification.
 
 ### IM0: Reproduce and locate the missing information
 

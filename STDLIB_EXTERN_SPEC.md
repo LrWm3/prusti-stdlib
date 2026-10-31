@@ -1214,6 +1214,39 @@ or upstream benchmark exit status is counted as a local verified pass. See
 [the current upgrade record](prusti-ferrum/VALIDATION.md) for provenance and
 the targeted upstream evidence.
 
+The heavy Ferrum baseline has also exposed a 600-second timeout in
+`mut_native_resource_early_pass` and a wrong-obligation rejection in
+`mut_native_resource_generic_prefix_wrong_state`: the latter fails at the loop
+restoration declaration, before its intended final assertion. These remain
+failed entries. Follow-up 355 repeats each affected family on build 352 and
+Silicon with the same bounds; the complete baseline continues unchanged.
+
+Direct owned-reference controls now exercise `Vec<&mut u32>::into_iter`, a
+write through its yielded reference, owner restoration, and an explicit false
+assertion. Generated contracts reveal a missing ownership model: `IntoIter`
+has raw pointers but no logical remaining-element resources. Conversion returns
+the Vec's entry resources immediately, while `next` can produce an element
+resource. No false assertion has yet been verified in these new controls;
+their paired baseline and candidate checks are required before drawing a
+consistency conclusion.
+
+Candidate 358 adds an owned logical slice and length to `IntoIter`, and ties
+`remaining` to that same slice through an ordinary pure definition. This also
+requires resolving concrete associated return types before constructing their
+resource interface. PCG `967a323` normalizes those definition signatures without
+erasing regions, retaining the original interface when any associated type
+remains opaque. The new missing-flow regression fails before normalization;
+the 250-input corpus, ten shape tests, six projection-map tests, loop test and
+seven opaque-body tests pass afterward. Distinct lifetime origins are checked
+with NLL and Polonius. The PCG changes are pushed to the fork, but are not yet
+the main pin. Build 356's logical-tail-only encoding still omitted the
+associated output resources, so its waiting verifier dispatcher was retired
+without running. Candidate 358 first gates the owned-reference positive and
+exact false control on both backends, then runs the library, owned-loop and
+existing mutable-iterator controls only if that minimum succeeds. This remains
+an unqualified candidate, separate from the optional-slice typing and opaque
+loop-coupling experiments.
+
 A closer reading separates a second generic Vec issue from the current-owner
 handoff. In `open_vec_pass`, the first indexed opening fails at `_tmp14`, before
 any element is replaced. The generated `IndexMut::index_mut` contract returns
@@ -3508,7 +3541,7 @@ unsupported; a hosted CI run is not claimed.
 | **M3: HashMap/HashSet phase complete** | P3-A, P3-B, P2-B expiry support | Map/set contracts and mutable lookup | Passed locally: 51 hash checks cover the modeled core operations and mutable lookup with explicit key laws and same-type queries. |
 | `IterMut` | P2-B and iterator models | Yielded-reference tracking and owner restoration | Core contracts bundled: native construction, forward next, exact length, mutable-slice IntoIterator, simultaneous yields, and source restoration. Whole-prefix loop values and reference-containing elements remain outside this gate. |
 | Functional `IterMut` loops (IM1–IM2) | Native core gate, IM0 | Prefix summaries and functional loop restoration obligations | Focused paired gates pass: symbolic scalar/reference traversal, exact early-break prefix/suffix values, shallow identities, and nonempty consistency controls. Resource loops use explicit state summaries and checked expiry assertions; the longest groups use the documented 600-second proof bound. |
-| Reference-containing slice/Vec elements (IM3–IM4) | Native core gate, IM0 | Indexed referent resources and generic lifetime-resource interfaces | Focused paired gates pass for concrete/generic resources, generic preservation including non-`Copy` referents, single-/two-reference update loops, Vec views, complete Vec loops, exact partial updates through separate-crate slice/Vec clients, and all formerly archived controls. Combined IM5 focused qualification is complete; the full stdlib matrix is deferred. |
+| Reference-containing slice/Vec elements (IM3–IM4) | Native core gate, IM0 | Indexed referent resources and generic lifetime-resource interfaces | Focused paired gates pass for concrete/generic resources, generic preservation including non-`Copy` referents, single-/two-reference update loops, Vec views, complete Vec loops, exact partial updates through separate-crate slice/Vec clients, and all formerly archived controls. Combined IM5 focused qualification is complete; the full stdlib matrix and its regression repairs are in progress. |
 | Adapters, closures, callbacks, general `collect` | Iterator and higher-order contracts | Separate closure/callback and composition work | Deferred from all three gates. |
 | Interior mutability and general nested/recursive collections | Snapshot and ownership extensions beyond IM3–IM5 | Additional modeling and permission support | Deferred; the reference-element plan does not establish unrestricted nested-generic support. |
 | Entry APIs, hash-collection iteration, heterogeneous lookup | M3 and additional models | API-specific state, representative, and borrowed-key contracts | Deferred from M3. |

@@ -2706,6 +2706,43 @@ completeness or qualify an earlier performance revision before retrying the
 upgrade, then rerun the current gates and retain dual-backend validation before
 merging. Detailed evidence is recorded in `prusti-ferrum/VALIDATION.md`.
 
+IM development resumes with the generic cross-crate helper. The initial
+aggregate-only contract verifies its library on Ferrum (93.02 seconds), but
+both backends reject the concrete caller's unchanged-referent assertion
+(`target/stdlib-im5-generic-cross259/ferrum` and
+`target/stdlib-im5-generic-cross260/silicon`). The generic caller's own
+state-sequence equality is insufficient evidence of concrete value transport.
+The concrete test requires a valid index into `&mut [&mut u32]` and reads the
+referent before and after the call; its negative twin asserts a changed value.
+
+The helper now also exports a checked per-element state-preservation
+postcondition with the pure `source[j]` trigger, following the accepted wrapper
+contract. It keeps the whole-sequence and identity guarantees. No trusted
+contract, production encoder change, or client assumption is added. At the new
+`iterator_generic_resources` repository paths, all seven Ferrum checks pass:
+library 219.13 seconds, positive 10.98, false 12.59, wrong referent 36.42, wrong
+state 36.41, plus Rust/runtime checks (`target/stdlib-im5-generic-cross261`).
+Silicon passes the same seven checks: library 298.41 seconds, positive 15.91,
+false 7.72, wrong referent 11.11 and wrong state 22.07. Both use build 229,
+600-second program, 30-second assertion and 100 ms check bounds, full helper
+checking, and one worker. This addition makes the existing
+state frame usable at a concrete call; it does not resolve the separately
+archived direct-loop false control or establish general observer-trigger
+completeness. Full-matrix verification remains deferred at the user's request.
+
+The additional non-`Copy` referent pair instantiates the same verified helper
+with `&mut Owned`, where `Owned(u32)` has no `Copy` implementation. Its positive
+checks unchanged identity and field value at an arbitrary valid index, while
+the negative asserts a changed field value. Both focused runs pass all four
+checks (`target/stdlib-im5-generic-cross263`): positive/wrong-value timings are
+9.55/4.75 seconds on Ferrum and 15.72/9.80 on Silicon, plus Rust/runtime checks.
+The helper's source is unchanged. The qualification audit checks source and
+driver hashes and all 22 outcomes across the two groups and backends. This
+closes the generic cross-crate state-preservation proof for the demonstrated
+concrete instances, including non-`Copy` referents. Exact early-break framing,
+Vec resource integration, archived standalone controls, and the deferred
+combined matrix remain open.
+
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification
 suites at acceptance. Run PCG shape tests and the numbered corpus whenever

@@ -8,6 +8,7 @@ From the repository root, after building Prusti:
     ./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite borrow
     ./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite iterator
     ./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite iterator_resources
+    ./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite iterator_generic_resources
     ./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite hash
     ./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite resources
 
@@ -128,7 +129,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--log-dir", type=Path, help="dedicated output directory for this run or shard")
     parser.add_argument("--release", action="store_true", help="use release Prusti binaries")
-    parser.add_argument("--suite", choices=("extern", "sequence", "vec", "collections", "borrow", "iterator", "iterator_resources", "hash", "resources"), default="extern")
+    parser.add_argument("--suite", choices=("extern", "sequence", "vec", "collections", "borrow", "iterator", "iterator_resources", "iterator_generic_resources", "hash", "resources"), default="extern")
     parser.add_argument("--backend", choices=("Silicon", "Ferrum"), default="Silicon", help="verification backend; requires a driver built with that backend")
     parser.add_argument("--case", action="append", help="select binary names by glob; may be repeated")
     parser.add_argument("--skip-library", action="store_true", help="verify selected clients without separately verifying the spec library")
@@ -261,7 +262,7 @@ def main():
             if args.suite == "extern":
                 run("rust-core-only", ["cargo", "check", "-p", "stdlib_core_only"], env)
                 run("core-only", [str(prusti), "-p", "stdlib_core_only"], env)
-            library = {"extern": "stdlib_specs", "sequence": "sequence_specs", "vec": "vec_specs", "collections": "collection_specs", "borrow": "borrow_specs", "iterator": "iterator_specs", "iterator_resources": "iterator_resource_specs", "hash": "key_specs", "resources": "resource_specs"}[args.suite]
+            library = {"extern": "stdlib_specs", "sequence": "sequence_specs", "vec": "vec_specs", "collections": "collection_specs", "borrow": "borrow_specs", "iterator": "iterator_specs", "iterator_resources": "iterator_resource_specs", "iterator_generic_resources": "iterator_generic_resource_specs", "hash": "key_specs", "resources": "resource_specs"}[args.suite]
             if not args.skip_library:
                 run("spec-library", [str(prusti), "-p", library], env)
             positive = [p for p in sources if p.stem == "pass" or p.stem.endswith("_pass")]

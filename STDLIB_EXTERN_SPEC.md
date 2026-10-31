@@ -2743,6 +2743,26 @@ concrete instances, including non-`Copy` referents. Exact early-break framing,
 Vec resource integration, archived standalone controls, and the deferred
 combined matrix remain open.
 
+The minimal Vec probes now isolate the missing ownership model before any
+iterator is constructed. `im5_vec_ref_read` reads a valid referent through
+`&mut Vec<&mut u32>`; `im5_vec_ref_view` updates it through `as_mut_slice` and
+reads it through the Vec again. Both compile and run, but both backends report
+`application.precondition:insufficient.permission` at the Vec referent read,
+currently surfaced as an internal error. Ferrum takes 6.68/1.97 seconds and
+Silicon 11.73/7.97 (`target/stdlib-im5-vec262`, build 229, 180-second bounds).
+The emitted entry contract has Vec storage permission but no indexed inner
+referent permissions. Retain these as positive `known_limits` probes, not
+expected-error successes, and defer the larger Vec loop until they work.
+
+The Vec implementation must give the owner a logical initialized-element
+projection, tied to its contents and length, with the same indexed referent
+resources used by slices. Slice-view construction and expiry must transfer
+and return those resources; shared snapshots must not manufacture them.
+Preserve the conservative raw-pointer ownership guard. First close the two
+small probes with wrong-value/false controls, then the native Vec loop and
+framing checks. In parallel with this diagnosis, a focused Ferrum run of the
+unchanged exact early-break probe is in progress; no full matrix is scheduled.
+
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification
 suites at acceptance. Run PCG shape tests and the numbered corpus whenever

@@ -485,12 +485,24 @@ are deliberately outside the accepted `src/bin` suite:
 | --- | --- | --- |
 | `im5_early_break_frame` | Set exactly the first `limit` referents to 7 and preserve every suffix value and element identity. | The original probe fails with `assert.failed:wand.not.found` on Silicon (428.60 seconds, build 221). |
 | `im5_vec_resource_loop` | Update every referent through `Vec<&mut u32>::as_mut_slice()`, then prove the update through the Vec again. | The corrected temporary probe encodes with build 229; no successful full proof is claimed. |
+| `im5_vec_ref_read` | Read an arbitrary valid referent through `&mut Vec<&mut u32>`, without a slice view or iterator. | Both backends report missing permission at the read with build 229. |
+| `im5_vec_ref_view` | Update a referent through `as_mut_slice`, then read its value through the Vec. | Both backends report missing permission at the final Vec read with build 229. |
 
 The early-break runtime checks zero, partial, and full traversal; the Vec
 runtime checks empty and nonempty input. Rust compilation and both runtimes pass at these
 repository paths. The trusted `main` functions supply runtime exercises only;
 each symbolic `visit` body remains untrusted. These checks do not establish
 the required proofs, and the earlier proof results predate these paths.
+
+The two minimal Vec probes pass Rust compilation and runtime checks at their
+repository paths. Full-program Ferrum checks fail in 6.68/1.97 seconds and
+Silicon checks fail in 11.73/7.97 seconds, respectively, at the 180-second
+program bound (`target/stdlib-im5-vec262/{ferrum,silicon}`). Both report
+`application.precondition:insufficient.permission`, currently backtranslated
+as an internal error. These are positive probes with unresolved proofs.
+The generated `m_read` precondition owns the Vec storage but has no indexed
+referent resources. This isolates a Vec ownership-model gap before iteration;
+raising the loop timeout cannot supply the missing permissions.
 
 After rebuilding the current branch with Ferrum, run a single probe with a
 fresh Cargo target, for example:
@@ -531,8 +543,10 @@ seconds. That earlier-obligation error does not satisfy the expected
 diagnostic. These complete-program results use the same 600-second program,
 30-second assertion, and 100 ms check budgets and are retained under
 `target/stdlib-im5-generic251/{ferrum,silicon}`. The wrong-state control is
-unconditional; a planned nonempty cross-crate control will additionally check
-consistency when element resources are present.
+unconditional. The separate `iterator_generic_resources` suite now supplies
+nonempty concrete wrong-value controls for both `u32` and non-`Copy` referents,
+paired with successful positives on both backends; it does not resolve the
+direct-loop false control retained here.
 
 The `mut_native_resource_pair_prefix_bad_state` and
 `mut_native_resource_pair_prefix_wrong_first` binaries preserve two unresolved

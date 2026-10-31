@@ -179,6 +179,14 @@ name = "im5_vec_resource_loop"
 path = "im5_vec_resource_loop.rs"
 
 [[bin]]
+name = "im5_vec_ref_read"
+path = "im5_vec_ref_read.rs"
+
+[[bin]]
+name = "im5_vec_ref_view"
+path = "im5_vec_ref_view.rs"
+
+[[bin]]
 name = "mut_native_resource_pair_prefix_bad_state"
 path = "mut_native_resource_pair_prefix_bad_state.rs"
 

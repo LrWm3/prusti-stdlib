@@ -188,8 +188,15 @@ where
     pub from_to_vars: FromToVars<'vir>,
     pub loop_snapshot_frames: Vec<LoopSnapshotFrame<'vir>>,
     pub loop_restoration_frames: FxHashMap<mir::BasicBlock, LoopRestorationFrame<'vir>>,
-    pub array_resource_captures:
-        FxHashMap<(Place<'vir>, Place<'vir>, usize), (vir::ExprInt<'vir>, vir::ExprBool<'vir>)>,
+    pub array_resource_captures: FxHashMap<
+        (
+            Place<'vir>,
+            Option<LifetimeProjectionLabel>,
+            Place<'vir>,
+            usize,
+        ),
+        (vir::ExprInt<'vir>, vir::ExprBool<'vir>),
+    >,
     pub pending_array_closures: Vec<vir::Stmt<'vir>>,
 
     // for the current basic block
@@ -1335,8 +1342,12 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             visitor.pcs_unblock_actions(borrows_state, &mut footprint, &mut Vec::new())
         })?;
         let mut script = Vec::new();
-        if !footprint.parts.is_empty() {
-            script.push(self.vcx.mk_assert_stmt(self.vcx.mk_conj(&footprint.parts)));
+        for part in footprint.parts {
+            // Historical expansions can require the same exposed resource.
+            // Check each footprint separately instead of demanding duplicate
+            // ownership in a separating conjunction. The subsequent actions
+            // and the wand consequent still check every resource they consume.
+            script.push(self.vcx.mk_assert_stmt(part));
         }
         script.extend(unblock);
         Ok(script)

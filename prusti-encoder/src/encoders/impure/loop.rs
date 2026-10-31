@@ -443,8 +443,11 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 self.current_span(),
             ));
         };
+        // Distinguish successive openings of the same slot. Its lifetime
+        // label remains with the expansion when collapse labels its places.
         let capture_key = (
             base.base().place(),
+            base.label(),
             element.base().place(),
             element.region_idx().index(),
         );

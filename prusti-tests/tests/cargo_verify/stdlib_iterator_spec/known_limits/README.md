@@ -483,14 +483,11 @@ are deliberately outside the accepted `src/bin` suite:
 
 | Binary | Required proof | Current evidence |
 | --- | --- | --- |
-| `im5_generic_state_loop` | Traverse `&mut [T]` without changing identities or any referent state, with no `Copy` or equality bound. | The original probe fails its restoration annotation on Silicon (342.06 seconds, build 221). |
 | `im5_early_break_frame` | Set exactly the first `limit` referents to 7 and preserve every suffix value and element identity. | The original probe fails with `assert.failed:wand.not.found` on Silicon (428.60 seconds, build 221). |
 | `im5_vec_resource_loop` | Update every referent through `Vec<&mut u32>::as_mut_slice()`, then prove the update through the Vec again. | The corrected temporary probe encodes with build 229; no successful full proof is claimed. |
 
-The generic runtime exercises owned non-`Copy`, shared-reference,
-mutable-reference, zero-sized, and empty inputs. The early-break runtime
-checks zero, partial, and full traversal; the Vec runtime checks empty and
-nonempty input. Rust compilation and all three runtimes pass at these
+The early-break runtime checks zero, partial, and full traversal; the Vec
+runtime checks empty and nonempty input. Rust compilation and both runtimes pass at these
 repository paths. The trusted `main` functions supply runtime exercises only;
 each symbolic `visit` body remains untrusted. These checks do not establish
 the required proofs, and the earlier proof results predate these paths.
@@ -499,7 +496,7 @@ After rebuilding the current branch with Ferrum, run a single probe with a
 fresh Cargo target, for example:
 
 ```sh
-probe_target=$(mktemp -d /tmp/prusti-im5-generic.XXXXXX)
+probe_target=$(mktemp -d /tmp/prusti-im5-early-break.XXXXXX)
 CARGO_TARGET_DIR="$probe_target" PRUSTI_VERIFY_MODE=verify \
 PRUSTI_VIPER_BACKEND=Ferrum PRUSTI_NO_VERIFY_DEPS=true \
 PRUSTI_ENABLE_CACHE=false PRUSTI_CHECK_OVERFLOWS=true \
@@ -507,7 +504,7 @@ PRUSTI_CHECK_PANICS=true PRUSTI_ASSERT_TIMEOUT=30000 \
 PRUSTI_EXTRA_VERIFIER_ARGS='--timeout=600 --numberOfParallelVerifiers 1 --parallelizeBranches=false --proverEnableTimeBounds' \
 ./x.py exec "$PWD/target/debug/cargo-prusti" \
   --manifest-path prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/Cargo.toml \
-  --bin im5_generic_state_loop
+  --bin im5_early_break_frame
 ```
 
 Substitute the appropriate rebuilt executable path when using a separate
@@ -517,6 +514,25 @@ These commands check the full generated program, including conversion
 helpers. Use the exact diagnostic and location to assess a negative control;
 a timeout, crash, or unrelated error is not evidence that its assertion was
 rejected correctly.
+
+The former `im5_generic_state_loop` probe moves to `src/bin` as
+`mut_native_resource_generic_prefix_pass`, with a wrong-state control
+alongside it. Before promotion, its unchanged proof passes on
+Ferrum (190.62 seconds) and Silicon (309.28 seconds) with build 229 and a
+100 ms check budget, plus Rust/runtime checks
+(`target/stdlib-im5-generic249/{ferrum,silicon}`). The original build-221
+restoration failure at 342.06 seconds remains recorded in the plan; the new
+result does not establish the cause of that earlier failure. Final-path
+validation passes for both cases on both backends. The separate
+`mut_native_resource_generic_prefix_false` control stays here: at its former
+`src/bin` path, Ferrum rejects the intended post-loop assertion in 152.87
+seconds, but Silicon instead fails the restoration annotation in 573.47
+seconds. That earlier-obligation error does not satisfy the expected
+diagnostic. These complete-program results use the same 600-second program,
+30-second assertion, and 100 ms check budgets and are retained under
+`target/stdlib-im5-generic251/{ferrum,silicon}`. The wrong-state control is
+unconditional; a planned nonempty cross-crate control will additionally check
+consistency when element resources are present.
 
 The `mut_native_resource_pair_prefix_bad_state` and
 `mut_native_resource_pair_prefix_wrong_first` binaries preserve two unresolved

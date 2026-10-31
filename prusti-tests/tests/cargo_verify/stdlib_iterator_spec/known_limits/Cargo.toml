@@ -171,10 +171,6 @@ name = "im4_holder_restoration_wrong"
 path = "im4_holder_restoration_wrong.rs"
 
 [[bin]]
-name = "im5_generic_state_loop"
-path = "im5_generic_state_loop.rs"
-
-[[bin]]
 name = "im5_early_break_frame"
 path = "im5_early_break_frame.rs"
 
@@ -189,3 +185,7 @@ path = "mut_native_resource_pair_prefix_bad_state.rs"
 [[bin]]
 name = "mut_native_resource_pair_prefix_wrong_first"
 path = "mut_native_resource_pair_prefix_wrong_first.rs"
+
+[[bin]]
+name = "mut_native_resource_generic_prefix_false"
+path = "mut_native_resource_generic_prefix_false.rs"

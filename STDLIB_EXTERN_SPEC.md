@@ -2645,6 +2645,43 @@ checks all fixture/manifest hashes, the rebuilt driver, full-library selection,
 and all 22 exact outcomes. This closes the cross-crate two-reference wrapper
 proof; the separately recorded standalone control failures remain unresolved.
 
+The unchanged generic state-preserving loop also passes with build 229 at its
+original `known_limits/im5_generic_state_loop.rs` path: 190.62 seconds on
+Ferrum and 309.28 on Silicon, plus Rust/runtime checks
+(`target/stdlib-im5-generic249/{ferrum,silicon}`). Both runs use the established
+600-second program, 30-second assertion, and 100 ms check budgets and verify
+every generated helper. The proof needs neither `Copy` nor an equality bound
+on `T`; it preserves the full referent-state sequence and shallow element
+identities. The earlier Silicon restoration failure remains part of the
+evidence, without a claim that these runs isolate its cause. The alternative
+aggregate-invariant draft was not needed or executed. Promotion adds a
+post-loop false control and an incorrect final-state inequality, followed by
+paired validation at their final paths.
+
+At the promoted paths, the generic positive and wrong-state control reach
+their expected outcomes on both backends (`target/stdlib-im5-generic251`).
+Ferrum takes 142.16/198.56 seconds; Silicon takes 114.01/434.42 seconds.
+Rust compilation and the generic runtime also pass. The false control is
+rejected at its intended assertion by Ferrum (152.87 seconds), but Silicon
+fails the earlier restoration annotation (573.47 seconds). Preserve that
+unresolved case in `known_limits`, with its original expected diagnostic;
+it does not pass the consistency gate. The other two sources are retained in
+the regular suite. No production encoder change was needed for these results.
+
+The next generic prototype verifies the loop in an untrusted library and
+exports identity plus whole-state preservation to separate clients. Its
+wrong-state client is guarded by nonempty input, so rejection must exercise
+element resources. It is prepared but not yet verified; the direct false
+control remains open regardless of the prototype's eventual outcome.
+
+The user has authorized a Ferrum performance upgrade at this checkpoint.
+Preserve the old build and all results, review the newer revision's changes,
+rebuild this branch with the new pin, and qualify current positive/negative
+iterator and borrow cases before adopting it. Keep one worker, branch
+parallelism off, and Silicon checks for changed specifications, negatives,
+and backend differences. Compare matching sources and bounds; upstream
+benchmark results do not qualify this branch or the full stdlib matrix.
+
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification
 suites at acceptance. Run PCG shape tests and the numbered corpus whenever
@@ -2732,8 +2769,8 @@ unsupported; a hosted CI run is not claimed.
 | P3-B: core hash collection operations | P3-A, P2-B expiry support | Conditional map/set contracts and mutable value restoration | Passed locally within the modeled key domain, including generic, non-`Copy`, collision, and negative clients. |
 | **M3: HashMap/HashSet phase complete** | P3-A, P3-B, P2-B expiry support | Map/set contracts and mutable lookup | Passed locally: 51 hash checks cover the modeled core operations and mutable lookup with explicit key laws and same-type queries. |
 | `IterMut` | P2-B and iterator models | Yielded-reference tracking and owner restoration | Core contracts bundled: native construction, forward next, exact length, mutable-slice IntoIterator, simultaneous yields, and source restoration. Whole-prefix loop values and reference-containing elements remain outside this gate. |
-| Functional `IterMut` loops (IM1–IM2) | Native core gate, IM0 | Prefix summaries and functional loop restoration obligations | Planned: symbolic full-traversal and early-break value/framing proofs, followed by combined acceptance in IM5. |
-| Reference-containing slice/Vec elements (IM3–IM4) | Native core gate, IM0 | Indexed referent resources and generic lifetime-resource interfaces | Planned: concrete and cross-crate generic reference shapes; combine with functional loops in IM5 before extending the support claim. |
+| Functional `IterMut` loops (IM1–IM2) | Native core gate, IM0 | Prefix summaries and functional loop restoration obligations | In progress: symbolic scalar traversal/early-break proofs and reference-state full traversals pass. Exact early-break referent framing and combined IM5 acceptance remain open. |
+| Reference-containing slice/Vec elements (IM3–IM4) | Native core gate, IM0 | Indexed referent resources and generic lifetime-resource interfaces | In progress: concrete and generic slice resources, generic state-preserving loops, and cross-crate single-/two-reference update loops pass focused proofs. Vec resource integration, unresolved controls, and combined IM5 acceptance remain open. |
 | Adapters, closures, callbacks, general `collect` | Iterator and higher-order contracts | Separate closure/callback and composition work | Deferred from all three gates. |
 | Interior mutability and general nested/recursive collections | Snapshot and ownership extensions beyond IM3–IM5 | Additional modeling and permission support | Deferred; the reference-element plan does not establish unrestricted nested-generic support. |
 | Entry APIs, hash-collection iteration, heterogeneous lookup | M3 and additional models | API-specific state, representative, and borrowed-key contracts | Deferred from M3. |

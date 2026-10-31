@@ -51,8 +51,8 @@ shallow identities. The four-argument form additionally records a
 `Seq<ResourceState>` captured while each yielded element is accessible.
 `mut_native_resource_prefix_*` proves that a symbolic traversal sets every
 referenced value to 7 and rejects an incorrect recorded state, a wrong final
-value, and `false` after traversal. Exact early-break suffix framing, generic
-combined loops, and their Vec views remain open. A separate untrusted
+value, and `false` after traversal. Exact early-break suffix framing and
+Vec views remain open. A separate untrusted
 `iterator_resources` library already covers the concrete single-reference
 loop across crates. Solver
 configuration and
@@ -81,6 +81,20 @@ and fabricated-state controls remain in `known_limits`: their original
 runs encounter wand-matching errors or a timeout, as recorded in the plan.
 These unresolved controls and the longer proof budgets limit this checkpoint;
 the complete wrapper and IM5 gates are not declared finished.
+
+The `mut_native_resource_generic_prefix_{pass,wrong_state}` cases
+exercise whole-prefix preservation for `&mut [T]`, without `Copy` or equality
+bounds. The positive captures the initial referent-state sequence and proves
+that both it and the element identities survive a symbolic native traversal.
+Runtime cases include empty input, owned non-`Copy` values, shared references,
+mutable references, and zero-sized elements. The wrong-state control
+incorrectly claims the final state sequence differs from its initial value.
+Both cases reach their expected outcomes on Ferrum and Silicon with build 229
+(`target/stdlib-im5-generic251`). The separate post-loop false control remains
+in `known_limits`: Ferrum rejects its assertion, but Silicon fails an earlier
+restoration obligation. Select the accepted group with
+`--case 'mut_native_resource_generic_prefix_*'` and the same proof bounds
+shown above.
 
 `sequence_resource_states(&elements)` captures all indexed referent states
 in a ghost `Seq<ResourceState>`. It requires the corresponding permissions;

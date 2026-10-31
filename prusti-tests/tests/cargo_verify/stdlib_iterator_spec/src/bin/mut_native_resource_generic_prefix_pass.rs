@@ -1,4 +1,3 @@
-// Open IM5 proof probe; see this directory's README for current evidence.
 use prusti_contracts::*;
 
 fn visit<T>(values: &mut [T]) {

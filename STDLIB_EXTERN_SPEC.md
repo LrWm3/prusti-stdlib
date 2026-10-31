@@ -2607,6 +2607,44 @@ proof. A prepared prototype passes Rust runtime and encoding checks only;
 its library and client proofs are still required. Materializing outer heap
 captures remains a diagnostic hypothesis, not an implemented fix.
 
+The cross-crate wrapper prototype now passes all seven checks on both
+backends (`target/stdlib-im5-pair-cross247/{ferrum,silicon}`, build 229).
+Its untrusted `copy_pair_values` helper copies both values from an arbitrary
+exemplar into every element of `&mut [Pair<'_, '_>]`. The contract preserves
+element and exemplar identities, preserves the exemplar's resource state,
+and exports a quantified final-state equality with the pure `source[j]`
+trigger. The loop explicitly preserves the exemplar's shallow snapshot as
+well as its referent state. No new trusted contract or encoder change is
+needed. The preceding drafts failed a resource-state observation (probe 243)
+and an implicit returned-permission postcondition (probe 245); neither counts
+as acceptance.
+
+With matching 600-second program, 30-second assertion, and 100 ms check
+budgets, the complete library proof takes 256.34 seconds on Ferrum and 297.51
+on Silicon. The positive client takes 6.19/13.76 seconds; the false,
+wrong-first, and wrong-second controls reach their exact assertion rejections
+in 3.92/8.57, 7.70/12.62, and 15.01/12.77 seconds, respectively. Rust and
+empty/nonempty runtime checks also pass. All generated helper bodies are
+checked, with one worker, disabled caches, and Ferrum branch parallelism off.
+The next validation integrates this helper and its four clients into the
+existing `iterator_resources` library at repository paths and rechecks the
+whole suite. The separate fabricated-state control, generic state loop,
+early-break frame, Vec restoration, and combined matrix remain open.
+
+The expanded `iterator_resources` suite then passes all 11 checks on each
+backend at its final repository paths
+(`target/stdlib-im5-pair-cross248/{ferrum,silicon}`). The combined library,
+including both untrusted helper bodies and all conversion helpers, takes
+342.97 seconds on Ferrum and 390.68 on Silicon. The new wrapper positive,
+false, wrong-first, and wrong-second clients take 4.79/89.89, 3.14/9.28,
+6.03/12.91, and 5.29/23.62 seconds, respectively. The existing single-reference
+positive and both controls also pass, as do Rust compilation and both
+runtimes. The same build and matching proof bounds are used throughout.
+The source/artifact audit in `target/stdlib-im5-pair-cross248/qualification.json`
+checks all fixture/manifest hashes, the rebuilt driver, full-library selection,
+and all 22 exact outcomes. This closes the cross-crate two-reference wrapper
+proof; the separately recorded standalone control failures remain unresolved.
+
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification
 suites at acceptance. Run PCG shape tests and the numbered corpus whenever

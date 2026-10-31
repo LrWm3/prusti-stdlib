@@ -42,6 +42,12 @@ pub(crate) type CallWand<'vir> = (
     Vec<vir::Stmt<'vir>>,
 );
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ResourceStage {
+    Storage,
+    Nested,
+}
+
 /// Encodes the magic wands given a function signature.
 pub struct WandEnc;
 
@@ -143,7 +149,12 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
                         .actions(self.pcg_ctxt())
                         .unwrap()
                         .iter()
-                        .filter(|a| !opaque_action(a.edge()))
+                        .filter(|a| !opaque_action(a.edge())
+                            && !matches!(a.edge().kind(), BorrowPcgEdgeKind::Coupled(
+                                pcg::coupling::PcgCoupledEdgeKind(
+                                    pcg::borrow_pcg::edge::abstraction::FunctionCallOrLoop::FunctionCall(_)
+                                )
+                            )))
                         .map(|a| a.edge().clone()),
                 );
             }
@@ -177,13 +188,19 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
                     (root, resources.into_iter().collect())
                 })
                 .collect();
-            let mut package_script = self.pcs_package_script_filtered(
+            let stage = self
+                .wands
+                .resource_stage(&wand_data, None, self.vcx, self.deps);
+            let previous_stage = std::mem::replace(&mut self.package_resource_stage, stage);
+            let package_script = self.pcs_package_script_filtered(
                 final_borrow_state,
                 rhs,
                 label,
                 &prior_edges,
                 |edge| restores_opaque || !opaque_action(edge),
-            )?;
+            );
+            self.package_resource_stage = previous_stage;
+            let mut package_script = package_script?;
 
             for EncodedPledge {
                 expiry_postcondition,
@@ -249,6 +266,70 @@ pub struct WandEncOutput<'vir> {
 pub type WandCallContext<'vir> = Option<GArgs<'vir>>;
 
 impl<'vir> WandEncOutput<'vir> {
+    /// Classify a stage by the resource-bearing inputs it consumes. Mixed
+    /// stages retain the full checked script; they cannot be split here.
+    pub(crate) fn resource_stage<E: TaskEncoder>(
+        &self,
+        wand: &WandData<'vir>,
+        call: Option<(&[ty::Ty<'vir>], ty::Ty<'vir>)>,
+        vcx: &'vir vir::VirCtxt<'vir>,
+        deps: &mut TaskEncoderDependencies<'vir, E>,
+    ) -> Option<ResourceStage> {
+        let mapping = if let Some((arguments, result)) = call {
+            Some(
+                self.function_data
+                    .call_projection_map(arguments, result, vcx.tcx())
+                    .ok()?,
+            )
+        } else {
+            None
+        };
+        let mut stage = None;
+        for node in &wand.lhs {
+            let Some(predicates) = self.predicates_for_function_shape_node(vcx, deps, *node, None)
+            else {
+                continue;
+            };
+            // Instantiation can turn an opaque T into an outer &mut. Use the
+            // call's actual projections, not its definition's generic slots.
+            let projections = if let (Some(mapping), Some((arguments, result))) = (&mapping, call) {
+                mapping
+                    .call_nodes(*node)?
+                    .iter()
+                    .map(|mapped| {
+                        let ty = if mapped.mir_local() == mir::RETURN_PLACE {
+                            result
+                        } else {
+                            arguments[mapped.mir_local().index() - 1]
+                        };
+                        (ty, mapped.region_idx().index())
+                    })
+                    .collect::<Vec<_>>()
+            } else {
+                vec![(node.ty(self.fn_sig(vcx, None)), node.region_idx().index())]
+            };
+            for (ty, index) in projections {
+                let storage =
+                    index == 0 && matches!(ty.kind(), ty::TyKind::Ref(_, _, ty::Mutability::Mut));
+                // One deduplicated lifetime can cover both storage and inner
+                // references. Such a group must retain its complete script.
+                if storage && predicates.len() > 1 {
+                    return None;
+                }
+                let current = if storage {
+                    ResourceStage::Storage
+                } else {
+                    ResourceStage::Nested
+                };
+                if stage.is_some_and(|previous| previous != current) {
+                    return None;
+                }
+                stage = Some(current);
+            }
+        }
+        stage
+    }
+
     pub(crate) fn fn_sig(
         &self,
         vcx: &'vir vir::VirCtxt<'vir>,
@@ -576,8 +657,8 @@ impl<'vir> WandEncOutput<'vir> {
             if selected.is_some_and(|ids| !ids.contains(&id)) {
                 continue;
             }
-            let bindings = materialize
-                .then(|| &*visitor.vcx.alloc(std::cell::RefCell::new(Vec::new())));
+            let bindings =
+                materialize.then(|| &*visitor.vcx.alloc(std::cell::RefCell::new(Vec::new())));
             let Some(mut wand) = self.mk_wand(
                 wand_data,
                 args,
@@ -616,7 +697,8 @@ impl<'vir> WandEncOutput<'vir> {
             }
             let signature = RustSignature::new(self.function_data.def_id());
             let mut convert = |node: FunctionShapeNode<Generalized>,
-                               pack|
+                               pack,
+                               heap|
              -> EncodeResult<'vir, Vec<vir::Stmt<'vir>>, E> {
                 let source = if node.mir_local() == mir::RETURN_PLACE {
                     signature.output
@@ -637,22 +719,27 @@ impl<'vir> WandEncOutput<'vir> {
                                 actual: source.decompose_normalize(call_ctx),
                                 selected: Some(opaque.ty(visitor.vcx.tcx())),
                             })?;
-                    Ok(conversion.at_snapshot_on_heap(
-                        args[node.mir_local()],
-                        pack,
-                        if pack { label_post } else { label_pre },
-                    ))
+                    Ok(conversion.at_snapshot_on_heap(args[node.mir_local()], pack, heap))
                 } else {
                     Ok(Vec::new())
                 }
             };
             let mut before = Vec::new();
             for node in &wand_data.lhs {
-                before.extend(convert(*node, true)?);
+                before.extend(convert(*node, true, label_post)?);
+            }
+            // A preceding stage returned these resources in the caller's
+            // representation. Repack the frame on its original input heap
+            // before passing it through the next generic restoration stage.
+            for node in &wand_data.frames {
+                before.extend(convert((*node).into(), true, label_pre)?);
             }
             let mut after = Vec::new();
             for node in &wand_data.rhs {
-                after.extend(convert((*node).into(), false)?);
+                after.extend(convert((*node).into(), false, label_pre)?);
+            }
+            for node in &wand_data.frames {
+                after.extend(convert((*node).into(), false, label_pre)?);
             }
             wands.push((id, wand, before, after));
         }
@@ -766,9 +853,21 @@ impl<'vir> WandEncOutput<'vir> {
             if !sources.iter().all(|node| inputs.contains(node))
                 || !targets.iter().all(|node| outputs.contains(node))
             {
-                return Err(
-                    "function-call edge covers only part of a restoration obligation".to_string(),
-                );
+                let list = |nodes: &[FunctionShapeNode]| {
+                    nodes
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                };
+                return Err(format!(
+                    "function-call edge covers only part of a restoration obligation \
+                     (wand {id}: [{}] -> [{}]; edge: [{}] -> [{}])",
+                    list(&sources),
+                    list(&targets),
+                    list(inputs),
+                    list(outputs),
+                ));
             }
             selected.push(id);
         }
@@ -930,13 +1029,22 @@ impl<'vir> WandEncOutput<'vir> {
     }
 }
 
-/// A physical frame must preserve its stored snapshot as well as permission.
-/// Indirect mutable-reference leaves are represented by `p_Param`.
+/// A frame preserves its heap state as well as permission. Mutable-reference
+/// leaves use `p_Param`; opaque groups expose a recursive resource state.
 fn physical_frame<'vir>(
     vcx: &'vir vir::VirCtxt<'vir>,
     resources: vir::ExprBool<'vir>,
 ) -> vir::ExprBool<'vir> {
     match resources.kind {
+        vir::ExprKindData::PredicateApp(app) if app.target == "indirect_resources" => {
+            let state = crate::encoders::ty::resources::state_function("indirect_resource_state")
+                .call()(
+                app.args[0].downcast_ty(),
+                app.args[1].downcast_ty(),
+                app.args[2].downcast_ty(),
+            );
+            vcx.mk_eq_expr(state, vcx.mk_old_lhs_expr(state))
+        }
         vir::ExprKindData::PredicateApp(app) => {
             assert_eq!(
                 app.target, "p_Param",
@@ -1079,24 +1187,14 @@ impl TaskEncoder for WandEnc {
             let pledges = spec.pledges;
             let wands: Vec<WandData<'vir>> = coupled_edges
                 .into_iter()
-                .filter_map(|hyper_edge| {
-                    let (sources, mut targets) = hyper_edge.into_tuple();
-                    // We don't want to emit an identity wand, like P --* P. This can happen when
-                    // PCG returns self-edges, like for fn(x: &'a mut &'b i32) where 'b is in
-                    // invariant position and we therefore have an edge x|'b -> x|'b.
-                    // Currently, these edges also prevent us from emitting indirect postconditions.
-                    // TODO: we might want to emit these identity wands in the future to attach functional
-                    // specifications to them. We still need to emit the resources on the wand's LHS.
-                    let mut sources_as_nodes = sources
-                        .iter()
-                        .map(|&s| s.to_function_shape_node())
-                        .collect::<Vec<_>>();
-                    sources_as_nodes.sort();
-                    targets.sort();
-                    if sources_as_nodes == targets {
-                        return None;
-                    }
-                    Some(WandData::new(targets, sources, pledges.clone()))
+                .map(|hyper_edge| {
+                    let (sources, targets) = hyper_edge.into_tuple();
+                    // Equal signature nodes need not denote equal resources:
+                    // a mutable argument can contain different references on
+                    // return. Keep its post-call resources and the obligation
+                    // to restore its pre-call resources distinct. Selection
+                    // below removes outputs belonging to consumed arguments.
+                    WandData::new(targets, sources, pledges.clone())
                 })
                 .collect();
             let mut output: WandEncOutput<'vir> = WandEncOutput {
@@ -1336,6 +1434,20 @@ impl<'vir> WandEncOutput<'vir> {
             selected = *target;
         }
         let lifetime = if opaque {
+            // `self[_]` names a collection's element resources. Vec also
+            // contains an allocator parameter, which is not an element.
+            let mut collection = selected;
+            while let ty::TyKind::Ref(_, inner, _) = collection.kind() {
+                collection = *inner;
+            }
+            if let ty::TyKind::Adt(_, args) = collection.kind()
+                && RustTyDecomposition::from_ty(collection, self.g_params(vcx, None))
+                    .ty
+                    .special
+                    == crate::encoders::ty::RustTySpecial::Vec
+            {
+                selected = args.type_at(0);
+            }
             let regions: IndexVec<_, GeneralizedLifetime<'vir>> =
                 vcx.tcx().extract_regions(selected);
             let groups = regions

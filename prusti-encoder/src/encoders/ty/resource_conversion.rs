@@ -25,6 +25,8 @@ pub(crate) struct ResourceConversion<'vir> {
     kind: ConversionKind<'vir>,
     trivial_resources: bool,
     indexed: IndexedResources<'vir>,
+    owned_slice: Option<super::owned_slice::OwnedSlice<'vir>>,
+    owned_typing: Option<super::owned_slice::OwnedSliceTyping<'vir>>,
 }
 
 type Fields<'vir> = Vec<(TyUsePureField<'vir>, &'vir ResourceConversion<'vir>)>;
@@ -111,7 +113,10 @@ impl<'vir> ResourceConversion<'vir> {
                         .map(|(i, (field, nested))| {
                             nested.observe_at(
                                 field.read(snapshot.downcast_ty()),
-                                self.unit.lazy(),
+                                self.owned_slice
+                                    .as_ref()
+                                    .filter(|slice| slice.index == i)
+                                    .map_or(self.unit.lazy(), |slice| slice.metadata(snapshot)),
                                 index,
                                 child_path(path, i),
                             )
@@ -266,7 +271,10 @@ impl<'vir> ResourceConversion<'vir> {
                         .map(|(i, (field, nested))| {
                             nested.resources_at(
                                 field.read(snapshot.downcast_ty()),
-                                self.unit,
+                                self.owned_slice
+                                    .as_ref()
+                                    .filter(|slice| slice.index == i)
+                                    .map_or(self.unit, |slice| slice.metadata(snapshot)),
                                 index,
                                 child_path(path, i),
                             )
@@ -333,6 +341,9 @@ impl<'vir> ResourceConversion<'vir> {
         pack: bool,
     ) -> Vec<vir::Stmt<'vir>> {
         let mut statements = Vec::new();
+        if pack && let Some(typing) = &self.owned_typing {
+            statements.extend(typing.establish(storage));
+        }
         if pack
             && let ConversionKind::Array {
                 typing: Some(typing),
@@ -421,7 +432,10 @@ impl<'vir> ResourceConversion<'vir> {
                     .flat_map(|(i, (field, nested))| {
                         nested.statements_at(
                             field.read(snapshot.downcast_ty()),
-                            self.unit,
+                            self.owned_slice
+                                .as_ref()
+                                .filter(|slice| slice.index == i)
+                                .map_or(self.unit, |slice| slice.metadata(snapshot)),
                             pack,
                             index,
                             child_path(path, i),
@@ -643,6 +657,8 @@ impl TaskEncoder for ResourceConversionEnc {
                 kind,
                 trivial_resources,
                 indexed,
+                owned_slice: super::owned_slice::OwnedSlice::new(deps, *task)?,
+                owned_typing: super::owned_slice::OwnedSliceTyping::new(deps, *task)?,
             },
         ))
     }

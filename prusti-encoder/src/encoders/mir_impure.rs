@@ -179,6 +179,12 @@ where
     /// (pure functions, intrinsics, `prusti_contracts` builtins) and thus
     /// created no wand to apply on expiry.
     pub wandless_calls: FxHashSet<mir::BasicBlock>,
+    /// Positions captured by shared collection indexing, used to read nested
+    /// referents through the owner's indexed permissions.
+    pub indexed_reads: FxHashMap<mir::Local, vir::ExprInt<'vir>>,
+    /// A function postcondition can return storage and nested borrows in
+    /// separate wands. Compose only the corresponding callee stage in each.
+    pub package_resource_stage: Option<super::impure::fn_wand::ResourceStage>,
     pub from_to_vars: FromToVars<'vir>,
     pub loop_snapshot_frames: Vec<LoopSnapshotFrame<'vir>>,
     pub loop_restoration_frames: FxHashMap<mir::BasicBlock, LoopRestorationFrame<'vir>>,
@@ -1176,6 +1182,23 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 self.deps,
             )
             .map_err(|error| self.unsupported_rvalue(error, self.current_span()))?;
+        let ids = if let Some(stage) = self.package_resource_stage {
+            let data = wands.viper_wands();
+            ids.into_iter()
+                .filter(|id| {
+                    wands
+                        .resource_stage(
+                            &data[*id],
+                            Some((&argument_tys, result_ty)),
+                            self.vcx,
+                            self.deps,
+                        )
+                        .is_none_or(|callee_stage| callee_stage == stage)
+                })
+                .collect::<Vec<_>>()
+        } else {
+            ids
+        };
         if ids.is_empty() {
             return Ok(Vec::new());
         }
@@ -1739,9 +1762,28 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             metadata: None,
             snap: None,
         };
+        let index = self.indexed_reads.get(&place.local).copied();
+        let mut resource_path = Vec::new();
         // TODO: factor this out (duplication with pure encoder)?
         for (place, elem) in place.iter_projections() {
-            result = self.encode_place_element(place.into(), elem, result)?;
+            result = self.encode_place_element(
+                place.into(),
+                elem,
+                result,
+                index.map(|i| (i, self.vcx.alloc_slice(&resource_path))),
+            )?;
+            match elem {
+                mir::ProjectionElem::Field(field, _) => resource_path.push(field.index()),
+                mir::ProjectionElem::Deref
+                    if matches!(
+                        place_ty.ty.kind(),
+                        ty::TyKind::Ref(_, _, ty::Mutability::Mut)
+                    ) =>
+                {
+                    resource_path.push(0);
+                }
+                _ => {}
+            }
             place_ty = place_ty.projection_ty(self.vcx.tcx(), elem);
         }
         Ok(EncodePlaceResult {
@@ -1780,6 +1822,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         place: Place<'vir>,
         elem: mir::PlaceElem<'vir>,
         expr: PlaceExpr<'vir>,
+        indexed: Option<(vir::ExprInt<'vir>, &'vir [usize])>,
     ) -> EncodeResult<'vir, PlaceExpr<'vir>, E> {
         let place_ty = place.ty(self.pcg_ctxt());
         Ok(match elem {
@@ -1886,12 +1929,47 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         }
                     }
                     ty::TyKind::Ref(_, _, ty::Mutability::Mut) => {
-                        let ref_snap = e_ty.ref_to_snap(expr.address).downcast_ty();
+                        // A shared reference exposes the reference value in
+                        // its snapshot, without owning its physical storage.
+                        let ref_snap = expr
+                            .snap
+                            .unwrap_or_else(|| e_ty.ref_to_snap(expr.address))
+                            .downcast_ty();
                         let p_ty = self.ty_use_pure(place_ty.ty).expect_mutref();
+                        let address = p_ty.deref_access(ref_snap);
+                        let snap = if expr.snap.is_some() {
+                            if let Some((index, path)) = indexed {
+                                let ty = RustTyDecomposition::from_ty(place_ty.ty, self.def_id);
+                                let crate::encoders::ty::TySpecifics::MutRef(data) =
+                                    &ty.ty.specifics
+                                else {
+                                    unreachable!()
+                                };
+                                let inner = data.referent.decompose_context(ty.ty.params, ty.args);
+                                let inner = self.deps.require_dep::<TyUseImpureEnc>(inner)?;
+                                let resources =
+                                    crate::encoders::ty::indexed::IndexedResources::new(
+                                        self.deps,
+                                        inner.ref_to_pred(self.vcx, address, None),
+                                    )?;
+                                let value = resources.read_snapshot(
+                                    inner.ref_to_pred_app(address, None),
+                                    inner.ref_to_snap(address),
+                                    index,
+                                    true,
+                                    path,
+                                );
+                                Some(p_ty.cast_to_caller_ctx(value.downcast_ty()))
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        };
                         PlaceExpr {
-                            address: p_ty.deref_access(ref_snap),
+                            address,
                             metadata: Some(p_ty.metadata_access(ref_snap)),
-                            snap: None,
+                            snap,
                         }
                     }
                     ty::TyKind::RawPtr(..) => {
@@ -3898,6 +3976,30 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     .expr
                     .expect_predicate();
                 self.vcx.with_span(span, |vcx| {
+                    let index = if is_pure
+                        && args.len() == 2
+                        && vcx.tcx().item_name(func_def_id).as_str() == "index"
+                        && matches!(
+                            vcx.tcx().crate_name(func_def_id.krate).as_str(),
+                            "core" | "alloc" | "std"
+                        )
+                        && args[1].node.ty(self.body, vcx.tcx()) == vcx.tcx().types.usize
+                        && matches!(
+                            args[0].node.ty(self.body, vcx.tcx()).kind(),
+                            ty::TyKind::Ref(_, _, ty::Mutability::Not)
+                        ) {
+                        let value = self.encode_operand_snap_immediate(&args[1].node)?;
+                        let value = self
+                            .ty_use_pure(vcx.tcx().types.usize)
+                            .expect_primitive()
+                            .snap_to_prim(value.downcast_ty())
+                            .downcast_ty::<vir::Int>();
+                        let saved = self.new_tmp(vir::TYPE_INT);
+                        self.stmt(vcx.mk_pure_assign_stmt(saved, value));
+                        Some(saved)
+                    } else {
+                        None
+                    };
                     let pure =
                         self.pure_call_result(func_def_id, caller_substs, args, is_pure, span)?;
                     if let Some((can_fail, pure)) = pure {
@@ -3924,6 +4026,12 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         // The call returned a value of the return type, therefore
                         // it is inhabited.
                         self.stmt(vcx.mk_inhale_stmt(return_ty_use.inhabited()));
+                        if destination.projection.is_empty() {
+                            self.indexed_reads.remove(&destination.local);
+                            if let Some(index) = index {
+                                self.indexed_reads.insert(destination.local, index);
+                            }
+                        }
                     } else {
                         let func_out = self.deps.require_dep::<encoders::MethodCallEnc>(
                             CallTaskDescription::new(self.def_id, caller_substs, func_def_id),
@@ -4058,7 +4166,8 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                                 )
                                 .collect::<EncodeResult<'vir, Vec<_>, E>>()?;
                             let captured = wands.selected_call_wands(
-                                &wand_args, label_pre, label_post, call_ctx, &extra, None, true, self,
+                                &wand_args, label_pre, label_post, call_ctx, &extra, None, true,
+                                self,
                             )?;
                             self.call_wand_captures.insert(location.block, captured);
                         }

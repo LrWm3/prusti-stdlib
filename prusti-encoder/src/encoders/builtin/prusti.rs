@@ -146,6 +146,7 @@ pub enum PrustiBuiltin {
     MutRefSharedSameAddress,
     MutSliceLen,
     MutSliceContents,
+    VecContents,
     MutSliceReferentValue,
     ResourceState,
     SequenceResourceState,
@@ -250,8 +251,8 @@ impl PrustiBuiltin {
             Some(match self_ty_name {
                 None => match item {
                     // These helpers are encoded as ordinary pure functions.
-                    "vec_contents" | "scalar_index_model" | "range_index_model"
-                    | "map_contents" | "set_contents" | "mut_iter_refs" => return None,
+                    "scalar_index_model" | "range_index_model" | "map_contents"
+                    | "set_contents" | "mut_iter_refs" => return None,
                     // TODO: how to handle this function?
                     "prusti_terminates_trusted" => return None,
                     "forall" => Self::Spec(SpecBuiltin::Forall),
@@ -269,6 +270,7 @@ impl PrustiBuiltin {
                     "mut_ref_shared_same_address" => Self::MutRefSharedSameAddress,
                     "mut_slice_len" => Self::MutSliceLen,
                     "mut_slice_contents" => Self::MutSliceContents,
+                    "vec_contents" => Self::VecContents,
                     "resource_state" => Self::ResourceState,
                     "sequence_resource_state" => Self::SequenceResourceState,
                     "sequence_resource_states" => Self::SequenceResourceStates,
@@ -609,6 +611,25 @@ impl PrustiBuiltinEnc {
                 ctxt.e_input_deref(0)?
                     .expect_mutref()
                     .metadata_access(slice)
+                    .upcast_ty()
+            }
+            PrustiBuiltin::VecContents => {
+                let owner_ty = RustTyDecomposition::from_ty(
+                    BuiltinCtxt::deref(ctxt.sig.inputs()[0]),
+                    ctxt.args.context(),
+                );
+                let owned = crate::encoders::ty::owned_slice::OwnedSlice::new(ctxt.deps, owner_ty)?
+                    .expect("vec_contents requires Vec");
+                let owner = ctxt.deref_operand::<vir::CSnap>(0)?;
+                let pure = ctxt.e_input_deref(0)?;
+                let field = &owner_ty.ty.expect_structlike().fields[owned.index];
+                let elements = pure.expect_structlike().fields[owned.index].read(owner);
+                let slice = ctxt
+                    .deps
+                    .require_dep::<TyUsePureEnc>(field.ty().decompose_normalize(owner_ty.args))?;
+                slice
+                    .expect_array()
+                    .to_seq(elements.downcast_ty(), owned.extent(owner.upcast_ty()))
                     .upcast_ty()
             }
             PrustiBuiltin::MutSliceContents | PrustiBuiltin::MutSliceReferentValue => {

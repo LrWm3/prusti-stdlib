@@ -2860,6 +2860,45 @@ corpus inputs pass with one test worker (`target/stdlib-im5-pcg287`). The fix
 is pushed to `LrWm3/pcg`, branch `stdlib/call-wand-projections`; it does not by
 itself complete Vec resource integration or the whole early-break proof.
 
+Vec resource integration now has a checked implementation. The encoder keeps
+Vec's allocator and bookkeeping fields and adds a logical owned slice of its
+initialized elements, bounded by the existing length field. `vec_contents`
+projects that slice. Resource conversion uses checked array-typing helpers;
+shared indexing reads nested referents through existing indexed permissions.
+The `as_mut_slice` and `DerefMut` contracts carry both initial and expiry
+referent states. Generic return packaging separates storage restoration from
+nested-resource restoration using the call's actual region projections, and
+re-packs generic frames before later restoration stages. Equal signature
+nodes no longer cause a restoration wand to be discarded: a mutable
+collection can contain different references on return.
+
+Build 291 was rebuilt from this branch at `e286dec43` plus the recorded Vec
+patch, with PCG `b1ed5fe` and Ferrum still pinned to `afdf10c`. Its driver SHA-256
+is `5d0d7151d2235664881707271f2401019a04c309fefb18cab6a3078d7e5d0a88`.
+The untrusted generic `mutable_view<T>` library and a concrete-reference
+return wrapper verify on both backends. Cross-crate clients use pairs of
+mutable references to non-`Copy` tokens: updating the left referent preserves
+the right referent, while false and wrong-left/right claims are rejected at
+their annotated assertions. All seven checks per backend pass, including
+library verification and runtime execution (`target/stdlib-im5-vec291`,
+`cross-crate-{ferrum,silicon}`). Library times are 10.82/18.64 seconds and client
+times 13.57/14.15 seconds for Ferrum/Silicon. The direct `DerefMut` positive
+and both controls also pass after the PCG fix (build 287 Ferrum and build 291
+Silicon). Earlier build 285 validates direct reads, slice-view writes, scalar
+Vec operations, and selected iterator/borrow regressions on both backends;
+its six `DerefMut` failures are retained as failed historical evidence.
+
+These focused runs use fresh Cargo targets, all generated helpers, disabled
+caching, one verifier, branch parallelism off, a 180-second program bound,
+30-second assertion bounds, and 100-millisecond solver-check bounds. The
+native reference-element Vec loop positive also passes on Ferrum (162.07
+seconds), but its first two controls timed out. Revised controls check the
+same complete restoration/readback path before the impossible claim; their
+paired qualification is in progress. Exact early-break suffix framing and
+the archived generic/pair controls remain open. The full stdlib matrix is
+explicitly deferred at the user's request, including final-pin merge
+qualification; no focused result below should be read as that matrix pass.
+
 Run focused paired tests during each step, then the full iterator and borrow
 suites and relevant sequence, Vec, collection, and external-specification
 suites at acceptance. Run PCG shape tests and the numbered corpus whenever

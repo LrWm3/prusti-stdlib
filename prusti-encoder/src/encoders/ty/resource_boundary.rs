@@ -25,13 +25,15 @@ pub(crate) struct ResourceBoundaryTask<'vir> {
     pub selected: Option<ty::Ty<'vir>>,
 }
 
-type Fields<'vir> = Vec<(TyUsePureField<'vir>, ResourceBoundary<'vir>)>;
+type Fields<'vir> = Vec<(usize, TyUsePureField<'vir>, ResourceBoundary<'vir>)>;
 
 #[derive(Clone)]
 pub(crate) struct ResourceBoundary<'vir> {
     pub physical: TyUseImpure<'vir>,
     unit: vir::ExprPSnap<'vir>,
     kind: BoundaryKind<'vir>,
+    owned_slice: Option<super::owned_slice::OwnedSlice<'vir>>,
+    owned_typing: Option<super::owned_slice::OwnedSliceTyping<'vir>>,
 }
 
 #[derive(Clone)]
@@ -78,6 +80,9 @@ impl<'vir> ResourceBoundary<'vir> {
             return conversion.at_storage_with_metadata(storage, metadata, pack);
         }
         let mut statements = Vec::new();
+        if pack && let Some(typing) = &self.owned_typing {
+            statements.extend(typing.establish(storage));
+        }
         if pack && let BoundaryKind::Array { typing, .. } = &self.kind {
             statements.push(typing.establish_extent(storage, self.extent(metadata)));
         }
@@ -127,8 +132,13 @@ impl<'vir> ResourceBoundary<'vir> {
             let fields = |fields: &Fields<'vir>| {
                 fields
                     .iter()
-                    .flat_map(|(field, nested)| {
-                        nested.snapshot(field.read(snapshot.downcast_ty()), self.unit, pack, label)
+                    .flat_map(|(index, field, nested)| {
+                        let metadata = self
+                            .owned_slice
+                            .as_ref()
+                            .filter(|slice| slice.index == *index)
+                            .map_or(self.unit, |slice| slice.metadata(snapshot));
+                        nested.snapshot(field.read(snapshot.downcast_ty()), metadata, pack, label)
                     })
                     .collect::<Vec<_>>()
             };
@@ -214,6 +224,8 @@ impl TaskEncoder for ResourceBoundaryEnc {
                     physical,
                     unit,
                     kind: BoundaryKind::Empty,
+                    owned_slice: None,
+                    owned_typing: None,
                 },
             ));
         }
@@ -266,18 +278,19 @@ impl TaskEncoder for ResourceBoundaryEnc {
                     unreachable!()
                 };
                 let mut fields = Vec::new();
-                for ((field, actual_field), accessor) in data
+                for (index, ((field, actual_field), accessor)) in data
                     .fields
                     .iter()
                     .zip(&actual_data.fields)
                     .zip(&pure.expect_structlike().fields)
+                    .enumerate()
                 {
                     let child = nested(
                         field.ty().decompose_normalize(definition.args),
                         actual_field.ty().decompose_normalize(actual.args),
                     )?;
                     if !child.is_empty() {
-                        fields.push((*accessor, child));
+                        fields.push((index, *accessor, child));
                     }
                 }
                 if fields.is_empty() {
@@ -298,19 +311,20 @@ impl TaskEncoder for ResourceBoundaryEnc {
                     .zip(&pure.expect_enumlike().variants)
                 {
                     let mut fields = Vec::new();
-                    for ((field, actual_field), accessor) in variant
+                    for (index, ((field, actual_field), accessor)) in variant
                         .inner
                         .fields
                         .iter()
                         .zip(&actual_variant.inner.fields)
                         .zip(&accessors.inner.fields)
+                        .enumerate()
                     {
                         let child = nested(
                             field.ty().decompose_normalize(definition.args),
                             actual_field.ty().decompose_normalize(actual.args),
                         )?;
                         if !child.is_empty() {
-                            fields.push((*accessor, child));
+                            fields.push((index, *accessor, child));
                         }
                     }
                     if !fields.is_empty() {
@@ -373,6 +387,8 @@ impl TaskEncoder for ResourceBoundaryEnc {
                 physical,
                 unit,
                 kind,
+                owned_slice: super::owned_slice::OwnedSlice::new(deps, actual)?,
+                owned_typing: super::owned_slice::OwnedSliceTyping::new(deps, actual)?,
             },
         ))
     }

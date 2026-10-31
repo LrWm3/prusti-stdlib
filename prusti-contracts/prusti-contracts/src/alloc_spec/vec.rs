@@ -44,11 +44,25 @@ impl<T, A: core::alloc::Allocator> Vec<T, A> {
 
     #[trusted]
     #[pure]
+    #[ensures(Seq::from_slice(result) == vec_contents(self))]
     fn as_slice(&self) -> &[T];
 
     #[trusted]
     #[ensures(Seq::from_slice(&*result) == old(vec_contents(&*self)))]
-    #[after_expiry(vec_contents(self) == before_expiry(Seq::from_slice(&*result)))]
+    #[after_expiry(self => vec_contents(self) == before_expiry(Seq::from_slice(&*result)))]
+    #[ensures({
+        let source = old(vec_contents(&*self));
+        let view = Seq::from_slice(&*result);
+        forall(move |j: Int| (Int::from(0) <= j && j < source.len()) ==>
+            sequence_resource_state(&view, j) == old(sequence_resource_state(&source, j)),
+            triggers = [(view[j],)])
+    })]
+    #[after_expiry(self[_] => {
+        let source = old(vec_contents(&*self));
+        forall(move |j: Int| (Int::from(0) <= j && j < source.len()) ==>
+            sequence_resource_state(&source, j) == before_expiry(sequence_resource_state(&source, j)),
+            triggers = [(source[j],)])
+    })]
     fn as_mut_slice(&mut self) -> &mut [T];
 
     #[trusted]
@@ -130,7 +144,20 @@ impl<T, A: core::alloc::Allocator> Deref for Vec<T, A> {
 impl<T, A: core::alloc::Allocator> DerefMut for Vec<T, A> {
     #[trusted]
     #[ensures(Seq::from_slice(&*result) == old(vec_contents(&*self)))]
-    #[after_expiry(vec_contents(self) == before_expiry(Seq::from_slice(&*result)))]
+    #[after_expiry(self => vec_contents(self) == before_expiry(Seq::from_slice(&*result)))]
+    #[ensures({
+        let source = old(vec_contents(&*self));
+        let view = Seq::from_slice(&*result);
+        forall(move |j: Int| (Int::from(0) <= j && j < source.len()) ==>
+            sequence_resource_state(&view, j) == old(sequence_resource_state(&source, j)),
+            triggers = [(view[j],)])
+    })]
+    #[after_expiry(self[_] => {
+        let source = old(vec_contents(&*self));
+        forall(move |j: Int| (Int::from(0) <= j && j < source.len()) ==>
+            sequence_resource_state(&source, j) == before_expiry(sequence_resource_state(&source, j)),
+            triggers = [(source[j],)])
+    })]
     fn deref_mut(&mut self) -> &mut [T];
 }
 

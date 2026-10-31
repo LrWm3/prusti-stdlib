@@ -267,7 +267,7 @@ impl<'a, 'vir> TyUsePureWalker<'a, 'vir> {
                         metadata_caster: self
                             .encode_normalized(ty.box_metadata_ty(), ty.0.params)?,
                     }),
-                    RustTySpecial::None | RustTySpecial::SliceIterMut => None,
+                    RustTySpecial::None | RustTySpecial::SliceIterMut | RustTySpecial::Vec => None,
                 };
                 TySpecifics::StructLike(self.encode_structlike(data, ty.0.params, box_data)?)
             }

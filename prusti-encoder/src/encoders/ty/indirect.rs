@@ -407,10 +407,14 @@ impl TaskEncoder for IndirectPredicatesEnc {
                     }
                 }
                 TySpecifics::StructLike(data) => {
+                    let owned_slice = super::owned_slice::OwnedSlice::new(deps, ty)?;
                     // TODO: invalid recursion here if the defined struct is
                     // recursive!
                     for (field_index, accessor, inner_expr) in collect_field_predicates(data, deps)?
                     {
+                        let owned_slice = owned_slice
+                            .clone()
+                            .filter(|slice| slice.index == field_index);
                         predicate_applications.push(vcx.mk_lazy_expr(
                             "struct_field_indirect",
                             vir::TYPE_BOOL,
@@ -420,6 +424,14 @@ impl TaskEncoder for IndirectPredicatesEnc {
                                         vcx,
                                         ExprInput {
                                             snap: accessor.read(input.snap.downcast_ty()),
+                                            extent: owned_slice
+                                                .as_ref()
+                                                .map(|slice| slice.extent(input.snap))
+                                                .or(input.extent),
+                                            metadata: owned_slice
+                                                .as_ref()
+                                                .map(|slice| slice.metadata(input.snap))
+                                                .or(input.metadata),
                                             resource_path: vcx.alloc_slice(
                                                 &input
                                                     .resource_path

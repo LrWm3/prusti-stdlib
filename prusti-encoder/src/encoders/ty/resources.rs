@@ -218,12 +218,17 @@ impl TaskEncoder for ResourceGroupEnc {
                     ));
                 }
                 TySpecifics::StructLike(data) => {
+                    let owned_slice = super::owned_slice::OwnedSlice::new(deps, identity)?;
                     let mut fields = Vec::new();
-                    for (field, accessor) in data.fields {
+                    for (index, (field, accessor)) in data.fields.into_iter().enumerate() {
                         let resource = ResourceUse::new(deps, field.ty().decompose(task.params))?;
+                        let metadata = owned_slice
+                            .as_ref()
+                            .filter(|slice| slice.index == index)
+                            .map_or(unit, |slice| slice.metadata(snap));
                         let field = accessor.read(snap.downcast_ty());
-                        fields.push(resource.state(field, unit));
-                        resources.push(resource.apply(field, unit));
+                        fields.push(resource.state(field, metadata));
+                        resources.push(resource.apply(field, metadata));
                     }
                     state = Some(fields_state(&fields));
                 }
@@ -410,7 +415,7 @@ impl TaskEncoder for ResourceGroupEnc {
 pub(crate) fn state_type<'vir>() -> vir::TypeCSnap<'vir> {
     vir::DomainIdnSnap::new(vir::ViperIdent::new("s_ResourceState"), 0)().downcast_ty()
 }
-fn state_function<'vir>(
+pub(crate) fn state_function<'vir>(
     name: &'vir str,
 ) -> vir::FunctionIdn<'vir, (vir::PSnap, vir::TyVal, vir::PSnap), vir::CSnap> {
     vir::FunctionIdn::new(

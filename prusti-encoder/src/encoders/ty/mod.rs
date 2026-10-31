@@ -8,6 +8,7 @@ pub(crate) mod resource_boundary;
 pub(crate) mod resource_collection;
 pub(crate) mod resource_array;
 pub(crate) mod array_typing;
+pub(crate) mod owned_slice;
 pub mod impure;
 pub mod kinds;
 pub mod use_impure;

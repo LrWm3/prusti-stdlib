@@ -325,6 +325,8 @@ pub enum RustTySpecial {
     /// A logical borrowed tail supplements the raw-pointer representation of
     /// `core::slice::IterMut`. Its identity is independent of physical addresses.
     SliceIterMut,
+    /// Initialized elements supplement the allocation's raw-pointer fields.
+    Vec,
 }
 
 impl<'tcx> RustTyData<'tcx> {
@@ -623,6 +625,14 @@ impl<'tcx, D: TyDatas<'tcx>> TyData<'tcx, (RustTyDatas, D)> {
 }
 
 impl RustTySpecial {
+    fn is_vec(adt: ty::AdtDef<'_>) -> bool {
+        vir::with_vcx(|vcx| {
+            let tcx = vcx.tcx();
+            tcx.crate_name(adt.did().krate).as_str() == "alloc"
+                && tcx.def_path(adt.did()).to_string_no_crate_verbose() == "::vec::Vec"
+        })
+    }
+
     fn is_slice_iter_mut(adt: ty::AdtDef<'_>) -> bool {
         vir::with_vcx(|vcx| {
             let tcx = vcx.tcx();
@@ -635,6 +645,7 @@ impl RustTySpecial {
         match ty.kind() {
             ty::TyKind::Adt(adt, _) if adt.is_box() => RustTySpecial::Box,
             ty::TyKind::Adt(adt, _) if Self::is_slice_iter_mut(*adt) => RustTySpecial::SliceIterMut,
+            ty::TyKind::Adt(adt, _) if Self::is_vec(*adt) => RustTySpecial::Vec,
             _ => RustTySpecial::None,
         }
     }
@@ -822,6 +833,22 @@ impl<'tcx> TySpecifics<'tcx, RustTyDatas> {
                             name: symbol::Symbol::intern("prusti_tail"),
                             fid: abi::FieldIdx::from_usize(data.fields.len()),
                             ty: LazyRustTy(tail_ty),
+                            address: RustFieldAddress::Constant,
+                        });
+                    }
+                    if RustTySpecial::is_vec(adt) {
+                        // Keep the allocator and physical bookkeeping. The
+                        // additional owned slice contains initialized elements;
+                        // its extent is the Vec's existing length field.
+                        assert_eq!(data.fields.len(), 2, "unexpected Vec representation");
+                        assert_eq!(data.fields[1].name.as_str(), "len");
+                        let elements = vir::with_vcx(|vcx| {
+                            ty::Ty::new_slice(vcx.tcx(), Self::new_param_ty(0))
+                        });
+                        data.fields.push(RustFieldData {
+                            name: symbol::Symbol::intern("prusti_elements"),
+                            fid: abi::FieldIdx::from_usize(data.fields.len()),
+                            ty: LazyRustTy(elements),
                             address: RustFieldAddress::Constant,
                         });
                     }

@@ -1,0 +1,63 @@
+// Exploratory model for a scalar projection from a resource-containing owner.
+// The outer expiry returns CURRENT resources and a checked continuation back
+// to ENTRY resources. This does not yet model indexed replacement or loops.
+adt Snap { State(number: Int, target: Ref) }
+field value: Int
+field pointee: Ref
+predicate slot(r: Ref) { acc(r.value) }
+function read(r: Ref): Int requires slot(r) { unfolding slot(r) in r.value }
+predicate root(a: Ref, b: Ref) { slot(a) && acc(b.pointee) }
+function snapshot(a: Ref, b: Ref): Snap
+  requires root(a,b)
+{ unfolding root(a,b) in State(read(a), b.pointee) }
+predicate group(s: Snap) { slot(s.target) }
+
+method project(a: Ref, b: Ref)
+  requires root(a,b) && group(snapshot(a,b))
+  ensures slot(a)
+  ensures (let before == (old(snapshot(a,b))) in slot(a) --* (root(a,b)
+    && (unfolding root(a,b) in read(a)) == old[lhs](read(a))
+    && (let current == (snapshot(a,b)) in
+        group(current) && (group(current) --* group(before)))))
+{
+  var before: Snap := snapshot(a,b)
+  unfold root(a,b)
+  unfold group(before)
+  package true --* slot(a) {}
+  package slot(a) --* (root(a,b)
+    && (unfolding root(a,b) in read(a)) == old[lhs](read(a))
+    && (let current == (snapshot(a,b)) in
+        group(current) && (group(current) --* group(before)))) {
+    fold root(a,b)
+    var restored: Snap := snapshot(a,b)
+    fold group(restored)
+    // Reserve the actual output while proving the continuation from its
+    // own antecedent. Both temporary and continuation wands are checked.
+    package true --* group(restored) {}
+    package group(restored) --* group(before) {
+      unfold group(restored)
+      fold group(before)
+    }
+    apply true --* group(restored)
+  }
+  apply true --* slot(a)
+}
+
+method caller(a: Ref, b: Ref)
+  requires root(a,b) && group(snapshot(a,b))
+{
+  var before: Snap := snapshot(a,b)
+  project(a,b)
+  unfold slot(a)
+  a.value := 7
+  fold slot(a)
+  apply slot(a) --* (root(a,b)
+    && (unfolding root(a,b) in read(a)) == old[lhs](read(a))
+    && (let current == (snapshot(a,b)) in
+        group(current) && (group(current) --* group(before))))
+  assert (unfolding root(a,b) in read(a)) == 7
+  var restored: Snap := snapshot(a,b)
+  assert group(restored)
+  apply group(restored) --* group(before)
+  assert group(before)
+}

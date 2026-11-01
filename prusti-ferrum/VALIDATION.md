@@ -27,7 +27,8 @@ without either pending encoder/PCG experiment. Its source is frozen at
 Executables are under `/tmp/prusti-stdlib-matrix352-bin`; the driver's SHA-256 is
 `fad7742d27b936ffe9c9cf9ba9862eb421c0c70ac004080715e29360345c78f0`.
 `target/stdlib-matrix-20261031-1236/build352.json` records all six hashes.
-All 18 adapter tests are compiled but have not yet executed. The standalone
+All 18 adapter tests pass: seven ordinary tests and eleven explicitly selected
+real-Z3 tests, with one CPU and one test thread. The standalone
 CLI was built from the same Ferrum pin into an external target directory;
 Rust validation uses the rebuilt Prusti binaries.
 
@@ -43,8 +44,18 @@ parallelism disabled.
 The handoff models had a local named `current` colliding with a let-bound name
 inside the wand. That local has been renamed before verification; the original
 models are retained. Syntax rejection supplies no permission-proof result.
-The corrected positive, false-assertion and missing-resource models are part
-of the paired diagnostics in this gate.
+The corrected positive verifies on both backends. Both controls reject exactly
+the intended obligation: the false assertion at line 63, and applying the
+continuation without its current resource at line 62. All model bodies are
+checked. `handoff352-qualification.json` records the six results and hashes.
+This establishes the scalar permission handoff, not Rust caller tracking,
+indexed replacement, resource-state framing or loop composition.
+
+The exact `final339` Viper program for `vec_lookup_range_pass` also verifies
+with both backends (37.90 seconds for Ferrum, 154.89 for Silicon, including
+startup). The optional-element replay still fails on both at the same
+`p_Param_snap` permission precondition. Fresh Rust positives and exact negatives
+are still running; these raw diagnostics alone do not qualify the upgrade.
 
 Builds 353 and 354 rebase the independent nested-typing and opaque-loop-coupling
 candidates onto the same final Ferrum pin. Their separate paired gates follow
@@ -53,8 +64,8 @@ waiting, and their artifacts remain preserved. None produced proof results.
 The broader concrete reservation in build 348 also remains deferred and
 unverified.
 
-The frozen full matrix at `afdf10c` continues unchanged, before these focused
-gates use the single worker. Its old-backend failures are baseline evidence,
+The frozen full matrix at `afdf10c` completed all 24 jobs with 1,755/1,842 checks
+passing before these focused gates started on the single worker. Its failures are baseline evidence,
 not regressions on current Ferrum. The committed pin remains `afdf10c` until
 this branch's gate is reviewed, and a full matrix on the eventual accepted
 source and build is still required before merge.

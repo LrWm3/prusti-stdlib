@@ -1313,6 +1313,17 @@ The candidate remains an experiment. Its frozen binaries, source patch and
 failed encode-only attempts are retained under `build345.json`,
 `source345.patch` and `encode345/`.
 
+The paired associated-output probes now confirm these limitations. Candidate
+342 passes 7/13 checks per backend, still failing the original generic range
+positives. Candidate 345 passes 9/22 selected borrow checks and 21/21 iterator
+controls per backend; its additional dependency edges also prevent the two
+existing Vec-index negative clients from reaching their intended assertions.
+Neither candidate is adopted. The new reference-element fixtures initially
+used an unsupported nested dereference in a pure assertion. Corrected copies
+read the values into scalar locals first; all four then expose the same
+`empty dependent resource restoration` during encoding (`controls361.json`
+and `encode361/`). The original invalid fixtures and results remain recorded.
+
 The next handoff experiment checks a smaller scalar projection first. Its
 outer wand must return current-owner resources together with a continuation
 from those resources to the entry-owner resources. Both the immediate resource
@@ -1322,6 +1333,17 @@ the matrix and associated-output probes, using the same single worker on both
 backends. A successful model would still need caller-side continuation
 tracking, conditional and loop composition, and a separate indexed-replacement
 proof before it could repair the broader generic collection failures.
+
+The scalar handoff gate now passes on Ferrum `0e048a4` and Silicon `6b540aa4`.
+Both backends verify the positive and reject exactly the false assertion and
+the application of a continuation after its required current resource has
+been removed. The three checked models are retained as `owner_handoff*.vpr`
+under the iterator fixture's `known_limits/` directory; they are byte-identical
+to the qualified inputs. `handoff352-qualification.json` records hashes,
+commands, exact error positions and timings. These are scalar permission and
+scalar-value-frame proofs only. They do not yet establish a resource-state
+frame, indexed replacement, current-owner PCG nodes, or continuation tracking
+through branches and loops.
 
 Helper stability remains unresolved: `inclusive_wrong_frame` emitted exactly
 the same Viper bytes in builds 336 and 337, but Ferrum accepted only the intended

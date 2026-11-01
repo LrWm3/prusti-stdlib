@@ -3528,6 +3528,44 @@ of loop backedges remain separate follow-ups. The gates above cover finite
 reference-bearing shapes and yields completed within each iteration; broader
 claims require their own ownership and loop invariants.
 
+## Follow-on scope authorized on 2026-11-01
+
+The user has asked to continue through the remaining IM and matrix repairs,
+then also tackle the separately deferred features below. Their return in
+approximately sixteen hours is a status checkpoint, not a stopping deadline.
+Earlier descriptions of these features as outside a completed gate remain
+accurate statements of historical proof coverage; they no longer exclude the
+features from the active work plan.
+
+Finish and combine the independently qualified current repairs first:
+Ferrum upgrade, optional-slice conversion, owned iterator resources and loop
+coupling, indexed enum snapshots, associated-output dependencies, and current
+owner/entry owner handoff. Recheck every matrix failure with its required
+positive and exact negative controls, then run the complete matrix on the
+accepted combined source and freshly rebuilt Prusti. Preserve all failed and
+superseded evidence. No pending candidate is accepted merely because it builds
+or because a negative reports some error.
+
+After that gate, work through these milestones in dependency order:
+
+| Milestone | Implementation and proof target | Completion evidence |
+|---|---|---|
+| D1: nested and recursive ownership | Extend indexed resource paths, checked conversions and observations to nested arrays, tuples/options, `Vec<Vec<T>>`, owned pointers and finite recursive heap shapes, including reference-containing and generic elements. | Arbitrary-length nested traversals, replacement with escaped old references, untouched-region framing, generic/non-`Copy` cross-crate proofs, and exact alias/permission/value controls. No empty-resource shortcut based only on missing lifetime projections. |
+| D2: yields retained across loop backedges | Represent an unbounded collection of live yielded references and its delayed source-restoration obligations; compose them with D1 ownership. | Collect and mutate retained yields, expire them in different orders, handle empty/partial/full traversal, and restore the source. Reject reuse while a conflicting yield remains live and incorrect restored values. |
+| D3: callbacks, iterator adapters and collection | Model closure captures and callback effects, then compose `take`, `skip`, `enumerate`, `zip`, `map`, `filter` and `filter_map`; connect `collect` to Vec and the modeled hash collections. | Symbolic length/order/value or membership laws as appropriate, short-circuit and early-drop behavior, captured mutations and borrow expiry, cross-crate clients, and false/value/frame/permission controls. Checked Rust wrappers must establish composition beyond trusted API contracts. |
+| D4: remaining hash APIs | Add vacant/occupied Entry operations and insertion/update callbacks, keys/values/shared and mutable iteration, owned iteration, and heterogeneous borrowed-key lookup with explicit compatible key laws. | Insertion/removal/update membership, cardinality and framing; iterator coverage without assuming a hash iteration order; mutable-value restoration; equivalent and inequivalent borrowed queries; collisions and exact negative controls. |
+| D5: interior mutability | Extend heap-dependent observations and alias tracking for `Cell` and `RefCell`, including dynamic borrow guards and their release. Review the pinned Rust implementations before writing contracts. | Shared-alias visibility for get/set/replace/swap, successful and failed borrow attempts, simultaneous shared guards versus exclusive guards, guard expiry and mapping, cross-crate use, and rejection of stale snapshots or invalid borrow assumptions. Account explicitly for normal-return and panic behavior. |
+| D6: combined qualification | Integrate the completed feature gates, update the support matrix and run all relevant suites with the final dependency pins. | Fresh full dual-backend verification, exact coverage and source/build provenance, runtime behavior checks where meaningful, and no unreviewed backend differences or deferred failures inside the claimed domains. |
+
+Use primary research and pinned implementation sources when a milestone needs
+a new ownership or effect model. Start with checked small models and failing
+Rust reproducers, then extend to generic, unbounded and cross-crate proofs.
+Keep one verifier worker and Ferrum branch parallelism off. Use Ferrum for
+routine work and Silicon for changed specifications, negatives, unexpected
+differences and final qualification. Commit and push working changes in logical
+chunks. Any remaining restriction or genuine blocker must be recorded against
+its milestone rather than silently narrowing the completion claim.
+
 ## Validation and delivery rules
 
 ### Evidence required for every gate

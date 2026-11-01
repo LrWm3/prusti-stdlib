@@ -4472,6 +4472,38 @@ nested revalidation with 565. Superseded broader jobs are recorded as skipped,
 never passed. Routine fixes and their negative controls remain Ferrum-only;
 Silicon is reserved for major feature completion and final integration.
 
+The completed 563 nested gate is **10/11 Ferrum checks**, with audited coverage
+and provenance. All six negative controls match, including the false
+postcondition after 420.59 seconds; the repeated-call positive still fails
+after 107.70 seconds. Exact full-program raw replay 567 also fails, after
+348.74 seconds, during the second helper's restoration. The earlier successful
+method-filtered diagnostic therefore remains insufficient for qualification.
+
+Native-AST inspection 568 finds the same two wand classes as the parsed
+program, but their argument lists differ: implicit full predicate permissions
+give 36/19 arguments in the native representation and 40/21 after printing and
+parsing. Temporary inspection code is isolated and is not an adoption candidate.
+Candidate 569 makes full permissions explicit in the Prusti Ferrum adapter,
+preserving supplied fractional and wildcard expressions. Eight structural
+adapter tests pass, including equality of implicit/explicit wand shapes and
+arguments; five Rust programs encode and pass Viper structural checks. The
+eleven solver-backed adapter tests and native nested gate remain queued. This
+representation difference is not yet established as the cause of the failure.
+
+The corrected storage conversion in 565 passes the basic associated-output
+positive (58.28 seconds) and its exact false-postcondition control (54.51).
+Escaped-reference replacement advances past the missing-permission failure,
+but its final current-value assertion fails after 265.21 seconds. Inclusive
+lookup still fails a permission check. The forwarding wrapper also exposes a
+scope error: a representation flag assigned inside a package was declared
+outside its proof script. Fresh 573 declares the flag with its application
+script. Its additional replacement diagnostic checks the value immediately
+after writing while retaining the original final assertions and the original
+fixture. Its focused borrow gate is followed by the other unresolved matrix
+families in 574, subject to the native adapter tests passing. Broader results
+must retain any focused failures and cannot establish combined qualification
+on their own.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user has asked to continue through the remaining IM and matrix repairs,

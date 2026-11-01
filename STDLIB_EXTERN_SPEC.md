@@ -30,6 +30,14 @@ implementation, or unsafe internals of the standard library.
 
 ## Current qualification checkpoint (2026-11-01)
 
+**Current backend policy (updated by the user on 2026-11-01).** Use Ferrum
+for routine implementation, specification changes, negative controls and regression
+checks. Run Silicon at major feature sign-off points, such as completed nested
+collections, interior mutability or general coroutine support, and for final
+combined qualification. A small fix or intermediate candidate does not trigger a
+Silicon rerun. This supersedes the earlier per-change paired-validation policy
+recorded below. Keep one verifier worker and Ferrum branch parallelism off.
+
 The full dual-backend matrix has run: 1,755 of 1,842 checks passed at frozen
 revision `225eb7714` (matrix 339). Its 87 failures include positive proofs,
 negative tests with extra or incorrect diagnostics, library checks and timeouts;
@@ -3181,8 +3189,9 @@ passing on each. The source/artifact audit checks all 463 fixture and contract
 files plus all six executables per build before any fixture correction. Its
 immutable results are in `/tmp/prusti-im5-dual229/audit-baseline-complete.json`.
 Routine iteration now uses Ferrum with one worker and branch parallelism off.
-Keep Silicon checks for changed specifications, negatives, and backend
-differences, and require dual-backend validation before merging. The full
+The original policy kept Silicon checks for changed specifications, negatives
+and backend differences. The current checkpoint above supersedes that routine
+policy; major-feature sign-off and final integration retain dual-backend validation. The full
 stdlib matrix at the final pin, generic/wrapper loops, exact early-break
 referent framing, and Vec resource integration remain open; adoption does not
 complete IM5 or qualify a destination merge.
@@ -4224,8 +4233,8 @@ Use primary research and pinned implementation sources when a milestone needs
 a new ownership or effect model. Start with checked small models and failing
 Rust reproducers, then extend to generic, unbounded and cross-crate proofs.
 Keep one verifier worker and Ferrum branch parallelism off. Use Ferrum for
-routine work and Silicon for changed specifications, negatives, unexpected
-differences and final qualification. Commit and push working changes in logical
+routine fixes and all their controls; use Silicon when signing off a completed
+major feature and for final combined qualification. Commit and push working changes in logical
 chunks. Any remaining restriction or genuine blocker must be recorded against
 its milestone rather than silently narrowing the completion claim.
 

@@ -37,8 +37,9 @@ none are waived. This is the last complete matrix result, not a claim about
 the newer combined implementation.
 
 Main now uses Ferrum `0e048a4` for development and includes the qualified
-metadata/storage-typing repair from `5602d5ef1`. Builds come from this Prusti
-branch. Verification uses one worker with Ferrum branch parallelism disabled.
+metadata/storage-typing repair from `5602d5ef1` and historical enum snapshot
+reconstruction from `5ec0a95f9`. Enum replacement remains open. Builds come
+from this Prusti branch. Verification uses one worker with Ferrum branch parallelism disabled.
 Changed specifications, negatives and backend differences retain Silicon gates,
 and the final combined revision still needs the full paired matrix.
 
@@ -49,6 +50,39 @@ kept separate from adopted changes; an encoding success or a checked Viper model
 does not establish the corresponding Rust feature. The separately authorized
 [D1–D6 follow-on scope](#follow-on-scope-authorized-on-2026-11-01) is also part of
 the remaining work.
+
+### Active repair evidence (2026-11-01, probes 408–424)
+
+The nested observer repair now proves the original nested-reference Rust
+positive on Ferrum. Probe 408 passed 9/9 Ferrum checks and 8/9 Silicon checks;
+Silicon could not apply the temporary output reservation. Saving its resource
+keys explicitly in probe 414 preserved the original positive and all exact
+negative controls, but the new repeated-call positive failed: 12/13 Ferrum
+checks passed. Silicon has not qualified that revision. Probe 424 now shares
+the set of consumed, guarded call obligations across return packages; each
+later package must still prove its consequent from its antecedent and frames.
+Its seven encode-only clients pass; verification remains pending.
+
+The owned-loop candidate 382 passed 21/26 checks on each backend, with complete
+coverage and provenance audits. Exact-source replay 418 locates duplicate
+`into_iter` wand consumption in the second loop-entry package. A strengthened
+PCG regression fails before `9dfaf88` and passes afterward under both NLL and
+Polonius; the PCG corpus, shape, projection and opaque-body checks also pass.
+That commit removes post-call outputs for moved owned arguments, whose storage
+has been consumed, and is pushed on `stdlib/owned-iterator-resources`.
+Prusti's own rebuilt candidate 422 passes 6/10 Ferrum checks: the duplicate
+package is gone, but loop reconstruction now reads labels from the wrong copy
+of the loop prefix. Main's PCG pin remains `269cb9a`; this is not an adoption.
+
+Next, preserve the actual call obligations and their snapshot identities across
+loop cuts and the duplicated prefix before a body invariant. Historical reads
+must refer to an executed capture, including exits before the invariant is
+first reached. Check ordinary and extra-`next` loops, wrong invariants, false
+assertions, empty traversal and nested loops before broadening qualification.
+Logs, exact-source replays, frozen source/binary hashes and audits are under
+`target/stdlib-matrix-20261031-1236`. A failed Ferrum minimum gate stops routine
+qualification of that candidate; passing repairs still require Silicon before
+adoption and the final combined matrix.
 
 ## Baseline and evidence
 

@@ -174,12 +174,19 @@ impl TaskEncoder for ResourceGroupEnc {
         // group has a known empty body. Do not extend this to unknown opaque
         // types merely because they have no lifetime parameters.
         let is_str = vir::with_vcx(|vcx| {
-            *task == RustTyDecomposition::from_ty(vcx.tcx().types.str_, super::generics::GParams::empty()).ty
+            *task
+                == RustTyDecomposition::from_ty(
+                    vcx.tcx().types.str_,
+                    super::generics::GParams::empty(),
+                )
+                .ty
         });
-        if !is_str && matches!(
-            task.specifics,
-            TySpecifics::Param(_) | TySpecifics::Opaque(_)
-        ) {
+        if !is_str
+            && matches!(
+                task.specifics,
+                TySpecifics::Param(_) | TySpecifics::Opaque(_)
+            )
+        {
             return Ok((None, ()));
         }
         vir::with_vcx(|vcx| {
@@ -629,21 +636,33 @@ fn emit_sequence_state<'vir>(
                 recursive,
             ),
         );
-        program.add_function(
-            vcx.opaque_function(
-                vcx.mk_function(
-                    sequence_state_function(),
-                    (sequence, ty, start),
-                    vcx.alloc_slice(&[vir::expr! { ((zero) <= (i)) && ((i) <= (length)) }, pre]),
-                    vcx.alloc_slice(&[vcx.mk_eq_expr(
-                        vcx.mk_collection_len_expr(vcx.mk_result(vcx.mk_ty_seq(state_type()))),
-                        vcx.mk_bin_op_expr(vir::BinOpKind::Sub, length, i)
-                            .downcast_ty::<vir::Int>(),
-                    )]),
-                    None,
-                    Some(body),
-                ),
-            ),
+        // Prove the same pointwise observation law as the concrete sequence
+        // observer. Its recursive call supplies the suffix induction step;
+        // callers need not unfold arbitrarily many elements to read one state.
+        let result = vcx.mk_result(vcx.mk_ty_seq(state_type()));
+        let extent = vcx
+            .mk_bin_op_expr(vir::BinOpKind::Sub, length, i)
+            .downcast_ty::<vir::Int>();
+        let result_element = vcx.mk_seq_index_expr(result, j).downcast_ty::<vir::CSnap>();
+        let absolute_index = vcx
+            .mk_bin_op_expr(vir::BinOpKind::Add, j, i)
+            .downcast_ty::<vir::Int>();
+        let observed = sequence_element_state_function().call()(seq, t, absolute_index);
+        let elements = vcx.mk_forall_expr(
+            vcx.alloc_slice(&[j_decl.as_dyn()]),
+            vcx.alloc_slice(&[vcx.mk_trigger(&[result_element.as_dyn()])]),
+            vir::expr! { (((zero) <= (j)) && ((j) < (extent))) ==> ((result_element) == (observed)) },
         );
+        program.add_function(vcx.opaque_function(vcx.mk_function(
+            sequence_state_function(),
+            (sequence, ty, start),
+            vcx.alloc_slice(&[vir::expr! { ((zero) <= (i)) && ((i) <= (length)) }, pre]),
+            vcx.alloc_slice(&[
+                vcx.mk_eq_expr(vcx.mk_collection_len_expr(result), extent),
+                elements,
+            ]),
+            None,
+            Some(body),
+        )));
     });
 }

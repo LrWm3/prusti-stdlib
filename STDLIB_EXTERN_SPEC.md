@@ -4395,6 +4395,46 @@ They preserve the original obligations and are intended to distinguish capture
 equality from later restoration. Neither modified Viper program counts as
 native Rust qualification. Routine work remains Ferrum-only.
 
+### Canonical observer adoption and staged-call follow-up (2026-11-01)
+
+The two canonical resource-observer files are adopted as a separate logical
+change. Their bytes match frozen 528, 550 and 561 exactly: type-parameter
+collections retain their existing canonical permissions and use the same
+sequence observer, whose pointwise observation law is proved by its recursive
+body. Qualification includes 528's generic and prefix libraries on both
+backends and 550's complete 12-check Ferrum prefix suite. This adoption does
+not claim that the pending combined encoder or remaining borrow cases pass.
+
+Combined 552 finishes at **21/24 Ferrum checks**, with complete, audited
+coverage and provenance. Escaped-reference replacement fails for a missing
+permission in both its positive and false-postcondition control; inclusive
+lookup also fails. All split controls, basic associated-output borrowing,
+ordinary Vec use and framing pass. Raw diagnostic 557 identifies replacement's
+missing permission as the Vec storage predicate before its second lookup.
+
+PCG candidate `791e4ca` preserves nested function-output target sets instead
+of adding all component outputs as dependencies of every input. Equal sets
+remain coupled; crossing sets keep conservative coupling; loop coupling is
+unchanged. Four algorithm tests, 29 focused graph/shape tests, the explicit
+early-storage-expiry regression under both borrow-checker modes, and all 252
+numbered fixtures pass. The iterator fixture's two old combined-edge
+annotations are replaced with four checks covering creation and expiry of both
+stages at the original required point and branch guards. The initial failed
+annotation run is retained. The candidate is pushed to `LrWm3/pcg` on
+`stdlib/stratified-call-restoration`; main's pin remains `9dfaf88`.
+
+Both nested diagnostics succeed: 555's additional checked call-boundary wand
+assertions take 329.53 seconds; 556's relocated entry captures take 255.41.
+These are diagnostic timings, not a performance guarantee or native Rust
+qualification. Fresh build 558 combines PCG 791e4ca with checked assertions for
+materialized joint owner obligations. Its borrow gate exposes a new mismatch:
+the physical owner can be made concrete between independent expiry stages,
+while a later stage still expects its generic storage frame. Its native nested
+checks remain in progress. Fresh candidate 561 adds checked conversions around
+such frame applications and restores the prior concrete representation
+afterward. Both builds and all original pending workspace bytes are preserved;
+561's native borrow/nested gate and conditional broader gate remain queued.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user has asked to continue through the remaining IM and matrix repairs,

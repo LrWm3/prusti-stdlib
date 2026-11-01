@@ -37,8 +37,7 @@ impl<'vir> ResourceCollectionTask<'vir> {
 pub(crate) struct ResourceCollectionEnc;
 #[derive(Clone)]
 pub(crate) struct ResourceCollection<'vir> {
-    pack: MethodIdn<'vir, Arguments>,
-    unpack: MethodIdn<'vir, Arguments>,
+    methods: Option<(MethodIdn<'vir, Arguments>, MethodIdn<'vir, Arguments>)>,
     params: GenericParams<'vir>,
     raw_sequence: Option<ResourceSequenceState<'vir>>,
     element_state: ResourceElementState<'vir>,
@@ -70,10 +69,13 @@ impl<'vir> ResourceCollection<'vir> {
     }
 
     pub fn statements(&self, sequence: vir::ExprSeq<'vir>, pack: bool) -> Vec<vir::Stmt<'vir>> {
+        let Some((pack_method, unpack_method)) = self.methods else {
+            return Vec::new();
+        };
         vir::with_vcx(|vcx| {
             let zero = vcx.mk_uint::<0>();
             vec![
-                (if pack { self.pack } else { self.unpack })(
+                (if pack { pack_method } else { unpack_method })(
                     sequence,
                     zero,
                     self.params.ty_exprs(),
@@ -160,6 +162,23 @@ impl TaskEncoder for ResourceCollectionEnc {
         )?;
         let params = deps.require_dep::<GenericParamsEnc>(task.args.context())?;
         let resource = ResourceUse::new(deps, *task)?;
+        // A type parameter already uses the canonical indexed resource group.
+        // Its raw and grouped permissions are identical, including the index
+        // and structural path. Keep those permissions in place and observe the
+        // same heap through the canonical sequence observer. Recursively
+        // unfolding and refolding them would introduce a second whole-heap
+        // sequence equality without changing their representation.
+        if task.ty.specifics.is_param() {
+            return Ok((
+                Vec::new(),
+                ResourceCollection {
+                    methods: None,
+                    params,
+                    raw_sequence: raw_observer,
+                    element_state,
+                },
+            ));
+        }
         let unit = unit_metadata(deps)?;
         vir::with_vcx(|vcx| {
             let mut hash = std::collections::hash_map::DefaultHasher::new();
@@ -495,8 +514,7 @@ impl TaskEncoder for ResourceCollectionEnc {
             Ok((
                 methods,
                 ResourceCollection {
-                    pack,
-                    unpack,
+                    methods: Some((pack, unpack)),
                     params,
                     raw_sequence: raw_observer,
                     element_state,
@@ -517,9 +535,12 @@ impl TaskEncoder for ResourceCollectionEnc {
 pub(crate) struct ResourceSequenceStateEnc;
 
 #[derive(Clone)]
-pub(crate) struct ResourceSequenceState<'vir> {
-    function: vir::FunctionIdn<'vir, Arguments, vir::Seq>,
-    params: GenericParams<'vir>,
+pub(crate) enum ResourceSequenceState<'vir> {
+    Canonical(ResourceUse<'vir>),
+    Converted {
+        function: vir::FunctionIdn<'vir, Arguments, vir::Seq>,
+        params: GenericParams<'vir>,
+    },
 }
 
 impl<'vir> ResourceSequenceState<'vir> {
@@ -528,20 +549,24 @@ impl<'vir> ResourceSequenceState<'vir> {
         sequence: vir::ExprGenSeq<'vir, Curr, Next>,
     ) -> vir::ExprGenSeq<'vir, Curr, Next> {
         vir::with_vcx(|vcx| {
-            self.function.call()(
+            let Self::Converted { function, params } = self else {
+                let Self::Canonical(resource) = self else {
+                    unreachable!()
+                };
+                return resource.sequence_state(sequence, vcx.mk_uint::<0>().lazy());
+            };
+            function.call()(
                 sequence,
                 vcx.mk_uint::<0>().lazy(),
                 vcx.alloc_slice(
-                    &self
-                        .params
+                    &params
                         .ty_exprs()
                         .iter()
                         .map(|e| e.lazy())
                         .collect::<Vec<_>>(),
                 ),
                 vcx.alloc_slice(
-                    &self
-                        .params
+                    &params
                         .const_exprs()
                         .iter()
                         .map(|e| e.lazy())
@@ -557,7 +582,7 @@ impl TaskEncoder for ResourceSequenceStateEnc {
     const ENCODER_NAME: &'static str = "resource sequence observer encoder";
     type TaskDescription<'vir> = RustTyDecomposition<'vir>;
     type OutputFullDependency<'vir> = ResourceSequenceState<'vir>;
-    type OutputFullLocal<'vir> = vir::Function<'vir>;
+    type OutputFullLocal<'vir> = Vec<vir::Function<'vir>>;
     type EncodingError = String;
 
     fn task_to_key<'vir>(task: &Self::TaskDescription<'vir>) -> Self::TaskKey<'vir> {
@@ -572,6 +597,13 @@ impl TaskEncoder for ResourceSequenceStateEnc {
         deps: &mut TaskEncoderDependencies<'vir, Self>,
     ) -> EncodeFullResult<'vir, Self> {
         deps.emit_output_ref(*task, ())?;
+        if task.ty.specifics.is_param() {
+            deps.require_ref::<super::resources::ResourceSequenceEnc>(())?;
+            return Ok((
+                Vec::new(),
+                ResourceSequenceState::Canonical(ResourceUse::new(deps, *task)?),
+            ));
+        }
         let conversion = deps.require_dep::<ResourceConversionEnc>(*task)?;
         if !conversion.supports_indexed_resources() {
             return Err(task_encoder::EncodeFullError::EncodingError(
@@ -654,12 +686,17 @@ impl TaskEncoder for ResourceSequenceStateEnc {
                 None,
                 Some(body),
             ));
-            Ok((definition, ResourceSequenceState { function, params }))
+            Ok((
+                vec![definition],
+                ResourceSequenceState::Converted { function, params },
+            ))
         })
     }
     fn emit_outputs<'vir>(program: &mut task_encoder::Program<'vir>) {
-        for function in Self::all_outputs_local_no_errors(program) {
-            program.add_function(function);
+        for functions in Self::all_outputs_local_no_errors(program) {
+            for function in functions {
+                program.add_function(function);
+            }
         }
     }
 }

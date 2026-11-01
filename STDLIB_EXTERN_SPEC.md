@@ -4137,6 +4137,49 @@ build-cache cleanup records are retained with the probe evidence. The resumed
 queue uses one verifier with Ferrum branch parallelism disabled; interrupted
 checks do not count as completed proofs.
 
+
+**Further isolated repairs.** Candidate 532 shares consumed-callee-obligation
+tracking across output packages, targeting a generic callee instantiated with
+several concrete resource groups. Candidate 533 adds conservative provenance
+through uniquely defined field reborrows. It identifies the caller's group by
+its opaque type, and captures the enclosing input owner's identity at the call;
+the actual checked continuation is unchanged. Its tests include distinct generic
+field types and two fields of the same type. Candidate 535 adds checked
+conditional composition into the selected input's loop summary. Both new loop
+positives run successfully and all four positive/negative variants encode; the
+dynamic-alias positive also passes Viper structure checks. Their paired native
+gates are queued. None is adopted or counted as verified yet.
+
+The complete 526 gate is 6/8 on Ferrum, with full coverage and provenance audited:
+both repeated-call expectations reach the 600-second limit, while the simple
+nested positive and its exact controls pass. The generated program applies call
+restoration wands during function-output packaging. Separate parent and referent
+restoration stages across two calls need intermediate parent state. Candidate 534
+therefore experiments with a joint checked restoration obligation for dependent
+nested groups, restricted to unit-return, pledge-free functions taking a mutable
+slice of nested mutable references. The complete antecedent must be proved when
+an original individual PCG request selects it; duplicate call/id/guard requests
+cannot replay it. This strengthens the required restoration input and is a
+conservative, scoped experiment, not unrestricted independent-lifetime support.
+Three programs encode and the full repeated caller passes Viper structure checks;
+its paired proof gate is queued behind the shorter native gates.
+
+Candidate 528 has completed both borrow gates at 5/7 each: `split_pass` and
+`vec_lookup_inclusive_pass` remain failures, and both negative controls pass for
+the intended reason. Generic-resource checks now pass 5/5 on each backend,
+including the library (310.27 seconds on Ferrum, 116.38 on Silicon). The
+resource-prefix gate passes 5/5 on Ferrum, including its library in 217.64 seconds
+and both cross-crate controls. Silicon's prefix gate is still running. This is
+promising evidence for the canonical observer and checked pointwise state law;
+it does not close the outstanding borrow failures or combined qualification.
+
+Twenty superseded frozen builds are being archived losslessly to recover disk
+space. Each archive is decompressed and every payload hash is checked before its
+online binary copy is removed. The original directory retains its archive
+manifest and restore command; the restore helper checks every binary hash again.
+Recent qualification binaries remain online. No proof result, source patch or
+failed-run log is removed.
+
 The design review also consults
 [Sound Automation of Magic Wands](https://dardinier.me/papers/CAV22_Wands.pdf)
 and [Automatic Verification of Iterated Separating Conjunctions using Symbolic Execution](https://arxiv.org/pdf/1603.00649).

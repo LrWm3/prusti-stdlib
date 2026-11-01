@@ -1366,6 +1366,17 @@ calls in a loop, retaining one current-to-entry obligation. It is gated on
 unverified; neither is a Rust encoder integration or an indexed-replacement
 proof.
 
+Probe 371 separately models a two-element reference-bearing owner. Closing
+the selected element returns the current owner and a checked nested
+continuation: opening that owner returns its current selected resource, then
+accepts the original selected resource to restore the entry owner. This avoids
+requiring duplicate permissions when the selected element was not replaced.
+The model exercises both unchanged projection and replacement while the old
+reference remains usable across a write through the current owner. Its false,
+wrong-old-value and missing-current-resource controls are queued. This is an
+unverified permission experiment, not a generic indexed encoding or a
+resource-state frame across expiry.
+
 The indexed `Option<&mut U>` failure has a different cause. Trace build 363
 confirms that all historical array-capture lookups succeed. The failed read
 occurs when constructing an expiry wand at a heap where the enum is unfolded
@@ -1387,6 +1398,27 @@ generated program no longer contains that identity conversion or duplicate
 observer. The paired positive/frame gate, followed by iterator and cross-crate
 regressions, remains queued and unqualified. Concrete representation-changing
 conversions retain their checked helpers.
+
+The optional-slice typing candidate 353 fails its minimum gate on both
+backends, so its broader tests were skipped. It replaces the original
+precondition error with an untranslated `fold.failed:insufficient.permission`.
+Exact raw replay 368 locates the same enclosing-reference fold at Viper lines
+1310–1313 on both backends: the whole-slice group has been packed using a
+concrete slice length, while the generic reference still selects its metadata
+through an unresolved associated type. The
+generated trait domain has the `Sized` pointee's unit-metadata equation and
+omits the slice equation. The pinned Rust source
+(`nightly-2026-08-15`, `library/core/src/ptr/metadata.rs`) specifies `usize`
+metadata for slices and `str`. Candidate 369 adds those compiler-provided
+associated-type equations alongside the typing repair. Own-branch rebuilding
+and four slice/str encode-only controls pass; paired verification remains
+pending. The minimum gate runs before its broader regression continuation 370.
+
+The separate loop-coupling candidate 354 finishes at 20/25 checks on each
+backend. The library, extra-next positive/false and both wrong-invariant cases
+still fail on missing indexed Vec entry resources. Its direct owned-reference
+controls pass, as do the paired baseline controls, but the PCG change is not
+adopted. The logical-tail candidate 358 remains separate and unqualified.
 
 Helper stability remains unresolved: `inclusive_wrong_frame` emitted exactly
 the same Viper bytes in builds 336 and 337, but Ferrum accepted only the intended

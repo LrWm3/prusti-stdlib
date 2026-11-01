@@ -4043,20 +4043,46 @@ The unbounded native-loop baseline 508 fails both expectations. Prototype 514
 introduces one checked current-to-entry continuation per opaque input owner,
 composes it at ordinary borrow expiry, and carries it through loop invariants.
 Its positive still lacks the current-snapshot equality at the loop boundary;
-its nonempty-loop false-postcondition control is rejected correctly. Rebuild
+its false-postcondition control is rejected correctly. Rebuild
 515 binds that snapshot when the invariant retains the complete mutable
 reference resource. It encodes and passes Viper scope/type checks. Its positive
-now fails an exhale assertion and the negative produces exactly the intended
-false-postcondition error; the positive diagnostic still needs investigation.
-Broader fixtures 517 cover repeated and conditional
+now fails the checked increment's overflow assertion: a body invariant after
+the while guard must retain `index < count` to justify that increment. The
+negative produces exactly the intended false-postcondition error, but a source
+audit found that 514/515 copied an older fixture without 508's `count > 0`
+precondition. Those controls do not qualify nonempty-loop reachability. Gate
+518 retains the checked strict bound and restores that precondition, using
+the same 515 binary. All four checks pass across both backends. No encoder
+assumption is added. Broader fixtures 517 cover repeated and conditional
 calls, early returns, calls before/after a loop, nested loops and two owners.
-All six positives pass at runtime; proof checks are gated on the minimum.
+All six positives pass at runtime. Gate 519 uses those same executable bodies
+with checked strict bounds and nonempty negative preconditions. It passes
+8/12 Ferrum checks: before/after and nested-loop cases still refer to a
+future loop-header heap while packaging PCG history wands. Candidate 520
+integrates this work with adopted owned-iterator main and reproduces those
+four failures among 28 native Ferrum cases.
 
-These handoff prototypes remain unadopted. Instantiated resource-group
-mappings, unbounded loop proofs and broader regression qualification remain
-required. Package-local captures and continuations must not escape their
-proof scope. Gate 516 also rechecks the generic-resource and borrow suites,
-including the existing `split_pass` failure, on native candidate 513.
+Candidate 523 replaces only the internal pure opaque input history wands
+already covered by the checked owner continuation. Storage, projected/mixed
+outputs, concrete split groups and explicit prefix-restoration annotations
+keep their existing PCG obligations. The new continuation is initialized and
+composed by checked wand packages, with current snapshot equalities when the
+loop retains the complete owner resource. All 28 native cases pass on each
+backend, including the seven unbounded loop variants and exact negative
+controls. `handoff523-qualification.json` verifies source/build provenance and
+nonempty/conditional reachability preconditions. Broader gate 524 is running
+on that fresh binary. These prototypes remain unadopted; instantiated group
+mapping, projected/ambiguous aliases and broader regression qualification
+remain open. Package-local captures and continuations must stay in scope.
+
+Gate 516 on candidate 513 is 4/5 for generic-resource checks and 5/6 for borrow
+checks on each backend. The borrow failure remains `split_pass`. The library
+failure is not evidence of a handoff regression: its emitted program has no
+new handoff terms and is alpha-equivalent to the earlier passing library
+499, with only crate identity suffixes changed. Direct verification of the
+complete, unedited 516 Viper program passes Ferrum in 167.17 seconds (521).
+The native library failure remains recorded and needs reproducibility and
+adapter-path diagnosis; the direct run does not replace its qualification.
 
 ## Follow-on scope authorized on 2026-11-01
 

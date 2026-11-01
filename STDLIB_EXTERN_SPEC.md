@@ -3930,14 +3930,24 @@ passes the remaining methods. Full native Silicon replay 465 also passes,
 but does not waive the original failure. Fresh encodings differ in loop-fact
 and restoration-obligation order. Candidate 471 orders those collections;
 seven fixtures produce identical normalized Viper programs in two fresh
-encodings (471/472). Its expanded paired gate and broader checks are pending.
-Its checked
+encodings (471/472). Its expanded gate passes 14/14 checks on each backend.
+Gate 484 adds nonempty normal-return and early-return wrong-result controls;
+all three checks pass on each backend. These focused results do not qualify
+the candidate: broader gate 473, using the formatted own rebuild 485, passes
+28/32 on Ferrum. The library has three package-local snapshot declarations
+used outside their scope, and both native mutable-loop cases encounter an
+unused post-call heap read after transferring the source permission. The
+extra-`next` false control reports an unexpected permission error after 509.72
+seconds. Its Viper program is alpha-equivalent to the passing 471 program,
+with distinct generated identifiers preserved by the comparison. Silicon
+broader validation is skipped after these failures. Its checked
 loop invariants reconnect historical call-entry snapshots, retain stable
 functional postconditions and dropped-result resources, and preserve the
 discriminant and moved payload of the live yield. Control 463 adds a wrong
 result postcondition after normal return, so an explicit false assertion
 cannot make the return-restoration path unreachable. Early-return fixtures
-458 encode with this candidate; they are not yet verified.
+458 pass in the expanded 471 gate, with the stronger early-return control
+passing separately in 484.
 
 Nested-reference replay 445 locates candidate 424's failure at the second
 call's nested restoration assertion inside the second return package. Probe
@@ -3948,9 +3958,12 @@ in contracts, callers and checked packages; all seven fixtures encode and
 their wand structures match. Its Ferrum gate is 12/13: the repeated caller
 still fails to find a nested restoration wand. Diagnostic 474 instead exports
 the callee's pre/post observation sequences as ghost results and reuses those
-exact values in caller obligations. It passes parsing and structure checks;
-caller verification and the conditional full callee/program gate 477 remain
-pending. Neither
+exact values in caller obligations. It passes parsing and structure checks, but caller verification fails at
+the next indexed-frame permission assertion after 552.47 seconds. The full
+callee/program gate 477 is therefore skipped. Own rebuild 486 extends checked
+physical-frame equalities through quantified indexed predicates; fixture gate
+487 also adds a normal-return false postcondition. All eight fixtures encode
+and the repeated caller's wand structures match; solver qualification is pending. Neither
 matching structure nor successful encoding establishes resource availability.
 Artifacts and exact build hashes are recorded under
 `target/stdlib-matrix-20261031-1236`; current status is in
@@ -3960,11 +3973,27 @@ Constructor-metadata candidate 478 moves slice and string metadata equations
 to the existing per-constructor fact encoder. This avoids introducing an
 unused string type merely by resolving `Pointee`, while retaining the laws
 for constructors actually used by a program. Its own Prusti rebuild succeeds;
-the optional-slice/string gate and prefix-library follow-up 479 are pending.
-No performance improvement is established yet. Generated-caller diagnostic
-476 separately tests the proposed current-owner handoff against the actual
-generic borrower encoding. Its abstract trait stub has a stronger proposed
-contract, so a passing caller alone would not qualify the implementation.
+the optional-slice/string gate passes 6/7 on Ferrum, failing the slice
+unpacking helper's whole-sequence postcondition. The candidate is rejected,
+the two metadata files are restored to main, and follow-up 479 is skipped.
+The unchanged prefix library also times out at 1800 seconds in 459; its
+other four checks pass. No performance improvement is established.
+Generated-caller handoff diagnostic 476 and its exact false-postcondition and
+missing-current controls pass all six paired expectations in 483. Its
+abstract trait stub still has an unverified stronger contract. Eight native
+Rust handoff fixtures encode and four positives pass at runtime, but the
+current-main single-call positive and negative both fail the current-resource
+reservation. The native implementation remains open.
+
+Own rebuild 491 fixes historical snapshot declaration scope and selects
+retained postcondition observations before emitting their heap reads. The
+affected library and three clients encode; the full library now passes
+Viper parsing and type checking. Paired regression and owned-loop gates
+remain pending. Rebuild 494 additionally replaces random specification-name
+suffixes in Viper paths with stable Rust definition identities, preserving
+distinct items. Its identity tests pass; fresh-encoding reproducibility and
+solver qualification are pending. These are unadopted candidates, not
+completed matrix repairs.
 
 ## Follow-on scope authorized on 2026-11-01
 

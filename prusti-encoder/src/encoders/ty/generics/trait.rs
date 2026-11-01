@@ -150,6 +150,37 @@ impl TaskEncoder for TraitEnc {
                         forall ..[trait_generics.ty_decls()] :: { [metadata] } [fact]
                     },
                 ));
+                // These compiler-provided implementations have no impl item
+                // either. The concrete reference encoder knows that slices
+                // and str carry usize lengths, so the generic resource body
+                // must resolve the same associated type when it is folded.
+                // Otherwise its conditional unit-metadata normalization can
+                // select a different resource key from the concrete use.
+                let length_metadata = deps.require_dep::<super::TyExprEnc>(
+                    RustTyDecomposition::from_prim_ty(tcx.types.usize),
+                )?;
+                let element = trait_params.rust_params()[0].expect_ty();
+                let slice = deps.require_dep::<super::TyExprEnc>(RustTyDecomposition::from_ty(
+                    ty::Ty::new_slice(tcx, element),
+                    trait_params,
+                ))?;
+                let slice_metadata = metadata_fn(vcx.alloc_slice(&[slice]), &[]);
+                axioms.push(vcx.mk_domain_axiom(
+                    vir_format_identifier!(vcx, "{trait_name}_slice_metadata"),
+                    vir::expr! {
+                        forall ..[trait_generics.ty_decls()] :: { [slice_metadata] }
+                            (slice_metadata) == (length_metadata)
+                    },
+                ));
+                let str_ty = deps.require_dep::<super::TyExprEnc>(RustTyDecomposition::from_ty(
+                    tcx.types.str_,
+                    GParams::empty(),
+                ))?;
+                let str_metadata = metadata_fn(vcx.alloc_slice(&[str_ty]), &[]);
+                axioms.push(vcx.mk_domain_axiom(
+                    vir_format_identifier!(vcx, "{trait_name}_str_metadata"),
+                    vcx.mk_eq_expr(str_metadata, length_metadata),
+                ));
             }
 
             // Each relevant impl contributes an axiom stating where it makes

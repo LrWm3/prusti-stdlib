@@ -3735,6 +3735,22 @@ through loop invariants. Merely changing the wand consequent would leave current
 versus entry conversions and historical PCG edges disconnected. The checked
 models remain the proof foundation; this integration is not implemented yet.
 
+**Metadata repair adopted (2026-11-01).** Candidate 373 passes its complete
+minimum on both backends (7/7 each), and broader gate 374 finishes at 46/51 on
+each. Both improve the advance/functional positives and their exact negatives
+over matrix 339, with no new client failures and no accepted negative tests.
+The existing three indexed Vec entry-resource errors in the library and the
+four full-region failures remain failed evidence; they are separate queued
+repairs. Coverage, frozen source, driver and harness provenance audits pass.
+`metadata373-qualification.json` records the complete decision and comparisons.
+
+The main branch now includes the compiler's slice/str `Pointee::Metadata = usize`
+equations, checked storage-typing recovery before nested collection packing,
+and the known typed empty indirect-resource body for `str` while retaining its
+physical storage permission. The slice/str ownership-transfer controls are
+retained in the iterator suite; this does not add a str value-observation API.
+The remaining candidates and final combined dual-backend matrix are still open.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user has asked to continue through the remaining IM and matrix repairs,

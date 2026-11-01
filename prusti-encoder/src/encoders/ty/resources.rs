@@ -169,7 +169,14 @@ impl TaskEncoder for ResourceGroupEnc {
         deps: &mut TaskEncoderDependencies<'vir, Self>,
     ) -> EncodeFullResult<'vir, Self> {
         deps.emit_output_ref(*task, ())?;
-        if matches!(
+        // Rust's str contains UTF-8 bytes, with no separately owned referents.
+        // Its physical predicate remains opaque, but its indirect-resource
+        // group has a known empty body. Do not extend this to unknown opaque
+        // types merely because they have no lifetime parameters.
+        let is_str = vir::with_vcx(|vcx| {
+            *task == RustTyDecomposition::from_ty(vcx.tcx().types.str_, super::generics::GParams::empty()).ty
+        });
+        if !is_str && matches!(
             task.specifics,
             TySpecifics::Param(_) | TySpecifics::Opaque(_)
         ) {
@@ -198,6 +205,7 @@ impl TaskEncoder for ResourceGroupEnc {
                 | TySpecifics::ImmRef(_)
                 | TySpecifics::Raw(_)
                 | TySpecifics::Builtin(_) => (),
+                TySpecifics::Opaque(_) if is_str => (),
                 TySpecifics::Param(_) | TySpecifics::Opaque(_) => unreachable!(),
                 TySpecifics::MutRef((data, reference)) => {
                     let referent = data.referent.decompose(task.params);

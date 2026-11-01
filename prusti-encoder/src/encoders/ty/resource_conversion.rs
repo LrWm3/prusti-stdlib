@@ -41,7 +41,7 @@ enum ConversionKind<'vir> {
         usize_ty: TyUsePure<'vir>,
         metadata: GArgCaster<'vir, crate::encoders::Pure>,
         conversion: ResourceCollection<'vir>,
-        typing: Option<ArrayTyping<'vir>>,
+        typing: ArrayTyping<'vir>,
         boundary: ResourceArray<'vir>,
     },
     Struct(Fields<'vir>),
@@ -52,6 +52,7 @@ enum ConversionKind<'vir> {
     Mutable {
         reference: TyUsePureMutRef<'vir>,
         physical: TyUseImpure<'vir>,
+        cast: GArgCaster<'vir, crate::encoders::Impure>,
         nested: &'vir ResourceConversion<'vir>,
     },
 }
@@ -165,6 +166,7 @@ impl<'vir> ResourceConversion<'vir> {
                     reference,
                     physical,
                     nested,
+                    ..
                 } => {
                     let address = reference.deref_access(snapshot.downcast_ty());
                     let stored = physical.ref_to_snap(address);
@@ -295,6 +297,7 @@ impl<'vir> ResourceConversion<'vir> {
                     reference,
                     physical,
                     nested,
+                    ..
                 } => {
                     let address = reference.deref_access(snapshot.downcast_ty());
                     let raw = physical.ref_to_pred(vcx, address, None);
@@ -340,19 +343,40 @@ impl<'vir> ResourceConversion<'vir> {
         metadata: vir::ExprPSnap<'vir>,
         pack: bool,
     ) -> Vec<vir::Stmt<'vir>> {
+        let mut statements = if pack {
+            self.establish_storage_typing(storage, metadata)
+        } else {
+            Vec::new()
+        };
+        statements.extend(self.statements(self.physical.ref_to_snap(storage), metadata, pack));
+        statements
+    }
+
+    fn establish_storage_typing(
+        &self,
+        storage: vir::ExprRef<'vir>,
+        metadata: vir::ExprPSnap<'vir>,
+    ) -> Vec<vir::Stmt<'vir>> {
         let mut statements = Vec::new();
-        if pack && let Some(typing) = &self.owned_typing {
+        if let Some(typing) = &self.owned_typing {
             statements.extend(typing.establish(storage));
         }
-        if pack
-            && let ConversionKind::Array {
-                typing: Some(typing),
-                ..
-            } = &self.kind
+        if let ConversionKind::Array {
+            extent,
+            usize_ty,
+            metadata: caster,
+            typing,
+            ..
+        } = &self.kind
         {
-            statements.push(typing.establish(storage));
+            let extent = extent.unwrap_or_else(|| {
+                usize_ty
+                    .expect_primitive()
+                    .snap_to_prim(caster.cast_to_caller_ctx(metadata.upcast_ty()).downcast_ty())
+                    .downcast_ty()
+            });
+            statements.push(typing.establish_extent(storage, extent));
         }
-        statements.extend(self.statements(self.physical.ref_to_snap(storage), metadata, pack));
         statements
     }
 
@@ -447,6 +471,7 @@ impl<'vir> ResourceConversion<'vir> {
                 ConversionKind::Mutable {
                     reference,
                     physical,
+                    cast,
                     nested,
                 } => {
                     let address = reference.deref_access(snapshot.downcast_ty());
@@ -468,6 +493,20 @@ impl<'vir> ResourceConversion<'vir> {
                         statements.push(vcx.mk_unfold_stmt(wrapped));
                     }
                     statements.push(vcx.mk_assert_stmt(physical.ref_to_pred(vcx, address, None)));
+                    if pack
+                        && (nested.owned_typing.is_some()
+                            || matches!(nested.kind, ConversionKind::Array { .. }))
+                    {
+                        // A nested reference provides storage, not just a
+                        // value snapshot. Recover its element type facts
+                        // before the checked whole-collection conversion.
+                        statements.extend(cast.cast_to_caller_ctx(address));
+                        statements.extend(nested.establish_storage_typing(
+                            address,
+                            reference.generic_metadata(snapshot.downcast_ty()),
+                        ));
+                        statements.extend(cast.cast_to_callee_ctx(address));
+                    }
                     let current =
                         reference.cast_to_caller_ctx(physical.ref_to_snap(address).downcast_ty());
                     statements.extend(nested.statements_at(
@@ -535,22 +574,33 @@ impl TaskEncoder for ResourceConversionEnc {
         let physical = deps.require_dep::<TyUseImpureEnc>(*task)?;
         let resource = ResourceUse::new(deps, *task)?;
         let unit = unit_metadata(deps)?;
+        let is_str = vir::with_vcx(|vcx| {
+            task.ty == RustTyDecomposition::from_ty(vcx.tcx().types.str_, super::generics::GParams::empty()).ty
+        });
         let kind = match task.ty.zip(pure).specifics {
+            // Only the known byte string has no indirect resources. Keep its
+            // physical storage permission and fold its checked resource body.
+            TySpecifics::Opaque(_) if is_str => ConversionKind::Empty,
             TySpecifics::Param(_) | TySpecifics::Opaque(_) => ConversionKind::Opaque,
             TySpecifics::Primitive(_)
             | TySpecifics::ImmRef(_)
             | TySpecifics::Raw(_)
             | TySpecifics::Builtin(_) => ConversionKind::Empty,
             TySpecifics::MutRef((data, reference)) => {
+                let referent = data.referent.decompose_normalize(task.args);
                 let physical = deps.require_dep::<TyUseImpureEnc>(
                     data.referent.decompose_context(task.ty.params, task.args),
                 )?;
-                let nested = deps.require_dep::<ResourceConversionEnc>(
-                    data.referent.decompose_normalize(task.args),
-                )?;
+                let nested = deps.require_dep::<ResourceConversionEnc>(referent)?;
                 ConversionKind::Mutable {
                     reference: reference.clone(),
                     physical,
+                    cast: deps.require_dep::<GArgsCastEnc<crate::encoders::Impure>>(
+                        (!referent.ty.specifics.is_param()).then_some(RustTyNormalized {
+                            param: RustTyDecomposition::param(),
+                            concrete: referent,
+                        }),
+                    )?,
                     nested: vir::with_vcx(|vcx| vcx.alloc(nested)),
                 }
             }
@@ -611,11 +661,7 @@ impl TaskEncoder for ResourceConversionEnc {
                     usize_ty,
                     metadata,
                     conversion,
-                    typing: if data.slice {
-                        None
-                    } else {
-                        Some(deps.require_dep::<ArrayTypingEnc>(*task)?)
-                    },
+                    typing: deps.require_dep::<ArrayTypingEnc>(*task)?,
                     boundary: deps.require_dep::<ResourceArrayEnc>(*task)?,
                 }
             }

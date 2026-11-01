@@ -4546,6 +4546,52 @@ control. An untrusted generic slice identity and its false contract additionally
 check staged owner restoration. Native proof remains pending; no feature is
 qualified by these encoding results.
 
+### Small untrusted contracts and historical reference addresses (581–588)
+
+Candidate 576 completes at **22/26 Ferrum checks**, with audited coverage and
+source/build provenance. Fresh application-local flags fix both forwarding
+controls. Escaped-reference replacement still loses its final current value,
+and inclusive lookup still lacks its slice frame. Diagnostic 578 advances
+past that frame failure after reordering, but lacks entry resources; diagnostic
+581 applies the returned owner obligations and advances again, to an old-vector
+resource observation. Neither diagnostic establishes native qualification.
+
+Candidate 580 fails native well-formedness: placing `old[lhs]` around a pure
+resource key makes that expression an argument evaluated when creating the
+wand, before the antecedent heap exists. Structural checking did not catch
+this. The earlier concern about using fixed keys directly was too broad.
+Candidates 585–586 keep fixed keys outside `old[lhs]`, retain it on the
+heap-dependent resource observation, and exclude unsupported key expressions.
+586 also recognizes heap-free generated snapshot constructors; its emitted
+untrusted exchange contract contains the intended transfer facts. All four
+encoding and structural checks pass. Native proof remains required.
+
+The unchanged 576 baseline's small-contract gate 582 matches **5/11 checks**.
+The generic exchange loses caller values, an untrusted slice identity cannot
+establish its staged owner obligation, and direct mutable-reference replacement
+fails permission restoration. Candidate 585 restricts a current-owner handoff
+to a stage that also restores that owner's storage. Its untrusted identity
+definition and exact false-contract control both pass, but its caller still
+fails. The forwarding wrapper now reports a resource-permission failure, so
+this restriction is not qualified for adoption.
+
+Inspection of direct replacement finds a separate address error: when the
+original loan expires, the assigned reference storage already points to the
+replacement target. Candidate 587 selects the reference address using the
+borrow's historical lifetime-projection label, with the same precedence as
+existing labelled resource accesses. It also omits an empty transfer conjunction.
+It rebuilds Prusti from its own source; five programs encode and pass structural
+checks, including branch-dependent writes and two successive replacements.
+Native positive and exact false-value controls are queued. Original pending
+workspace contents and the accepted PCG pin are restored after the build.
+
+The serial queue compares the small 586/587 contracts, then uses frozen 587
+for the broader unresolved families rather than repeating the slow gate on
+586. Any focused failures remain open alongside broader results. Full-program
+diagnostic 588 will localize the small identity/inclusive failures only if
+they remain on 587. Routine changes and all their controls continue on Ferrum;
+Silicon is reserved for major feature sign-off and final integration.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user has asked to continue through the remaining IM and matrix repairs,

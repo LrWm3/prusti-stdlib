@@ -3925,7 +3925,13 @@ Owned-loop candidate 455 is the first to pass all ten focused Ferrum checks,
 including the extra-`next` positive (143 seconds) and exact false control.
 Silicon passes nine: the positive still reports a function-precondition
 permission failure. The candidate is not adopted. Exact-source paired replay
-462 is locating that difference before broader qualification. Its checked
+462 passes the main method on both backends, and complementary replay 464
+passes the remaining methods. Full native Silicon replay 465 also passes,
+but does not waive the original failure. Fresh encodings differ in loop-fact
+and restoration-obligation order. Candidate 471 orders those collections;
+seven fixtures produce identical normalized Viper programs in two fresh
+encodings (471/472). Its expanded paired gate and broader checks are pending.
+Its checked
 loop invariants reconnect historical call-entry snapshots, retain stable
 functional postconditions and dropped-result resources, and preserve the
 discriminant and moved payload of the live yield. Control 463 adds a wrong
@@ -3935,14 +3941,30 @@ cannot make the return-restoration path unreachable. Early-return fixtures
 
 Nested-reference replay 445 locates candidate 424's failure at the second
 call's nested restoration assertion inside the second return package. Probe
-456 adds checked assertions around the call and package boundaries. Candidate
+456 adds checked assertions around the call and package boundaries, but reaches
+its 600-second limit without localizing the failure. Candidate
 460 captures old RHS and frame observations outside the wands, consistently
 in contracts, callers and checked packages; all seven fixtures encode and
-their wand structures match. Its verification gate remains pending. Neither
+their wand structures match. Its Ferrum gate is 12/13: the repeated caller
+still fails to find a nested restoration wand. Diagnostic 474 instead exports
+the callee's pre/post observation sequences as ghost results and reuses those
+exact values in caller obligations. It passes parsing and structure checks;
+caller verification and the conditional full callee/program gate 477 remain
+pending. Neither
 matching structure nor successful encoding establishes resource availability.
 Artifacts and exact build hashes are recorded under
 `target/stdlib-matrix-20261031-1236`; current status is in
 `checkpoint-live.json`.
+
+Constructor-metadata candidate 478 moves slice and string metadata equations
+to the existing per-constructor fact encoder. This avoids introducing an
+unused string type merely by resolving `Pointee`, while retaining the laws
+for constructors actually used by a program. Its own Prusti rebuild succeeds;
+the optional-slice/string gate and prefix-library follow-up 479 are pending.
+No performance improvement is established yet. Generated-caller diagnostic
+476 separately tests the proposed current-owner handoff against the actual
+generic borrower encoding. Its abstract trait stub has a stronger proposed
+contract, so a passing caller alone would not qualify the implementation.
 
 ## Follow-on scope authorized on 2026-11-01
 

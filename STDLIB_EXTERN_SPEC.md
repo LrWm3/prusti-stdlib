@@ -51,7 +51,7 @@ does not establish the corresponding Rust feature. The separately authorized
 [D1–D6 follow-on scope](#follow-on-scope-authorized-on-2026-11-01) is also part of
 the remaining work.
 
-### Active repair evidence (2026-11-01, probes 408–424)
+### Active repair evidence (2026-11-01, probes 408–449)
 
 The nested observer repair now proves the original nested-reference Rust
 positive on Ferrum. Probe 408 passed 9/9 Ferrum checks and 8/9 Silicon checks;
@@ -61,7 +61,12 @@ negative controls, but the new repeated-call positive failed: 12/13 Ferrum
 checks passed. Silicon has not qualified that revision. Probe 424 now shares
 the set of consumed, guarded call obligations across return packages; each
 later package must still prove its consequent from its antecedent and frames.
-Its seven encode-only clients pass; verification remains pending.
+Its seven encode-only clients pass. The minimum remains 12/13 on Ferrum:
+the original positive and all exact negative controls pass, but the repeated
+caller still fails. AST inspection confirms that the second package no longer
+reuses the earlier callee obligation. Exact textual replay 438 timed out at
+600 seconds, so it does not establish a new failure location. A method-filtered
+diagnostic is queued; this candidate is not adopted.
 
 The owned-loop candidate 382 passed 21/26 checks on each backend, with complete
 coverage and provenance audits. Exact-source replay 418 locates duplicate
@@ -74,11 +79,37 @@ Prusti's own rebuilt candidate 422 passes 6/10 Ferrum checks: the duplicate
 package is gone, but loop reconstruction now reads labels from the wrong copy
 of the loop prefix. Main's PCG pin remains `269cb9a`; this is not an adoption.
 
-Next, preserve the actual call obligations and their snapshot identities across
-loop cuts and the duplicated prefix before a body invariant. Historical reads
-must refer to an executed capture, including exits before the invariant is
-first reached. Check ordinary and extra-`next` loops, wrong invariants, false
-assertions, empty traversal and nested loops before broadening qualification.
+Candidate 433 preserves actual call obligations, shares capture locals between
+the duplicated prefix and repeated body, and captures historical nonreference
+values at executable MIR points. Its Ferrum minimum improves to 8/10: both
+ordinary loops and both exact wrong-invariant controls pass. The extra-`next`
+positive and false control still fail resource restoration. Prefix early-return
+fixtures encode, but their proofs are not yet qualified.
+
+Checked-source diagnostics 437 and 440 isolate three lost facts: the current
+second iterator equals its post-call snapshot, a discarded yield still owns
+resources needed by the retained obligation, and independently captured copies
+of one observation must remain equal. The added invariants pass entry and
+backedge checks; the remaining diagnostic is the bound needed to observe the
+first element of the pre-call tail. A separate checked invariant tests that
+ordinary `next` postcondition in diagnostic 444. These edited Viper programs
+are diagnostic evidence, not Rust feature qualification.
+
+The rebuilt 449 candidate implements the resulting plan: deduplicate identical
+call observations, retain ADT projections of a single capture, preserve stable
+logical consequences of functional postconditions, carry dropped-result
+resources that remain leaves of a live call obligation, and infer checked
+snapshot equalities along post-call resource flows to available current owners.
+All inferred invariants must be proved at entry and every backedge. Whole
+postcondition retention in prototype 446 was retired after encoding showed
+heap-dependent facts and old labels; none of its proofs is claimed.
+
+Run the focused ordinary/extra-call positive and exact-negative gate first,
+then early returns, empty traversal, nested loops and the broader owned suite.
+The independent cross-crate rerun 360 passes all ten generic-resource checks
+on Ferrum; Silicon passes all nine client/runtime checks but fails the
+specification library's prefix restoration. Its prefix-resource pair remains
+in progress. These backend differences must be resolved before qualification.
 Logs, exact-source replays, frozen source/binary hashes and audits are under
 `target/stdlib-matrix-20261031-1236`. A failed Ferrum minimum gate stops routine
 qualification of that candidate; passing repairs still require Silicon before

@@ -220,6 +220,7 @@ fn handle_result(
             errors
                 .into_iter()
                 .flat_map(|error| {
+                    debug!("Backend verification error before source translation: {error:?}");
                     let Some(offending_pos_id) = error
                         .offending_pos_id
                         .as_ref()

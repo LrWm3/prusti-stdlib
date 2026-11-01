@@ -4070,8 +4070,8 @@ composed by checked wand packages, with current snapshot equalities when the
 loop retains the complete owner resource. All 28 native cases pass on each
 backend, including the seven unbounded loop variants and exact negative
 controls. `handoff523-qualification.json` verifies source/build provenance and
-nonempty/conditional reachability preconditions. Broader gate 524 is running
-on that fresh binary. These prototypes remain unadopted; instantiated group
+nonempty/conditional reachability preconditions. Broader gate 524 has completed
+on that fresh binary, as recorded below. These prototypes remain unadopted; instantiated group
 mapping, projected/ambiguous aliases and broader regression qualification
 remain open. Package-local captures and continuations must stay in scope.
 
@@ -4083,6 +4083,70 @@ new handoff terms and is alpha-equivalent to the earlier passing library
 complete, unedited 516 Viper program passes Ferrum in 167.17 seconds (521).
 The native library failure remains recorded and needs reproducibility and
 adapter-path diagnosis; the direct run does not replace its qualification.
+
+
+**Integration follow-up (2026-11-01).** Candidate 523 also passes the exact
+32-check owned-iterator regression set on each backend. Audit 524 confirms
+complete coverage and source/build provenance. Its generic-resource gate is
+5/5 on Ferrum and 4/5 on Silicon, where the library still reports loop
+restoration failure. Borrow checks are 5/6 on each backend: `split_pass` still
+fails its current-resource reservation. These failures remain open.
+
+Gate 525 adds direct/conditional aliases, projected generic owners, two concrete
+lifetime groups and a generic callee instantiated with those groups. All six
+positive fixtures pass at runtime, but verification passes only 4/12 checks on
+each backend. Direct aliases and direct concrete groups pass; conditional aliases,
+projected generic fields, concrete-group loops and a generic callee instantiated
+with several groups fail on both backends. Wrong diagnostics on their negative
+controls are failures, not successful rejection. Candidate 529 propagates logical
+input identities through whole mutable-reference assignments and branches, then
+captures the selected identity at each call. This adds no address-distinctness
+assumption. All 16 checks pass across both backends: direct/conditional aliases,
+same-type owners and the existing two-owner loop, each with an exact negative
+control. Audit 529 checks fixture, binary and diagnostic provenance. Projected
+group mapping and dynamically selected owners inside loops remain open.
+
+Gate 527 adds an arbitrary-count borrowed-counter postcondition and an unchanged
+frame. Its runtime check and all four encodings pass, but the functional positive
+fails its postcondition on both backends. The wrong-count, wrong-frame and false
+controls produce exactly the intended error (3/4 per backend). Diagnostic 530
+separates the two postconditions, checks an explicit invariant preserving the
+immutable count, and removes the owner call in a baseline. It is queued; those
+variants do not replace the original failed qualification. Candidate 531 extends
+the checked loop summaries to individual concrete input groups, preserving the
+existing treatment of explicit prefix-restoration annotations. Its own rebuilt
+binary is frozen and its paired concrete-group loop and alias regressions are
+queued. Neither candidate is adopted yet.
+
+Fresh build 526 combines handoff 523 with the pending nested indexed observations
+and physical frames. Its three focused programs encode and the complete repeated
+caller passes Viper structure checks, but emits no new owner-handoff terms. In the
+resumed proof gate, the simple nested positive passes while the repeated-call
+positive reaches the 600-second limit. This combination does not establish a
+nested-call repair. Independent build 528 combines 523 with canonical generic
+sequence observers and their checked pointwise state law from 379. It targets
+the remaining inclusive-lookup resource reservation and resource-prefix library
+obligations; its paired gate is queued. Both builds remain isolated and unadopted.
+
+**Interruption recovery.** On resuming after the Paseo interruption, no old worker
+remained. The incomplete 526 run and partial 529 freeze were preserved and
+identified separately. Candidate 529 was rebuilt from its own source, all six
+binaries were frozen and hashed, and its complete paired gate reran successfully.
+Original pending workspace contents were restored byte-for-byte. Recovery and
+build-cache cleanup records are retained with the probe evidence. The resumed
+queue uses one verifier with Ferrum branch parallelism disabled; interrupted
+checks do not count as completed proofs.
+
+The design review also consults
+[Sound Automation of Magic Wands](https://dardinier.me/papers/CAV22_Wands.pdf)
+and [Automatic Verification of Iterated Separating Conjunctions using Symbolic Execution](https://arxiv.org/pdf/1603.00649).
+The former requires one footprint compatible with every permitted antecedent
+state; the latter explains framing heap-dependent observations through quantified
+resources and controlling their instantiation. Applying those principles here
+means freezing continuation identities before packaging, preserving one linear
+restoration obligation, and proving pointwise observer laws instead of relying
+on arbitrary recursive unfolding. These are design requirements for the pending
+encoder work, not evidence that any particular installed backend is defective.
 
 ## Follow-on scope authorized on 2026-11-01
 

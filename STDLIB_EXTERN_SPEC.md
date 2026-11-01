@@ -4622,6 +4622,48 @@ failed Rust E0508 because its specification moved a non-Copy slice element;
 the corrected borrowed-snapshot specification adds no Copy/Clone bound.
 The failed source and encoding result are retained.
 
+### Isolated historical-reference repair and remaining gates (591–595)
+
+The historical-address repair was rebuilt independently on main `392ffe06f`
+with the existing PCG `9dfaf88` pin (probe 595). A mutable loan now reads the
+assigned reference from the heap version recorded by its lifetime projection.
+Replacing the reference's storage must not redirect expiry to its new referent.
+The direct replacement positive and exact false-value control both pass Ferrum.
+The conditional and repeated replacements still fail value assertions without
+the pending transfer contracts: the complete isolated gate is **6/10**, including
+preflight and three runtime checks. This is an adoption of the address repair
+only, not completion of the replacement milestone. The combined candidate 591
+passes all six of these proof controls and its complete small gate is **23/23**.
+Probe 595's patch and binary hashes are retained in `build595.json`; its source
+patch is `682e868cab3348aa3c24e1faffda9a229e72c9da6bf3d79a5273a01fb17d30da`.
+The original pending encoder changes remain separate from this repair.
+
+Candidate 591's larger replacement gate remains **4/6**: the positive loses the
+updated element value and the negative fails at that earlier assertion, rather
+than its expected location. Candidate 593's broader scalar/indexed transfer
+rule is **24/27** on its small gate and is not accepted. Its new untrusted
+`first_element` definition cannot establish a value equality for every indexed
+resource with an equal underlying key. Diagnostic 594 restricts that equality
+to the actual selected index and retains the entire program: the definition
+and selected value then verify, but the client's unchanged-second-element
+assertion still fails. This localizes the missing index correspondence; the
+weakened diagnostic is not a general fix or a passing qualification.
+
+The full-program nested-call experiment 583 still fails wand matching after
+201.72 seconds despite deduplicating identical captures. That transformation
+is not adopted, and this result does not establish a backend defect. The wider
+matrix-family gate 577 was changed before execution to frozen candidate 591,
+whose small ownership gate passes; it excludes candidate 593. Its results must
+still be audited, and known focused failures remain open independently.
+
+Next, qualify scalar/indexed value transfer with its actual resource-index
+correspondence, preserve current-owner resources together with their entry
+restoration obligation through forwarding, and resolve nested-call wand
+identity. Current and entry resource layouts cannot be assumed interchangeable.
+Combine accepted repairs, rerun the remaining matrix failures and final matrix,
+then stop at the user-requested boundary below. Routine checks remain Ferrum;
+Silicon is reserved for completed feature and final integration sign-off.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user initially authorized the remaining IM and matrix repairs followed by

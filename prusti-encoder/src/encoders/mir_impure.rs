@@ -866,7 +866,26 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 // For a borrow e.g. let x = &mut y; the capability to `y` is
                 // folded into the Rvalue `&mut y` that is stored in `x`. This
                 // reverses that effect
-                self.unfold(borrow.assigned_ref(), label)?;
+                // A reference's storage may already contain a replacement
+                // value while its original referent remains borrowed. The
+                // projection records which reference value owns this loan.
+                // Read its historical address, then restore its permissions
+                // in the current heap, just as for a labelled assigned place.
+                let mut assigned = borrow.assigned_ref();
+                if let Some(at) =
+                    borrow
+                        .blocked_by_nodes(self.pcg_ctxt())
+                        .find_map(|node| match node {
+                            PcgNode::LifetimeProjection(projection) => match projection.label() {
+                                Some(LifetimeProjectionLabel::Location(at)) => Some(at),
+                                _ => None,
+                            },
+                            _ => None,
+                        })
+                {
+                    assigned = pcg::utils::LabelledPlace::new(assigned.place(), at).into();
+                }
+                self.unfold(assigned, label)?;
             }
             BorrowPcgEdgeKind::BorrowFlow(borrow_flow)
                 if let BorrowFlowEdgeKind::Assignment(assignment_data) = borrow_flow.kind()

@@ -1455,6 +1455,35 @@ rather than its allocator. It builds, but three encode controls reject a nested
 in a separate binding before reading its expiry state. No proof has run on this
 specification change, and the original failed build/inputs remain recorded.
 
+The focused follow-ups now pass for optional slice/str transfer (373: 7/7
+checks per backend) and historical indexed-enum snapshots (364: 5/5 per
+backend). Every selected negative reaches its exact assertion, and coverage
+and provenance audits pass. The broader 374 and 364 regression continuations
+remain required before adoption. Candidate 377 rebuilds the owned-tail and
+referent-state contracts with the temporal capture fixed; all four controls
+encode, and its paired minimum is running. Candidate 375 never entered the
+verifier queue.
+
+Canonical-sequence minimum 367 fails on both backends (3/4 each). Ferrum
+reports the current-owner permission failure in the final wand package and
+two array-helper observation postconditions; Silicon reaches the 600-second
+timeout. Both exact frame negatives pass. The canonical recursive observer
+specifies only length, whereas the removed duplicate observer also specified
+its pointwise relation to element observations. Candidate 379 adds that
+relation as a checked recursive function postcondition. It builds in isolation
+and all three controls encode; its paired gate is queued. This change cannot
+be assumed to repair the separate current-owner permission failure.
+
+Raw diagnostic 372 locates the nested-reference failure in the second
+`m_visit` restoration wand at Viper lines 839–945. Its indexed inner-pointer
+reads remain inside the contract's quantifier because `array_indirect`
+disables snapshot bindings below that binder; packaging freezes those reads
+at `package_post0`. A checked sequence capture can freeze the pointer
+identities outside the wand without capturing permissions. Model 381 tests
+that proposal with a recursive sequence observer, later parent-pointer
+replacement, and false/state/permission controls. It is queued and unverified;
+no Rust encoder change for this diagnosis is accepted yet.
+
 The separate loop-coupling candidate 354 finishes at 20/25 checks on each
 backend. The library, extra-next positive/false and both wrong-invariant cases
 still fail on missing indexed Vec entry resources. Its direct owned-reference

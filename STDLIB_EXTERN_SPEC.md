@@ -4504,6 +4504,48 @@ families in 574, subject to the native adapter tests passing. Broader results
 must retain any focused failures and cannot establish combined qualification
 on their own.
 
+### Restoration ordering and transferred values (probes 571–580)
+
+The native adapter tests finish at **11/11**, in addition to the eight structural
+tests. The explicit-permission candidate 569 finishes at **9/11 nested checks**:
+the repeated caller and its false-postcondition control still fail to find a
+wand. Coverage and source/build provenance are complete; no negative is accepted.
+The representation change is therefore not a demonstrated repair. Diagnostic
+572 checks explicit repackaging of the captured obligations without adding
+assumptions; its full-program Ferrum run is pending.
+
+Candidate 573 fixes the proof-script scope but introduces duplicate declarations
+when a retained obligation is applied in multiple branches. It is withdrawn
+before native verification. Candidate 576 allocates a fresh application-local
+flag at each use while preserving captured contract identities. All three
+encoding and full structural checks pass; the 26-check borrow gate is queued.
+Broader 577 will attempt the other unresolved matrix families even if a focused
+case fails, preserving those failures in its record.
+
+Exact replay 575 locates inclusive lookup's missing slice permission. Inspection
+shows the outer vector restoration consuming that storage before the later
+slice obligation needs it as a frame. Diagnostic 578 moves the later slice
+restoration earlier within the same guarded action phase. Every statement and
+obligation remains; structural checking passes and proof is pending. A successful
+diagnostic would still require a dependency-based implementation and native
+positive/negative qualification.
+
+Replacement's generated obligation transfers reference resources without a
+value-preservation relation between matching resource identities. Candidate 580
+adds an identity-guarded relation for plain resource leaves: compare complete
+keys across the antecedent and consequent, and preserve the resource observation
+when they match. Antecedent keys and observations use `old[lhs]`. Each observation
+is supported by permissions on its own side; there is no permission-query guard.
+Quantified, conditional and bound groups are excluded until their scoped
+correspondence is modeled. Untrusted callees must prove the stronger package.
+This follows Viper's [documented antecedent-state observation semantics](https://viper.ethz.ch/tutorial/magic-wands-heap-dependent.html).
+The earlier 579 prototype is withdrawn before proof because its key comparison
+used the wrong heap. Six encoding and structural checks pass on 580, including
+an untrusted generic permutation, a false-value control and a false-contract
+control. An untrusted generic slice identity and its false contract additionally
+check staged owner restoration. Native proof remains pending; no feature is
+qualified by these encoding results.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user has asked to continue through the remaining IM and matrix repairs,

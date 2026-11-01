@@ -1266,6 +1266,16 @@ restoration declaration, before its intended final assertion. These remain
 failed entries. Follow-up 355 repeats each affected family on build 352 and
 Silicon with the same bounds; the complete baseline continues unchanged.
 
+Follow-up 355 is complete with unchanged bounds: Ferrum passes 7/8 checks
+and Silicon passes 8/8. Both backends reject all three negative clients at
+their intended final assertions, including the former wrong-obligation
+failures. The early-break positive still times out after 600 seconds on
+Ferrum, while Silicon verifies it in 143.49 seconds. The generic-prefix
+positive verifies on both backends. Source/build provenance and complete
+selected coverage pass the audit (`qualification355.json`, `audit355.json`);
+this closes the diagnostic follow-up, not the remaining positive timeout or
+the final combined matrix. Raw replay 359 will skip these now-passing negatives.
+
 Direct owned-reference controls now exercise `Vec<&mut u32>::into_iter`, a
 write through its yielded reference, owner restoration, and an explicit false
 assertion. Generated contracts reveal a missing ownership model: `IntoIter`

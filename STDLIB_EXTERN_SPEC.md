@@ -1345,6 +1345,37 @@ scalar-value-frame proofs only. They do not yet establish a resource-state
 frame, indexed replacement, current-owner PCG nodes, or continuation tracking
 through branches and loops.
 
+The next checked models separate two additional obligations. Probe 365 adds a
+referent-state frame to the delayed continuation and checks that a later write
+through the current group survives restoration of the entry group. Probe 366
+composes that continuation through an arbitrary number of scalar projection
+calls in a loop, retaining one current-to-entry obligation. It is gated on
+365 and includes false-value and missing-continuation controls. Both remain
+unverified; neither is a Rust encoder integration or an indexed-replacement
+proof.
+
+The indexed `Option<&mut U>` failure has a different cause. Trace build 363
+confirms that all historical array-capture lookups succeed. The failed read
+occurs when constructing an expiry wand at a heap where the enum is unfolded
+into its discriminant and active fields. Build 364 extends the existing
+checked struct reconstruction to enum snapshots, preserving the original heap
+label and testing actual field permissions. The original positive and wrong
+value control, a false control, and replacement with an escaped old reference
+all encode. Its paired verifier gate is still pending; encoding alone does
+not qualify the repair.
+
+The new-pin inclusive Vec lookup still reaches the 600-second timeout inside
+`resource_pack_aggregate_f569555111cf551b`. For its generic element, the helper
+recursively unfolds and refolds identical indexed permissions while comparing
+two recursive sequence observers. Candidate 367 keeps those canonical
+permissions in place and uses the existing canonical sequence observer
+directly for type parameters. It does not treat an unknown type as having no
+resources. Own-branch rebuilding and three encode-only controls pass; the
+generated program no longer contains that identity conversion or duplicate
+observer. The paired positive/frame gate, followed by iterator and cross-crate
+regressions, remains queued and unqualified. Concrete representation-changing
+conversions retain their checked helpers.
+
 Helper stability remains unresolved: `inclusive_wrong_frame` emitted exactly
 the same Viper bytes in builds 336 and 337, but Ferrum accepted only the intended
 negative in 43.56 seconds in the first and added an aggregate-helper failure in

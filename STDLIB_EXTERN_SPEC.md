@@ -3911,6 +3911,39 @@ is not waived or included in the qualified scope. `enum405-qualification.json`
 records the source, build, comparison and exact-control evidence. Option
 replacement and final combined qualification remain open.
 
+**Current-main cross-crate and loop follow-up (2026-11-01).** Build 452 is a
+fresh rebuild of main `a3a96bdfe` with PCG `269cb9a2e` and Ferrum `0e048a4`,
+without the pending encoder experiments. Gate 453 passes all five selected
+generic-resource expectations on each backend, including the verified spec
+library. The prefix-resource gate passes its runtime, positive and exact
+negative clients, but its library reaches the 600-second limit on both
+backends (4/5 each). Coverage and provenance audits pass. Follow-up 459 raises
+only the whole-program limit to 1800 seconds; assertion and solver-check
+limits remain unchanged. The original timeouts remain unresolved evidence.
+
+Owned-loop candidate 455 is the first to pass all ten focused Ferrum checks,
+including the extra-`next` positive (143 seconds) and exact false control.
+Silicon passes nine: the positive still reports a function-precondition
+permission failure. The candidate is not adopted. Exact-source paired replay
+462 is locating that difference before broader qualification. Its checked
+loop invariants reconnect historical call-entry snapshots, retain stable
+functional postconditions and dropped-result resources, and preserve the
+discriminant and moved payload of the live yield. Control 463 adds a wrong
+result postcondition after normal return, so an explicit false assertion
+cannot make the return-restoration path unreachable. Early-return fixtures
+458 encode with this candidate; they are not yet verified.
+
+Nested-reference replay 445 locates candidate 424's failure at the second
+call's nested restoration assertion inside the second return package. Probe
+456 adds checked assertions around the call and package boundaries. Candidate
+460 captures old RHS and frame observations outside the wands, consistently
+in contracts, callers and checked packages; all seven fixtures encode and
+their wand structures match. Its verification gate remains pending. Neither
+matching structure nor successful encoding establishes resource availability.
+Artifacts and exact build hashes are recorded under
+`target/stdlib-matrix-20261031-1236`; current status is in
+`checkpoint-live.json`.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user has asked to continue through the remaining IM and matrix repairs,

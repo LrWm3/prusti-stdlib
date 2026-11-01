@@ -4592,6 +4592,36 @@ diagnostic 588 will localize the small identity/inclusive failures only if
 they remain on 587. Routine changes and all their controls continue on Ferrum;
 Silicon is reserved for major feature sign-off and final integration.
 
+### Audited small restoration regressions (586–593)
+
+Candidate 586 matches **10/13 Ferrum checks**; its untrusted generic exchange
+now preserves both caller values and rejects the exact false-value and
+false-contract controls. Candidate 587's historical reference-address fix
+matches **18/19** small checks, including direct, branched and repeated
+replacement with exact negative controls. The larger gate remains **11/17**:
+Vec replacement, forwarding and inclusive lookup are still open.
+
+The phase-local ordering repair in 590 removes the small identity caller's
+permission failure, leaving a final value failure. Its full focused gate is
+**17/21**. Candidate 591 extends guarded value transfer to one quantified scope,
+retaining both bounds and complete resource identities. Its small gate is
+**23/23**, with complete coverage and matching source/build provenance,
+including the untrusted generic const-array definition, the slice-identity
+caller, and all exact controls. The fifteen Rust regression programs from this
+gate are committed as the required behavior; this does not adopt the pending
+combined encoder or qualify the unresolved larger cases.
+
+Diagnostic 592 confirms that IndexMut's generic restoration factors a returned
+element resource through the index argument before restoring the collection.
+At `I = usize`, that intermediate resource cannot carry the element's state.
+Candidate 593 combines overlapping nested-resource stages while keeping
+physical storage and disjoint groups separate. It also checks scalar/indexed
+transfers using complete underlying resource identities. It builds; native
+qualification is pending. An additional generic element fixture initially
+failed Rust E0508 because its specification moved a non-Copy slice element;
+the corrected borrowed-snapshot specification adds no Copy/Clone bound.
+The failed source and encoding result are retained.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user initially authorized the remaining IM and matrix repairs followed by

@@ -4340,7 +4340,15 @@ observes any member of that identity group. Guards, invariants, captures and
 other uses retain the complete group; removed expressions are restricted to
 integer constants and copies between those private locals. Its encoded prefix
 program matches passing 528 after removing comments and normalizing generated
-crate names. Verification is pending; this comparison alone is not a proof.
+crate names. Its complete Ferrum prefix gate subsequently passes 12/12,
+including the specification library in 206.00 seconds. The native result and
+source/build provenance are audited in `audit550.json`.
+
+The same build's nested gate finishes at 9/11. The repeated-call positive and
+its false-postcondition control both report `assert.failed:wand.not.found`;
+the latter therefore fails its expected-diagnostic check. The simple positive
+and remaining negative controls pass. The prefix repair does not close nested
+restoration.
 
 Canonical-observer candidate 547 still fails the repeated nested caller with
 `assert.failed:wand.not.found` (196.90 seconds). Its simple nested positive
@@ -4348,7 +4356,7 @@ passes. Disk exhaustion subsequently interrupted logging during a negative
 case: the partial 4/5 result has **incomplete coverage** and is not a completed
 gate. Both its failed log and the failed 552 build are preserved. The original
 workspace bytes and PCG pin were restored from verified backups; superseded
-frozen binaries are being archived losslessly, with every payload hash checked
+frozen binaries were archived losslessly, with every payload hash checked
 before removing the online copy. Sources and proof logs remain available.
 
 The inclusive lookup diagnosis also exposed a missing integration prerequisite:
@@ -4363,12 +4371,29 @@ pending Prusti qualification.
 Candidate 552 combines 549 and 550 with that PCG port, alias-preserving resource
 conversions and the checked fully framed final restoration stage from 387.
 Its first build failed for lack of disk space, before any binaries were frozen.
-Rebuild and focused associated-output/borrow verification remain required.
+The fresh rebuild succeeds with all six binary hashes recorded in
+`build552.json`; original pending workspace bytes and the main PCG pin are
+restored exactly afterward. Seven valid encode-only programs and three complete
+Viper structural checks pass. A misspelled encode-only selector is recorded
+separately and corrected; it is not counted as a proof result. The focused
+24-check native Ferrum gate is running. Broader qualification is conditional
+on that gate passing, and retains the corrected 50 owner fixtures from 541.
 Raw diagnostic 551 reproduces the inclusive lookup failure on the unedited
 548 program: applying the outer restoration requires the slice's captured
 element resources. It does not qualify a Rust client or establish a backend
 defect. The next native integration gate must also retain the owner, iterator,
 generic, prefix and nested checks before adoption.
+
+Raw nested diagnostic 553 selects `m_visit` from the unedited native 550
+program. With the normal 100 ms internal check budget, it localizes the failure
+to the first helper call's saved restoration wand in the final package
+(164.24 seconds). Raising that budget to 1000 ms reaches the overall 600-second
+timeout; it does not establish a backend defect or resolve the failure.
+Diagnostics 555 and 556 respectively add checked assertions immediately after
+each call and move the existing entry-snapshot evaluations before their calls.
+They preserve the original obligations and are intended to distinguish capture
+equality from later restoration. Neither modified Viper program counts as
+native Rust qualification. Routine work remains Ferrum-only.
 
 ## Follow-on scope authorized on 2026-11-01
 

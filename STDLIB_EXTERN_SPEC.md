@@ -4594,12 +4594,19 @@ Silicon is reserved for major feature sign-off and final integration.
 
 ## Follow-on scope authorized on 2026-11-01
 
-The user has asked to continue through the remaining IM and matrix repairs,
-then also tackle the separately deferred features below. Their return in
-approximately sixteen hours is a status checkpoint, not a stopping deadline.
-Earlier descriptions of these features as outside a completed gate remain
-accurate statements of historical proof coverage; they no longer exclude the
-features from the active work plan.
+The user initially authorized the remaining IM and matrix repairs followed by
+the deferred features below. Their later instruction on 2026-11-01 sets a
+mandatory stopping point: **finish restoration and stabilize the existing
+generic collection and ownership proofs, then pause and report back before
+starting D1–D6.** They want to schedule automation work next. This supersedes
+the earlier instruction to continue directly into the follow-on milestones;
+it does not stop the current restoration and stabilization work.
+
+At that stopping point, report the accepted commits and dependency pins,
+validation results and any material limitations, with qualified changes
+committed and pushed. Do not start new feature work or schedule automation
+without the user's next instruction. The earlier sixteen-hour return estimate
+is not a deadline for the current work.
 
 Finish and combine the independently qualified current repairs first:
 Ferrum upgrade, optional-slice conversion, owned iterator resources and loop
@@ -4610,7 +4617,7 @@ accepted combined source and freshly rebuilt Prusti. Preserve all failed and
 superseded evidence. No pending candidate is accepted merely because it builds
 or because a negative reports some error.
 
-After that gate, work through these milestones in dependency order:
+After that gate, pause. These milestones remain planned for a later resumption:
 
 | Milestone | Implementation and proof target | Completion evidence |
 |---|---|---|

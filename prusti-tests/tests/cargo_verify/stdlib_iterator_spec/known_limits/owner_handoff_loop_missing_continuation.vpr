@@ -1,0 +1,91 @@
+// Exploratory model for a scalar projection from a resource-containing owner.
+// The outer expiry returns CURRENT resources and a checked continuation back
+// to ENTRY resources. The repeat method composes a single continuation across
+// arbitrarily many calls; indexed replacement and Rust integration are absent.
+adt Snap { State(number: Int, target: Ref) }
+field value: Int
+field pointee: Ref
+predicate slot(r: Ref) { acc(r.value) }
+function read(r: Ref): Int requires slot(r) { unfolding slot(r) in r.value }
+predicate root(a: Ref, b: Ref) { slot(a) && acc(b.pointee) }
+function snapshot(a: Ref, b: Ref): Snap
+  requires root(a,b)
+{ unfolding root(a,b) in State(read(a), b.pointee) }
+predicate group(s: Snap) { slot(s.target) }
+function state(s: Snap): Int requires group(s)
+{ unfolding group(s) in read(s.target) }
+
+method project(a: Ref, b: Ref)
+  requires root(a,b) && group(snapshot(a,b))
+  ensures slot(a)
+  ensures (let before == (old(snapshot(a,b))) in slot(a) --* (root(a,b)
+    && (unfolding root(a,b) in read(a)) == old[lhs](read(a))
+    && (let current == (snapshot(a,b)) in
+        group(current) && (group(current) --* (group(before) && state(before) == old[lhs](state(current)))))))
+{
+  var before: Snap := snapshot(a,b)
+  unfold root(a,b)
+  unfold group(before)
+  package true --* slot(a) {}
+  package slot(a) --* (root(a,b)
+    && (unfolding root(a,b) in read(a)) == old[lhs](read(a))
+    && (let current == (snapshot(a,b)) in
+        group(current) && (group(current) --* (group(before) && state(before) == old[lhs](state(current)))))) {
+    fold root(a,b)
+    var restored: Snap := snapshot(a,b)
+    fold group(restored)
+    // Reserve the actual output while proving the continuation from its
+    // own antecedent. Both temporary and continuation wands are checked.
+    package true --* group(restored) {}
+    package group(restored) --* (group(before) && state(before) == old[lhs](state(restored))) {
+      unfold group(restored)
+      fold group(before)
+    }
+    apply true --* group(restored)
+  }
+  apply true --* slot(a)
+}
+
+method repeat(a: Ref, b: Ref, n: Int)
+  requires 0 <= n
+  requires root(a,b) && group(snapshot(a,b))
+{
+  var before: Snap := snapshot(a,b)
+  package true --* group(before) {}
+  package group(before) --* (group(before) && state(before) == old[lhs](state(before))) {}
+  apply true --* group(before)
+  var i: Int := 0
+  while (i < n)
+    invariant 0 <= i && i <= n
+    invariant root(a,b) && group(snapshot(a,b))
+    invariant (let current == (snapshot(a,b)) in group(current) --* (group(before) && state(before) == old[lhs](state(current))))
+    invariant i > 0 ==> state(snapshot(a,b)) == i + 9
+  {
+    var prior: Snap := snapshot(a,b)
+    project(a,b)
+    unfold slot(a)
+    a.value := i
+    fold slot(a)
+    apply slot(a) --* (root(a,b)
+      && (unfolding root(a,b) in read(a)) == old[lhs](read(a))
+      && (let current == (snapshot(a,b)) in
+          group(current) && (group(current) --* (group(prior) && state(prior) == old[lhs](state(current))))))
+    var restored: Snap := snapshot(a,b)
+    unfold group(restored)
+    unfold slot(restored.target)
+    restored.target.value := i + 10
+    fold slot(restored.target)
+    fold group(restored)
+    exhale group(prior) --* (group(before) && state(before) == old[lhs](state(prior)))
+    package true --* group(restored) {}
+    package group(restored) --* (group(before) && state(before) == old[lhs](state(restored))) {
+      apply group(restored) --* (group(prior) && state(prior) == old[lhs](state(restored)))
+      apply group(prior) --* (group(before) && state(before) == old[lhs](state(prior)))
+    }
+    apply true --* group(restored)
+    i := i + 1
+  }
+  var finished: Snap := snapshot(a,b)
+  apply group(finished) --* (group(before) && state(before) == old[lhs](state(finished)))
+  assert n == 0 || state(before) == n + 9
+}

@@ -616,3 +616,24 @@ with only its introductory comment changed. The paired audit is in
 `target/stdlib-im5-early300/qualification.json`; all generated helpers were
 checked with the existing 600/30/0.1-second bounds. This supersedes the archived
 source above, which remains available to reproduce its historical failure.
+
+## Checked owner-restoration models (2026-11-01)
+
+The `owner_handoff_state*.vpr`, `owner_handoff_loop*.vpr` and
+`owner_handoff_indexed*.vpr` models pass their paired Ferrum `0e048a4` and
+Silicon `6b540aa4` gates. Each family has one positive and three exact negative
+controls: false, wrong value/state, and missing current permission or continuation.
+All 24 expectations match with one worker, branch parallelism disabled, and
+180/30/0.1-second verifier/assertion/check limits. Inputs here are byte-identical
+to those qualified in `target/stdlib-matrix-20261031-1236/handoff{365,366,371}-qualification.json`.
+
+The state model preserves a referent's later update across delayed restoration.
+The loop model composes one current-to-entry continuation through an arbitrary
+number of calls. The indexed model permits replacing one of two reference-bearing
+elements while retaining and using its old reference, and also covers unchanged
+projection without duplicate permissions. Its guarantee is permission restoration
+and live-reference values, not a resource-state frame across expiry. These models
+do not establish Rust/PCG integration, arbitrary indexed collections, or nested
+ownership. The indexed wrong-value diagnostics spell the ADT field as
+`get_Snap_left(before)`; exact source positions and error counts were reviewed,
+and the dispatcher's original textual mismatch is retained.

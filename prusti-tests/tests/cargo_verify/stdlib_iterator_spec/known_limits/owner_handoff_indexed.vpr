@@ -1,0 +1,98 @@
+// Checked indexed-owner handoff model, two reference-bearing elements.
+// Restoration first returns the current owner; a nested continuation returns
+// the current selected element and then accepts the original selected element.
+// This permission model does not claim a resource-state frame across expiry,
+// arbitrary indexed sequences, generic Rust conversion, or PCG integration.
+adt Snap { Pair(left: Ref, right: Ref) }
+field pointee: Ref
+field value: Int
+predicate link(r: Ref) { acc(r.pointee) }
+function target(r: Ref): Ref requires link(r) { unfolding link(r) in r.pointee }
+predicate cell(r: Ref) { acc(r.value) }
+function read(r: Ref): Int requires cell(r) { unfolding cell(r) in r.value }
+predicate root(a: Ref, b: Ref) { link(a) && link(b) }
+function snapshot(a: Ref, b: Ref): Snap requires root(a,b)
+{ unfolding root(a,b) in Pair(target(a), target(b)) }
+predicate group(s: Snap) { cell(s.left) && cell(s.right) }
+
+method project(a: Ref, b: Ref)
+  requires root(a,b) && group(snapshot(a,b))
+  ensures link(a) && cell(old(snapshot(a,b)).left)
+  ensures target(a) == old(snapshot(a,b)).left
+  ensures (let before == (old(snapshot(a,b))) in (link(a) --* (root(a,b)
+    && snapshot(a,b).left == old[lhs](target(a))
+    && snapshot(a,b).right == before.right
+    && (let current == (snapshot(a,b)) in (cell(current.left) --* (group(current) && (group(current) --* (cell(current.left) && (cell(before.left) --* group(before))))))))))
+{
+  var before: Snap := snapshot(a,b)
+  unfold root(a,b)
+  unfold group(before)
+  package true --* (link(a) && cell(before.left)) {}
+  package (link(a) --* (root(a,b)
+    && snapshot(a,b).left == old[lhs](target(a))
+    && snapshot(a,b).right == before.right
+    && (let current == (snapshot(a,b)) in (cell(current.left) --* (group(current) && (group(current) --* (cell(current.left) && (cell(before.left) --* group(before))))))))) {
+    fold root(a,b)
+    var restored: Snap := snapshot(a,b)
+    package (cell(restored.left) --* (group(restored) && (group(restored) --* (cell(restored.left) && (cell(before.left) --* group(before)))))) {
+      fold group(restored)
+      package true --* group(restored) {}
+      package (group(restored) --* (cell(restored.left) && (cell(before.left) --* group(before)))) {
+        unfold group(restored)
+        package true --* cell(restored.left) {}
+        package cell(before.left) --* group(before) {
+          fold group(before)
+        }
+        apply true --* cell(restored.left)
+      }
+      apply true --* group(restored)
+    }
+  }
+  apply true --* (link(a) && cell(before.left))
+}
+
+method replace_and_keep_old(a: Ref, b: Ref, replacement: Ref)
+  requires root(a,b) && group(snapshot(a,b)) && cell(replacement)
+{
+  var before: Snap := snapshot(a,b)
+  project(a,b)
+  unfold cell(before.left)
+  before.left.value := 7
+  fold cell(before.left)
+  unfold link(a)
+  a.pointee := replacement
+  fold link(a)
+  apply (link(a) --* (root(a,b)
+    && snapshot(a,b).left == old[lhs](target(a))
+    && snapshot(a,b).right == before.right
+    && (let current == (snapshot(a,b)) in (cell(current.left) --* (group(current) && (group(current) --* (cell(current.left) && (cell(before.left) --* group(before)))))))))
+  var restored: Snap := snapshot(a,b)
+  apply (cell(restored.left) --* (group(restored) && (group(restored) --* (cell(restored.left) && (cell(before.left) --* group(before))))))
+  unfold group(restored)
+  unfold cell(restored.left)
+  restored.left.value := 11
+  fold cell(restored.left)
+  fold group(restored)
+  assert read(before.left) == 7
+  assert (unfolding group(restored) in read(restored.left)) == 11
+  // The old reference stays live through the current-owner write above.
+  apply (group(restored) --* (cell(restored.left) && (cell(before.left) --* group(before))))
+  apply cell(before.left) --* group(before)
+  assert group(before) && cell(restored.left)
+}
+
+method keep_original(a: Ref, b: Ref)
+  requires root(a,b) && group(snapshot(a,b))
+{
+  var before: Snap := snapshot(a,b)
+  project(a,b)
+  apply (link(a) --* (root(a,b)
+    && snapshot(a,b).left == old[lhs](target(a))
+    && snapshot(a,b).right == before.right
+    && (let current == (snapshot(a,b)) in (cell(current.left) --* (group(current) && (group(current) --* (cell(current.left) && (cell(before.left) --* group(before)))))))))
+  var restored: Snap := snapshot(a,b)
+  apply (cell(restored.left) --* (group(restored) && (group(restored) --* (cell(restored.left) && (cell(before.left) --* group(before))))))
+  apply (group(restored) --* (cell(restored.left) && (cell(before.left) --* group(before))))
+  apply cell(before.left) --* group(before)
+  assert group(before)
+}

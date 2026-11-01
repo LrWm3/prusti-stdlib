@@ -1387,6 +1387,17 @@ wrong-old-value and missing-current-resource controls are queued. This is an
 unverified permission experiment, not a generic indexed encoding or a
 resource-state frame across expiry.
 
+The state, loop-composition and indexed-replacement model gates are now
+qualified: all 24 expectations match on Ferrum `0e048a4` and Silicon `6b540aa4`.
+The paired negatives reject exactly the false/wrong-value assertion or missing
+permission/continuation. Probe 371's initial textual matcher expected the source
+field syntax, while both backends print its ADT getter; the exact line-76
+assertion was reviewed and the original mismatch is retained. Byte-identical
+models are committed as `owner_handoff_{state,loop,indexed}*.vpr`, with hashes,
+commands and results in `handoff{365,366,371}-qualification.json`. Rust/PCG
+continuation integration, arbitrary indexed sequences and the indexed expiry
+state frame remain open.
+
 The indexed `Option<&mut U>` failure has a different cause. Trace build 363
 confirms that all historical array-capture lookups succeed. The failed read
 occurs when constructing an expiry wand at a heap where the enum is unfolded
@@ -1423,6 +1434,26 @@ metadata for slices and `str`. Candidate 369 adds those compiler-provided
 associated-type equations alongside the typing repair. Own-branch rebuilding
 and four slice/str encode-only controls pass; paired verification remains
 pending. The minimum gate runs before its broader regression continuation 370.
+
+Candidate 369 finishes at 5/7 checks on each backend. Its optional-slice
+positive and exact negative now pass. The added `str` controls expose a separate
+missing resource body: Rust strings contain bytes, but the generic conversion
+currently treats them as unknown owned referents. Candidate 373 retains the
+opaque physical storage predicate and adds a checked, typed empty indirect
+resource body only for the compiler's `str` type. Unknown opaque types remain
+opaque. The isolated own-branch build and all four encode-only controls pass;
+paired proof and broader regression gates are separate.
+
+The owned-tail minimum 358 fails on both backends at the final `*value == 7`
+assertion, including the negative's preceding positive assertion. Its broader
+checks are skipped. The generated `next`, `into_iter` and `push` restoration
+wands return permissions without preserving referent state. Candidate 375 adds
+explicit state transfer and expiry frames, based on the pinned Rust method
+bodies, and lets an owned iterator's `[_]` selector identify its element group
+rather than its allocator. It builds, but three encode controls reject a nested
+`after_call` inside `before_expiry`; the replacement captures that observation
+in a separate binding before reading its expiry state. No proof has run on this
+specification change, and the original failed build/inputs remain recorded.
 
 The separate loop-coupling candidate 354 finishes at 20/25 checks on each
 backend. The library, extra-next positive/false and both wrong-invariant cases

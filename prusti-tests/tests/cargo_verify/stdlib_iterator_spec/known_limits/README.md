@@ -637,3 +637,19 @@ do not establish Rust/PCG integration, arbitrary indexed collections, or nested
 ownership. The indexed wrong-value diagnostics spell the ADT field as
 `get_Snap_left(before)`; exact source positions and error counts were reviewed,
 and the dispatcher's original textual mismatch is retained.
+
+## Checked nested-reference capture model (2026-11-01)
+
+The four `indexed_snapshot_capture*.vpr` models pass all eight expectations on
+Ferrum `0e048a4` and Silicon `6b540aa4`. A checked recursive observer captures
+a sequence of shallow referent snapshots outside a restoration wand. Indexed
+wrappers preserve injective permission keys without assuming distinct addresses.
+The positive replaces a parent pointer after capture, preserves the old
+referent's later value, and applies both restoration wands. False, wrong-state,
+and missing-current-permission controls each fail at exactly their intended
+statement. Source and log hashes, commands, positions and timings are recorded
+in `target/stdlib-matrix-20261031-1236/capture383-qualification.json`.
+
+These models establish the Viper proof pattern; Rust/PCG integration and
+struct/enum projection paths remain to be implemented and qualified. The earlier
+381 model failed quantified-permission injectivity and remains failed evidence.

@@ -1,0 +1,82 @@
+// Checked indexed snapshot capture before a delayed nested restoration.
+// The capture stores pointer identities, never permissions. This model has no
+// Rust/PCG integration or generic struct/enum projection support.
+field pointer: Ref
+field value: Int
+predicate link(r: Ref) { acc(r.pointer) }
+predicate indexed_link(index: Int, r: Ref) { link(r) }
+function target(index: Int, r: Ref): Ref requires indexed_link(index, r)
+{ unfolding indexed_link(index, r) in unfolding link(r) in r.pointer }
+predicate cell(r: Ref) { acc(r.value) }
+predicate indexed_cell(index: Int, r: Ref) { cell(r) }
+function read(index: Int, r: Ref): Int requires indexed_cell(index, r)
+{ unfolding indexed_cell(index, r) in unfolding cell(r) in r.value }
+predicate links(rs: Seq[Ref]) {
+  forall j: Int :: { rs[j] } 0 <= j && j < |rs| ==> indexed_link(j, rs[j])
+}
+predicate cells(rs: Seq[Ref]) {
+  forall j: Int :: { rs[j] } 0 <= j && j < |rs| ==> indexed_cell(j, rs[j])
+}
+function targets(rs: Seq[Ref], start: Int): Seq[Ref]
+  requires 0 <= start && start <= |rs|
+  requires forall j: Int :: { rs[j] } start <= j && j < |rs| ==> indexed_link(j, rs[j])
+  ensures |result| == |rs| - start
+  ensures forall j: Int :: { result[j] } 0 <= j && j < |result| ==> result[j] == target(j + start, rs[j + start])
+{ start == |rs| ? Seq[Ref]() : Seq(target(start, rs[start])) ++ targets(rs, start + 1) }
+function snapshot(rs: Seq[Ref]): Seq[Ref]
+  requires links(rs)
+  ensures |result| == |rs|
+{ unfolding links(rs) in targets(rs, 0) }
+function state(rs: Seq[Ref], index: Int): Int
+  requires 0 <= index && index < |rs|
+  requires cells(rs)
+{ unfolding cells(rs) in read(index, rs[index]) }
+
+method expose(rs: Seq[Ref], index: Int)
+  requires 0 <= index && index < |rs|
+  requires links(rs) && cells(snapshot(rs))
+  ensures links(rs) && cells(snapshot(rs))
+  ensures snapshot(rs) == old(snapshot(rs))
+  ensures links(rs) --* (links(rs) && snapshot(rs) == old[lhs](snapshot(rs)))
+  ensures (let captured == (snapshot(rs)) in
+    (cells(captured) && links(rs)) --* (cells(captured) && links(rs)
+      && snapshot(rs) == old[lhs](snapshot(rs))
+      && state(captured, index) == old[lhs](state(captured, index))))
+{
+  var before: Seq[Ref] := snapshot(rs)
+  package true --* (links(rs) && cells(before)) {}
+  package links(rs) --* (links(rs) && snapshot(rs) == old[lhs](snapshot(rs))) {}
+  package (cells(before) && links(rs)) --* (cells(before) && links(rs)
+    && snapshot(rs) == old[lhs](snapshot(rs))
+    && state(before, index) == old[lhs](state(before, index))) {}
+  apply true --* (links(rs) && cells(before))
+}
+
+method replace_parent(rs: Seq[Ref], index: Int, replacement: Ref)
+  requires 0 <= index && index < |rs|
+  requires links(rs) && cells(snapshot(rs)) && cell(replacement)
+{
+  expose(rs, index)
+  var captured: Seq[Ref] := snapshot(rs)
+  unfold cells(captured)
+  unfold indexed_cell(index, captured[index])
+  unfold cell(captured[index])
+  captured[index].value := 7
+  fold cell(captured[index])
+  fold indexed_cell(index, captured[index])
+  fold cells(captured)
+  unfold links(rs)
+  unfold indexed_link(index, rs[index])
+  unfold link(rs[index])
+  rs[index].pointer := replacement
+  fold link(rs[index])
+  fold indexed_link(index, rs[index])
+  fold links(rs)
+  apply links(rs) --* (links(rs) && snapshot(rs) == old[lhs](snapshot(rs)))
+  apply (cells(captured) && links(rs)) --* (cells(captured) && links(rs)
+    && snapshot(rs) == old[lhs](snapshot(rs))
+    && state(captured, index) == old[lhs](state(captured, index)))
+  assert state(captured, index) == 7
+  assert snapshot(rs)[index] == replacement
+  assert false
+}

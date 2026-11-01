@@ -3673,6 +3673,31 @@ of loop backedges remain separate follow-ups. The gates above cover finite
 reference-bearing shapes and yields completed within each iteration; broader
 claims require their own ownership and loop invariants.
 
+**Additional repair gates (2026-11-01).** The owned-tail state-frame repair
+377 passes its minimum on both backends (4/4 each), including the original final
+referent-value assertion and its exact false control. Combined PCG candidate
+382 includes signature normalization and loop coupling; its 250 corpus, ten
+shape, six projection, two loop and seven opaque-resource tests pass. Prusti
+has been rebuilt from that source, and all four encode-only controls pass. Its
+paired broader proof gate replaces the unstarted 378 gate with the same
+coverage plus the minimum owned-reference controls; no broad adoption is claimed.
+
+Canonical sequence candidate 379 removes both observer postcondition failures
+from the inclusive Vec positive, leaving its current-owner permission failure
+on both backends (about 102 seconds each). Ferrum matches 3/4 expectations;
+Silicon matches 2/4 because its negative also reports an unrelated generated
+sequence-conversion assertion. That extra error is a failure, despite rejection
+of the intended false assertion. The candidate remains unqualified.
+
+The checked nested-reference capture model 383 passes all eight expectations
+on both backends, including false, wrong-state and missing-permission controls.
+Its byte-identical inputs are retained as `indexed_snapshot_capture*.vpr` in
+the iterator `known_limits` directory; `capture383-qualification.json` records
+source/log hashes and exact diagnostics. It captures an indexed sequence of
+shallow pointer snapshots before wand packaging and preserves the old referent
+after parent-pointer replacement. Rust integration and struct/enum projection
+paths remain open; the earlier injectivity failure in model 381 is retained.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user has asked to continue through the remaining IM and matrix repairs,

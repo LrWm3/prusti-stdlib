@@ -156,9 +156,24 @@ def main():
         parser.error("build Prusti first with ./x.py build --all (and --release if selected)")
     sources = sorted((fixture / "src/bin").glob("*.rs"))
     if args.case:
+        unmatched = [pattern for pattern in args.case
+                     if not any(fnmatch.fnmatchcase(source.stem, pattern) for source in sources)]
+        if unmatched:
+            parser.error("no binaries match --case: " + ", ".join(unmatched))
         sources = [source for source in sources if any(fnmatch.fnmatchcase(source.stem, pattern) for pattern in args.case)]
         if not sources:
             parser.error("no binaries match the selected --case patterns")
+
+    # Validate the complete inventory before starting any compilation or proof.
+    # A duplicated annotation on one line otherwise becomes part of the expected
+    # diagnostic, making a correct rejection look like a verifier regression.
+    for source in sources:
+        annotations = re.findall(r"// expected-(?:error|incorrect|parse|unsupported):", source.read_text())
+        positive = source.stem == "pass" or source.stem.endswith("_pass")
+        expected_count = 0 if positive else 1
+        if len(annotations) != expected_count:
+            parser.error("{}: expected {} diagnostic annotation(s), found {}".format(
+                source.name, expected_count, len(annotations)))
 
     toolchain = re.search(r'channel\s*=\s*"([^"]+)"', (root / "rust-toolchain").read_text())[1]
     log_dir = args.log_dir.resolve() if args.log_dir else root / "target" / ("stdlib-" + args.suite + "-spec-logs") / args.backend.lower()

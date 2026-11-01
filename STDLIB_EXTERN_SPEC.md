@@ -3988,12 +3988,41 @@ reservation. The native implementation remains open.
 Own rebuild 491 fixes historical snapshot declaration scope and selects
 retained postcondition observations before emitting their heap reads. The
 affected library and three clients encode; the full library now passes
-Viper parsing and type checking. Paired regression and owned-loop gates
-remain pending. Rebuild 494 additionally replaces random specification-name
-suffixes in Viper paths with stable Rust definition identities, preserving
-distinct items. Its identity tests pass; fresh-encoding reproducibility and
-solver qualification are pending. These are unadopted candidates, not
-completed matrix repairs.
+Viper parsing and type checking. Gate 492 passes all eight Ferrum checks;
+paired Silicon and broader owned-loop gates remain pending.
+
+The independent naming fix is accepted in `adf34ef15`: generated Viper names
+use stable crate and item identities instead of random specification UUIDs.
+Rebuild 499 passes both identity tests and all five generic-resource checks
+on each backend. Its borrow gate is 5/6 on each: `split_pass` retains the
+existing current-resource reservation failure. Clean-main replay 506 reproduces
+that failure on both backends with identical original diagnostics; the exact
+negative still passes. This failure remains open. Candidate 500 combines the
+scope/capture repair with the accepted names; six complete programs repeat
+identically, excluding comments, across fresh encodings 500/502. Its solver
+gate is pending. Obsolete naming candidates 494/498 and owned minimum 491
+are superseded rather than counted as additional passing proof gates.
+
+**Native current-owner handoff prototype (2026-11-01).** Candidate 504 emits
+current resources and a checked current-to-entry continuation when an outer
+wand restores a mutable owner's storage and nested resources together. Its
+concrete Rust callee and false-postcondition control pass on both backends.
+The generic caller reaches the remaining entry-resource restoration failure,
+instead of failing the current-resource reservation. Candidate 505 captures
+the actual continuation after applying the callee wand, selects it using owner
+identity and validity guards, and applies matching continuations in reverse
+order when restoring entry resources. Boundary conversions for handed-off
+resources use the restored current heap. All 16 native checks pass across
+Ferrum and Silicon: callee, single-call, repeated-call and conditional-call
+positives and exact false-postcondition controls. The conditional negative
+requires that its call branch runs. All generated methods are checked; this
+is native encoder evidence, unlike the earlier edited-stub experiments.
+
+The prototype remains unadopted. Concrete callers, multiple owners, instantiated
+resource-group mappings, unbounded loop composition and broader regression
+qualification remain required. Package-local captures and continuations must
+not escape their proof scope. `handoff505-qualification.json` records the
+native source/build audit and these limits.
 
 ## Follow-on scope authorized on 2026-11-01
 

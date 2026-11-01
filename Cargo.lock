@@ -1041,7 +1041,7 @@ checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
 [[package]]
 name = "ferrum"
 version = "0.1.0"
-source = "git+https://github.com/LrWm3/ferrum.git?rev=afdf10cf59106c38d09df32939f1aa9c77d0b989#afdf10cf59106c38d09df32939f1aa9c77d0b989"
+source = "git+https://github.com/LrWm3/ferrum.git?rev=0e048a420c081f4c442dd04277bb016346de4e10#0e048a420c081f4c442dd04277bb016346de4e10"
 dependencies = [
  "ferrum-silicon",
  "ferrum-silver",
@@ -1051,7 +1051,7 @@ dependencies = [
 [[package]]
 name = "ferrum-silicon"
 version = "0.1.0"
-source = "git+https://github.com/LrWm3/ferrum.git?rev=afdf10cf59106c38d09df32939f1aa9c77d0b989#afdf10cf59106c38d09df32939f1aa9c77d0b989"
+source = "git+https://github.com/LrWm3/ferrum.git?rev=0e048a420c081f4c442dd04277bb016346de4e10#0e048a420c081f4c442dd04277bb016346de4e10"
 dependencies = [
  "ferrum-silver",
  "indexmap",
@@ -1065,7 +1065,7 @@ dependencies = [
 [[package]]
 name = "ferrum-silver"
 version = "0.1.0"
-source = "git+https://github.com/LrWm3/ferrum.git?rev=afdf10cf59106c38d09df32939f1aa9c77d0b989#afdf10cf59106c38d09df32939f1aa9c77d0b989"
+source = "git+https://github.com/LrWm3/ferrum.git?rev=0e048a420c081f4c442dd04277bb016346de4e10#0e048a420c081f4c442dd04277bb016346de4e10"
 dependencies = [
  "chrono",
  "indexmap",

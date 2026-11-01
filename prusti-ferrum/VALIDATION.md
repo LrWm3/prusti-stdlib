@@ -1,4 +1,4 @@
-# Current upgrade candidate 0e048a4 (qualification pending)
+# Current development pin 0e048a4 (focused qualification complete)
 
 Ferrum `0e048a420c081f4c442dd04277bb016346de4e10` includes the permission-map
 repair in `85fc9d8`, stable allocation ordering, preserved heap-dependent
@@ -54,8 +54,26 @@ indexed replacement, resource-state framing or loop composition.
 The exact `final339` Viper program for `vec_lookup_range_pass` also verifies
 with both backends (37.90 seconds for Ferrum, 154.89 for Silicon, including
 startup). The optional-element replay still fails on both at the same
-`p_Param_snap` permission precondition. Fresh Rust positives and exact negatives
-are still running; these raw diagnostics alone do not qualify the upgrade.
+`p_Param_snap` permission precondition.
+
+The paired Rust gate is complete: 86/108 checks meet their expectations, with
+22 retained baseline failures and no new failure against `final339`. Both
+backends pass 30/39 iterator and 13/15 borrow checks. Coverage, fixture hashes,
+driver hashes and harness provenance match all four runs. No negative was
+unexpectedly accepted. The three previously Ferrum-only positives now pass
+through this branch's rebuilt adapter: the two concrete replacements in
+3.00/1.06 seconds and Vec range lookup in 30.82 seconds. The replacement false,
+inclusive/range framing, Vec index bounds/value, and Pair wrong-second controls
+reach their intended errors. Pair wrong-second takes 349.20 seconds on Ferrum
+and 301.07 on Silicon, resolving the earlier upgrade blocker.
+
+The remaining failures are still open encoder/proof work. Inclusive Vec
+lookup times out in a conversion helper on Ferrum (601.91 seconds); Silicon
+reports the functional postcondition failure (512.15 seconds). Optional and
+nested elements, region restoration, the iterator library and generic owner
+resources remain failed where recorded. Wrong or additional diagnostics in
+negative cases remain failures. `qualification352.json` and `audit352.json`
+record the completed comparison; a full final-pin matrix is not claimed.
 
 Builds 353 and 354 rebase the independent nested-typing and opaque-loop-coupling
 candidates onto the same final Ferrum pin. Their separate paired gates follow
@@ -66,9 +84,9 @@ unverified.
 
 The frozen full matrix at `afdf10c` completed all 24 jobs with 1,755/1,842 checks
 passing before these focused gates started on the single worker. Its failures are baseline evidence,
-not regressions on current Ferrum. The committed pin remains `afdf10c` until
-this branch's gate is reviewed, and a full matrix on the eventual accepted
-source and build is still required before merge.
+not regressions on current Ferrum. The reviewed focused gate supports adopting
+`0e048a4` for development now. A full matrix on the eventual accepted combined
+source and freshly rebuilt binaries is still required before merge.
 
 # Performance upgrade to 2df948c deferred after qualification
 

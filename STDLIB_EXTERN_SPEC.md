@@ -1247,6 +1247,18 @@ or upstream benchmark exit status is counted as a local verified pass. See
 [the current upgrade record](prusti-ferrum/VALIDATION.md) for provenance and
 the targeted upstream evidence.
 
+The local upgrade gate is now reviewed and `0e048a4` is adopted for development.
+All 18 adapter tests and six scalar-handoff model expectations pass. The four
+paired Rust runs account for 108 checks: 86 pass, and all 22 failures were
+already failed baseline entries. No negative is unexpectedly accepted. Both
+concrete replacement positives and Vec range lookup now pass on rebuilt Ferrum;
+the exact Pair wrong-second rejection also passes on both backends. Coverage,
+source/build provenance, comparisons and retained failures are recorded in
+`qualification352.json` and `audit352.json`. Inclusive Vec lookup still times
+out in Ferrum's aggregate helper and fails its functional postcondition on
+Silicon. The final combined full matrix remains required; this pin adoption
+does not accept any pending encoder or PCG candidate.
+
 The heavy Ferrum baseline has also exposed a 600-second timeout in
 `mut_native_resource_early_pass` and a wrong-obligation rejection in
 `mut_native_resource_generic_prefix_wrong_state`: the latter fails at the loop

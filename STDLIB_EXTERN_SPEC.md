@@ -52,15 +52,17 @@ Routine specification changes and negative controls use Ferrum under the policy
 above. Major feature sign-off and the final combined revision retain Silicon
 validation.
 
-Remaining repairs include nested-reference restoration, enum replacement,
-owned reference iteration and loop coupling, associated outputs, current-owner
-resource handoff and cross-crate qualification. Frozen experimental builds are
+Remaining repairs include combined nested-reference qualification, enum
+replacement, associated outputs, current-owner resource handoff and cross-crate
+prefix qualification. The accepted owned-iterator resource and loop repair
+passes its 32-check regression gate; retained yields across loop backedges remain
+in D2 below. Frozen experimental builds are
 kept separate from adopted changes; an encoding success or a checked Viper model
 does not establish the corresponding Rust feature. The separately authorized
 [D1–D6 follow-on scope](#follow-on-scope-authorized-on-2026-11-01) is also part of
 the remaining work.
 
-### Active repair evidence (2026-11-01, probes 408–449)
+### Historical repair evidence (2026-11-01, probes 408–449)
 
 The nested observer repair now proves the original nested-reference Rust
 positive on Ferrum. Probe 408 passed 9/9 Ferrum checks and 8/9 Silicon checks;
@@ -4252,6 +4254,65 @@ proof result or failed-run evidence was discarded. Continue with combined
 qualification, adopt passing changes in logical commits, repair the remaining
 matrix failures, and then complete D1–D6. Silicon follows the major-feature
 policy above rather than running for each intermediate repair.
+
+### Combined regression follow-up (2026-11-01, probes 540–547)
+
+Build 540 passes the exact accepted owned-iterator inventory at 32/32 Ferrum
+checks (`audit540-owned.json`) and the full generic-resource cross-crate suite
+at 10/10, including its specification library. All 50 owner programs produce
+the intended verifier outcomes, but eight duplicated annotations introduced by
+the fixture importer make the harness result 67/75. This remains a failed
+harness gate. Rerun 541 uses the identical frozen encoder with corrected,
+formatted fixtures; its 75 checks must pass before those files are adopted.
+
+The prefix suite is 11/12: every client, runtime check and negative passes, but
+the library exceeds the 600-second verification limit (619.32 seconds including
+startup). Comparing its generated program with passing candidate 528 shows an
+extra indexed physical reservation and external captures introduced by the
+nested repair. Candidate 546 restricts those to dependent restoration stages
+with frames or a bundled owner. Its generated prefix program differs from 528,
+after normalizing generated crate identifiers, only by unused logical owner-ID
+assignments. That is structural diagnostic evidence, not a passing proof.
+
+The repeated nested caller also fails in 540: `assert.failed:wand.not.found`
+after 161.94 seconds, while the simple nested positive passes. Its normalized
+comparison with passing 534 shows different observer identifiers and unused
+owner IDs. The encoder generates four equivalent shallow sequence observers
+for concrete references because their task keys retain function-specific
+lifetime/context data. Candidate 547, based on 546, canonicalizes ground
+physical observer tasks while retaining indexed paths and preserving generic,
+alias and inference contexts. Its encoded repeated caller uses one shared
+observer. Three Rust programs encode; proof qualification remains queued.
+This does not establish a defect in either verification backend.
+
+Separately, candidate 544 extends owner handoff to a stage whose owner storage
+is supplied by an already-restored, checked frame. The old split-borrow
+contract restores physical storage first, then returns only entry resources in
+a later stage; the current-owner reservation consequently cannot be proved.
+The candidate's focused gate includes the original positives/negatives, an
+untrusted forwarding wrapper and its false postcondition, and a zero-sized
+split positive/false pair. Four programs encode and pass full Viper structural
+checks. None of these checks counts as verification. Candidate 544 does not
+include the later 546/547 changes.
+
+The old frozen harness also silently ignored a misspelled negative selector in
+540's borrow job. Its coverage is explicitly incomplete in
+`coverage540-correction.json`; the intended `inclusive_wrong_frame` control is
+queued in 544 and unchanged-build recheck 542. Main commit `434cfaf11` now
+rejects every unmatched case pattern and malformed annotation inventory before
+compilation or verification. CLI controls confirm both rejection paths, and
+all existing fixture annotations satisfy the preflight. This harness fix is
+committed and pushed; the encoder candidates remain isolated.
+
+The serial queue is 540, 541, 544, 546, then an adaptive tail containing 547 and
+542. Recheck 542 uses unchanged frozen 540 binaries for associated outputs,
+escaped enum replacement, optional metadata, region reconstruction and the
+remaining heavy prefix cases. All use Ferrum, one worker and branch parallelism
+off. The next combined encoder must retain the successful repairs, resolve
+these regressions, and pass its relevant complete gates before adoption and
+major-feature/final Silicon qualification. No failed or interrupted result is
+waived. Runtime logs, source/binary hashes, queue state and frozen programs are
+preserved under `target/stdlib-matrix-20261031-1236`.
 
 ## Follow-on scope authorized on 2026-11-01
 

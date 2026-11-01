@@ -3698,6 +3698,43 @@ shallow pointer snapshots before wand packaging and preserves the old referent
 after parent-pointer replacement. Rust integration and struct/enum projection
 paths remain open; the earlier injectivity failure in model 381 is retained.
 
+**Nested capture and staged-restoration candidates (2026-11-01).** Candidate
+385 implements the checked shallow indexed observer from model 383 and captures
+its whole sequence outside each wand's index binder. Four minimal controls
+encode, as do four live-old-reference/parent-replacement controls (388); paired
+proofs are queued, with replacement gated on the minimum. The initial 384
+encode-only attempt omitted observer-function emission and was retired before
+verification; 385 includes the generated function bodies and checked contracts.
+The first scope is direct mutable-reference chains, not struct/enum projections.
+
+Associated-output candidate 387 combines the earlier alias normalization and
+PCG `19327b5` with a final dependent stage whose entire antecedent is supplied
+by earlier independent stages' frames. It retains their permission requirements
+and verifies the resulting wand; it does not discard a restoration obligation.
+All four corrected associated-output update/replacement controls and the open
+Vec control now encode. Their proof gate remains pending. Build 386 failed Rust
+ownership checking and is retained as failed build evidence.
+
+Metadata candidate 373's broader Ferrum gate 374 finishes at 46/51. It improves
+`mut_region_advance_pass`, `mut_region_functional_pass` and their exact negative
+controls over full matrix 339, with no new client failures or accepted negatives.
+The library and four full-region checks still fail; Silicon is running. For the
+full-region implementation, the generated return packages apply the same split
+storage wand twice. Stage classification recognizes only top-level `&mut`
+syntax, so physical referents inside `Option`/tuples are misclassified. Candidate
+390 classifies the actual mapped lifetime projection as physical or opaque
+`RegionsIn` instead. With the 373 fixes, all four full-region controls encode;
+the generic implementation now applies the split storage wand once. Its paired
+minimum remains queued. Initial build 389 failed typed-index compilation.
+
+The separate current-owner handoff still needs contract and PCG integration:
+outer expiry must return the current group plus a checked continuation back to
+the entry group. Callers must retain that continuation while using the current
+owner, compose sequential/conditional calls, and carry one composed continuation
+through loop invariants. Merely changing the wand consequent would leave current
+versus entry conversions and historical PCG edges disconnected. The checked
+models remain the proof foundation; this integration is not implemented yet.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user has asked to continue through the remaining IM and matrix repairs,

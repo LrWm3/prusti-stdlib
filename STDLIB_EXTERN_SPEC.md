@@ -4664,6 +4664,35 @@ Combine accepted repairs, rerun the remaining matrix failures and final matrix,
 then stop at the user-requested boundary below. Routine checks remain Ferrum;
 Silicon is reserved for completed feature and final integration sign-off.
 
+The wider frozen-591 gate has completed its owned-iterator group at **30/32**
+(audit `audit577-owned.json`): coverage and source/build provenance match, and
+all negative controls report their exact expected diagnostics. The iterator
+specification library and `native_for_extra_next_pass` remain failures. The
+owner-handoff group and subsequent generic, prefix, nested, region, enum,
+metadata and heavy-prefix groups are still being run serially.
+
+Inspection of the library's generated contracts found a concrete mismatch:
+`transfer_frames` rejects generated associated-type domain functions as stable
+keys. Consequently `Pointee::Metadata` suppresses the trait call's value frame,
+while the sized wrapper requires the corresponding frame. Candidate 600 starts
+from 591 and recognizes only generated `_assoc_type_` functions returning
+`Type`, whose domain declarations are heap-independent. Its own Prusti build,
+six encodings and six structural checks pass; native qualification is queued.
+Its source patch is
+`3dcc3859ba09a6fd1248fe050962be19a2c356a005afdc9dc62d97feb55cb045`.
+Candidate 599's separate proposal to add value frames to owner continuations
+is held without native qualification; it does not repair this specific missing
+trait-call frame and is excluded from 600. Neither candidate is adopted.
+
+Two further diagnostics are queued after the wider gate. Probe 596 retains the
+full nested-call program and returns four explicit ghost capture values from
+the callee, with checked equalities to its original entry/post observations.
+It tests capture identity without dropping the original proof obligations.
+Probe 597 checks a standalone resource-state coherence lemma for two indexed
+wrappers of the same underlying resource, including an inhabited false-assertion
+control. Both pass structural checking only so far. Their results cannot be
+substituted for native Rust regression qualification.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user initially authorized the remaining IM and matrix repairs followed by

@@ -4435,6 +4435,43 @@ such frame applications and restores the prior concrete representation
 afterward. Both builds and all original pending workspace bytes are preserved;
 561's native borrow/nested gate and conditional broader gate remain queued.
 
+### Entry capture placement and frame representation (probes 558–566)
+
+The completed native 558 gate is **19/24 borrow checks** and **9/11 nested
+checks**, with complete coverage and matching source/build provenance. The
+basic associated-output positive and its false-postcondition control now also
+fail a permission check. No negative was unexpectedly accepted. Raw replay
+560 localizes the basic case to the later restoration stage's generic Vec
+storage frame, after an earlier stage returned that storage in concrete form.
+
+The call-boundary assertions from diagnostic 555 do not fix the full native
+nested program: 558's repeated caller fails after 179.97 seconds and its false
+postcondition reports the wrong wand diagnostic after 425.23 seconds. After
+normalizing comments and generated crate identifiers, the raw and native
+programs match, but the successful raw invocation selected only `m_visit`.
+That context difference prevents treating the diagnostic as native validation
+or evidence of a backend defect.
+
+Fresh candidate 563 replaces those assertions with entry-snapshot evaluation
+before the actual method call, after argument conversions. Post-call captures
+remain after the call. The move requires a fresh local with exactly one
+assignment, an entry-labelled expression, and inputs not written across the
+call; dependency-ordered entry captures can move together. Expressions and
+heap labels are preserved. Five Rust programs encode and pass full Viper
+structural checks. These are not proof results; the full native nested gate
+is queued on Ferrum.
+
+Inspection also finds that 561's physical-frame cast emits no conversion in
+the three associated/inclusive reproductions: decomposing the canonical
+reference constructor retains its generic referent. Its native gate is
+withdrawn before execution, with all build and structural evidence retained.
+Fresh 565 normalizes that referent in the caller's context before selecting the
+checked conversion. Its borrow gate contains 24 checks; broader 566 is
+conditional on both that gate and 563's nested gate passing, and includes
+nested revalidation with 565. Superseded broader jobs are recorded as skipped,
+never passed. Routine fixes and their negative controls remain Ferrum-only;
+Silicon is reserved for major feature completion and final integration.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user has asked to continue through the remaining IM and matrix repairs,

@@ -4314,6 +4314,62 @@ major-feature/final Silicon qualification. No failed or interrupted result is
 waived. Runtime logs, source/binary hashes, queue state and frozen programs are
 preserved under `target/stdlib-matrix-20261031-1236`.
 
+### Split restoration and associated-output integration (probes 548–552)
+
+Corrected, formatted owner fixtures in 541 pass all **75/75 Ferrum checks**
+with frozen encoder 540. The coverage and source/binary audit is complete;
+the failed 540 annotation results remain preserved separately.
+
+The focused split-borrow progression is:
+
+| Candidate | Ferrum result | Interpretation |
+|---|---|---|
+| 544 | 12/16 | Storage-frame handoff alone introduces an unframed current-snapshot read. The untrusted forwarding wrapper also consumes element resources during its storage stage. Both zero-sized controls pass. |
+| 548 | 13/16 | Putting physical frames before dependent current-owner observations fixes the original `split_pass`. Forwarding and inclusive lookup remain failures. |
+| 549 | 15/16 | Recognizing a direct physical footprint inside tuple/ADT outputs keeps storage and element restoration in their respective stages. The untrusted forwarding positive and exact false-postcondition control now pass. Only `vec_lookup_inclusive_pass` fails. |
+
+All three inventories and diagnostics are audited. Candidate 549 does not
+classify a heap-dependent or indexed footprint as direct aggregate storage.
+These results do not yet qualify the combined encoder or a new supported
+feature domain. No routine Silicon reruns were added.
+
+The 546 prefix suite finishes at 11/12: all clients and controls pass, but its
+library still reaches the 600-second bound. Candidate 550 additionally removes
+private integer owner-origin definitions only when the completed CFG never
+observes any member of that identity group. Guards, invariants, captures and
+other uses retain the complete group; removed expressions are restricted to
+integer constants and copies between those private locals. Its encoded prefix
+program matches passing 528 after removing comments and normalizing generated
+crate names. Verification is pending; this comparison alone is not a proof.
+
+Canonical-observer candidate 547 still fails the repeated nested caller with
+`assert.failed:wand.not.found` (196.90 seconds). Its simple nested positive
+passes. Disk exhaustion subsequently interrupted logging during a negative
+case: the partial 4/5 result has **incomplete coverage** and is not a completed
+gate. Both its failed log and the failed 552 build are preserved. The original
+workspace bytes and PCG pin were restored from verified backups; superseded
+frozen binaries are being archived losslessly, with every payload hash checked
+before removing the online copy. Sources and proof logs remain available.
+
+The inclusive lookup diagnosis also exposed a missing integration prerequisite:
+current PCG `9dfaf88` does not include experimental associated-output dependency
+change `19327b5`. Port `00b72ae` retains that relation on the current iterator
+graph and adds an inclusive `get_mut` regression at both signature and call
+sites. All 28 focused PCG tests and its complete numbered fixture corpus pass.
+The commit is pushed to `LrWm3/pcg`, branch
+`stdlib/associated-output-dependencies`; main's submodule pin remains unchanged
+pending Prusti qualification.
+
+Candidate 552 combines 549 and 550 with that PCG port, alias-preserving resource
+conversions and the checked fully framed final restoration stage from 387.
+Its first build failed for lack of disk space, before any binaries were frozen.
+Rebuild and focused associated-output/borrow verification remain required.
+Raw diagnostic 551 reproduces the inclusive lookup failure on the unedited
+548 program: applying the outer restoration requires the slice's captured
+element resources. It does not qualify a Rust client or establish a backend
+defect. The next native integration gate must also retain the owner, iterator,
+generic, prefix and nested checks before adoption.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user has asked to continue through the remaining IM and matrix repairs,

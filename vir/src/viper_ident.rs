@@ -61,7 +61,57 @@ fn def_path_name(vcx: &VirCtxt<'_>, def_id: DefId) -> String {
             name.push_str(&format!("#{idx}_{}", component.disambiguator));
         }
     }
-    name
+    stable_generated_path(
+        &name,
+        vcx.tcx().stable_crate_id(def_id.krate).as_u64(),
+        def_id.index.as_u32(),
+    )
+}
+
+/// Proc-macro UUIDs distinguish Rust specification items, but varying their
+/// spelling also perturbs solver heuristics on otherwise identical programs.
+/// Keep Rust's per-crate definition index to preserve item identity after
+/// removing random suffixes from generated path components.
+fn stable_generated_path(path: &str, crate_id: u64, definition_index: u32) -> String {
+    let bytes = path.as_bytes();
+    let mut result = String::new();
+    let mut copied = 0;
+    let mut cursor = 0;
+    while cursor < bytes.len() {
+        if !bytes[cursor].is_ascii_alphabetic() && bytes[cursor] != b'_' {
+            cursor += 1;
+            continue;
+        }
+        let start = cursor;
+        while cursor < bytes.len()
+            && (bytes[cursor].is_ascii_alphanumeric() || bytes[cursor] == b'_')
+        {
+            cursor += 1;
+        }
+        let word = &path[start..cursor];
+        if word.starts_with("Prusti") || word.starts_with("prusti_") {
+            if let Some((prefix, suffix)) = word.rsplit_once('_') {
+                if suffix.len() == 32
+                    && suffix
+                        .bytes()
+                        .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                {
+                    result.push_str(&path[copied..start]);
+                    result.push_str(prefix);
+                    result.push_str("_generated");
+                    copied = cursor;
+                }
+            }
+        }
+    }
+    if copied == 0 {
+        return path.to_owned();
+    }
+    result.push_str(&path[copied..]);
+    result.push_str(&format!(
+        "#generated_crate_{crate_id:x}_def_{definition_index}"
+    ));
+    result
 }
 
 /// Asking for the `item_name` of a closure triggers an ICE in the compiler, so
@@ -128,5 +178,29 @@ mod tests {
         let once = sanitize_str(path);
         assert!(is_valid_identifier(&once));
         assert_eq!(sanitize_str(&once), once);
+    }
+
+    #[test]
+    fn generated_paths_are_stable_and_keep_definition_identity() {
+        let first = "specs::PrustiStructVec_0123456789abcdef0123456789abcdef::<T>::prusti_post_item_next_abcdef0123456789abcdef0123456789::{closure#0}";
+        let second = "specs::PrustiStructVec_ffffffffffffffffffffffffffffffff::<T>::prusti_post_item_next_00000000000000000000000000000000::{closure#0}";
+        assert_eq!(
+            stable_generated_path(first, 7, 42),
+            stable_generated_path(second, 7, 42)
+        );
+        assert_ne!(
+            stable_generated_path(first, 7, 42),
+            stable_generated_path(first, 7, 43)
+        );
+        assert_ne!(
+            stable_generated_path(first, 7, 42),
+            stable_generated_path(first, 8, 42)
+        );
+        let ordinary = "user::record_0123456789abcdef0123456789abcdef::next";
+        assert_eq!(stable_generated_path(ordinary, 7, 42), ordinary);
+        assert_eq!(
+            stable_generated_path("user::PrustiHelper::next", 7, 42),
+            "user::PrustiHelper::next"
+        );
     }
 }

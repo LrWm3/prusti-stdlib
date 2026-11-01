@@ -28,6 +28,28 @@ External implementations remain trusted. The verification target is client code
 that calls standard-library operations, rather than the allocator, raw-pointer
 implementation, or unsafe internals of the standard library.
 
+## Current qualification checkpoint (2026-11-01)
+
+The full dual-backend matrix has run: 1,755 of 1,842 checks passed at frozen
+revision `225eb7714` (matrix 339). Its 87 failures include positive proofs,
+negative tests with extra or incorrect diagnostics, library checks and timeouts;
+none are waived. This is the last complete matrix result, not a claim about
+the newer combined implementation.
+
+Main now uses Ferrum `0e048a4` for development and includes the qualified
+metadata/storage-typing repair from `5602d5ef1`. Builds come from this Prusti
+branch. Verification uses one worker with Ferrum branch parallelism disabled.
+Changed specifications, negatives and backend differences retain Silicon gates,
+and the final combined revision still needs the full paired matrix.
+
+Remaining repairs include nested-reference restoration, enum reconstruction,
+owned reference iteration and loop coupling, associated outputs, current-owner
+resource handoff and cross-crate qualification. Frozen experimental builds are
+kept separate from adopted changes; an encoding success or a checked Viper model
+does not establish the corresponding Rust feature. The separately authorized
+[D1–D6 follow-on scope](#follow-on-scope-authorized-on-2026-11-01) is also part of
+the remaining work.
+
 ## Baseline and evidence
 
 Baseline: checkout `87487f774`, inspected on 2026-10-26. Upstream observations are
@@ -3777,6 +3799,33 @@ Stage-classification candidate 390 finishes at 3/7 on both backends. It removes
 the duplicate physical split restoration, but both full-region positives still
 fail on the tail's indexed indirect resources. Both negatives have the same
 extra error and remain failed checks. The candidate is not adopted.
+
+**Nested proof follow-up (2026-11-01).** Candidate 396 finishes at 8/9 on
+each backend: the missing wand is resolved, but the nested positive lacks
+immediate indexed output resources. Combining checked reservation 393 with the
+trigger fix in candidate 398 also finishes at 8/9 each; the remaining error is
+now an indexed unfold in the second package. All negative controls match
+exactly, and all coverage/provenance audits pass. Neither candidate is adopted.
+
+Exact raw replay 401 locates that unfold. Diagnostic 402 adds one checked
+equality between a captured sequence address and the old pointer used by the
+unfold. The assertion succeeds and the original unfold failure disappears;
+the package's final entry-resource restoration still fails. This identifies
+missing quantifier instantiation as part of the problem. An arithmetic trigger
+in diagnostic 403 is rejected by the frontend before verification. Diagnostic
+404 instead adds an equivalent, checked absolute-index observer postcondition,
+with a valid input-selector trigger; its frontend check passes and proof is
+queued. It adds no assumed resource or equality.
+
+The exact full-region replay 400 is rejected before verification because the
+text frontend disallows conditional trigger terms in that generated program.
+It provides no proof location; the original Prusti 390 failures remain the
+verified diagnostic evidence. Enum broader gate 364 is running on Silicon;
+its Ferrum gate is 28/32, with no regressions against identical baseline tests
+and no accepted negatives. Current-main build 405 combines the enum repair
+with adopted metadata fixes and encodes all five option controls; its paired
+gate is queued. Three repeated-call nested controls (406) are prepared to
+check caller permissions and false claims after calls once the minimum works.
 
 ## Follow-on scope authorized on 2026-11-01
 

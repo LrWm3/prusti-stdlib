@@ -974,7 +974,40 @@ The final gate combines both extensions.
 | IM4 | Generic and cross-crate reference resources | IM3 | Focused gate complete: generic definitions retain the same referent permissions under substitution and through Vec/slice views. |
 | IM5 | Combined acceptance and support update | IM2, IM4 | Focused paired proofs complete: symbolic reference-element loops prove final values and framing across crates. Full stdlib matrix and final-pin merge qualification are in progress. |
 
-### Full matrix qualification (2026-10-31, in progress)
+### Full matrix qualification (2026-10-31; baseline complete, repairs in progress)
+
+The complete `final339` baseline finishes with **1,755/1,842 checks passing**:
+875/921 on Ferrum and 880/921 on Silicon. All 24 jobs have complete coverage,
+matching configuration and source hashes, and no unexpected or missing cases.
+This is the frozen `225eb7714` encoder, PCG `269cb9a`, and Ferrum `afdf10c`;
+it is not qualification of the pending Ferrum upgrade or repair candidates.
+
+| Baseline job group | Ferrum | Silicon |
+|---|---:|---:|
+| Extern, sequence, Vec, collections, resources, hash | 249/249 | 249/249 |
+| Borrow | 155/164 | 156/164 |
+| Ordinary iterator | 389/421 | 391/421 |
+| Heavy iterator | 51/54 | 52/54 |
+| Cross-crate iterator resources | 11/11 | 11/11 |
+| Cross-crate generic resources | 9/10 | 9/10 |
+| Cross-crate prefix resources | 11/12 | 12/12 |
+
+The 87 failed checks comprise 52 positive checks, 28 negative-diagnostic
+mismatches, and seven library checks. No negative client is unexpectedly
+accepted. Twelve failed checks report a verifier timeout; these and negatives
+that fail before their intended assertion remain failures. Full per-case
+diagnostics and timings are in `summary339.json` and `final339/` under the
+artifact directory below.
+
+The final cross-crate jobs expose two additional library findings. Generic
+preservation fails the `body_restore_prefix` obligation at `specs/src/lib.rs:24`
+on both backends (425.90 seconds on Ferrum, 220.67 on Silicon), while all its
+clients and controls pass. The prefix-update library reaches Ferrum's
+600-second verifier bound, while Silicon proves it and both backends pass its
+clients and controls. Follow-up 360 runs both complete suites with rebuilt
+baseline 352 and Ferrum `0e048a4`/Silicon at unchanged bounds, serially after
+the already queued independent repair gates. The earlier focused IM proofs
+remain historical evidence; they do not replace these current library failures.
 
 `scripts/test_stdlib_matrix.py` runs all eleven fixture suites on Ferrum and
 Silicon, serially, with one verifier and Ferrum branch parallelism disabled.

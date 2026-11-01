@@ -42,7 +42,7 @@ branch. Verification uses one worker with Ferrum branch parallelism disabled.
 Changed specifications, negatives and backend differences retain Silicon gates,
 and the final combined revision still needs the full paired matrix.
 
-Remaining repairs include nested-reference restoration, enum reconstruction,
+Remaining repairs include nested-reference restoration, enum replacement,
 owned reference iteration and loop coupling, associated outputs, current-owner
 resource handoff and cross-crate qualification. Frozen experimental builds are
 kept separate from adopted changes; an encoding success or a checked Viper model
@@ -3826,6 +3826,25 @@ and no accepted negatives. Current-main build 405 combines the enum repair
 with adopted metadata fixes and encodes all five option controls; its paired
 gate is queued. Three repeated-call nested controls (406) are prepared to
 check caller permissions and false claims after calls once the minimum works.
+
+**Historical enum reconstruction adopted (2026-11-01).** Current-main
+baseline 407 reproduces the original option-slot positive's missing snapshot
+permission (4/5 Ferrum expectations). Its driver is byte-identical to the
+accepted metadata-only build 373. Candidate 405 adds only the enum historical
+snapshot reconstruction: the original positive and exact false/wrong controls
+pass on both backends, including Some/None runtime behavior. This establishes
+the repair independently of the metadata change.
+
+The adopted code reconstructs an unfolded enum from its actual historical
+discriminant and readable active-variant fields, preserving generic casts.
+It never substitutes a later owner snapshot. The new `mut_element_option_false`
+control is retained byte-for-byte. Original minimum 364 is 5/5 per backend;
+its broader gate is 28/32 per backend with no regressions among identical
+baseline tests. Current-main gate 405 is 7/8 each: the new escaped-old-reference
+option replacement positive still fails a restoration assertion. That failure
+is not waived or included in the qualified scope. `enum405-qualification.json`
+records the source, build, comparison and exact-control evidence. Option
+replacement and final combined qualification remain open.
 
 ## Follow-on scope authorized on 2026-11-01
 

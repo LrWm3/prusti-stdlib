@@ -183,6 +183,62 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             fallback = self
                 .vcx
                 .mk_ternary_expr(self.vcx.mk_conj(&readable), expanded, fallback);
+        } else if let TySpecifics::EnumLike(data) = &child_ty.ty.specifics {
+            // A historical heap may have the enum unfolded into its
+            // discriminant and active variant fields. Reconstruct the same
+            // shallow value from those checked reads, just as for structs.
+            // Do not read a later owner snapshot: replacement may have changed
+            // the variant or the reference identities in this slot.
+            let pure = self.deps.require_dep::<TyUsePureEnc>(child_ty)?;
+            let impure = child_impure.expect_enumlike();
+            let discr_ref = impure.discr(slot_ref);
+            let discr_ty = impure.discr_ty();
+            let discr = discr_ty.ref_to_snap(discr_ref);
+            let mut expanded = fallback;
+            for ((variant, physical), logical) in data
+                .variants
+                .iter()
+                .zip(impure.variants.iter())
+                .zip(pure.expect_enumlike().variants.iter())
+            {
+                let mut readable = Vec::new();
+                let mut fields = Vec::new();
+                for (field, access) in variant.inner.fields.iter().zip(&physical.inner.fields) {
+                    let addr = access.field_ref(slot_ref);
+                    let concrete = self.deps.require_dep::<TyUseImpureEnc>(
+                        field.ty().decompose_normalize(child_ty.args),
+                    )?;
+                    let generic = self.deps.require_dep::<TyUseImpureEnc>(
+                        field.ty().decompose_context(child_ty.ty.params, child_ty.args),
+                    )?;
+                    let caster = self.deps.require_dep::<GArgsCastEnc<crate::encoders::Pure>>(
+                        field.ty().decompose_compare_normalize(child_ty.ty.params, child_ty.args),
+                    )?;
+                    let concrete_held = has(concrete.ref_to_pred_app(addr, None));
+                    readable.push(self.vcx.mk_disj(&[
+                        concrete_held,
+                        has(generic.ref_to_pred_app(addr, None)),
+                    ]));
+                    fields.push(self.vcx.mk_ternary_expr(
+                        concrete_held,
+                        concrete.ref_to_snap(addr),
+                        caster.cast_to_caller_ctx(generic.ref_to_snap(addr)),
+                    ));
+                }
+                let selected = self.vcx.mk_eq_expr(discr.downcast_ty(), logical.discr);
+                let readable = self.vcx.mk_conj(&readable);
+                let value = logical.inner.field_snaps_to_snap(fields).upcast_ty();
+                expanded = self.vcx.mk_ternary_expr(
+                    self.vcx.mk_conj(&[selected, readable]),
+                    value,
+                    expanded,
+                );
+            }
+            fallback = self.vcx.mk_ternary_expr(
+                has(discr_ty.ref_to_pred_app(discr_ref, None)),
+                expanded,
+                fallback,
+            );
         }
         let expanded = self.vcx.mk_ternary_expr(
             has(child_impure.ref_to_pred_app(slot_ref, None)),

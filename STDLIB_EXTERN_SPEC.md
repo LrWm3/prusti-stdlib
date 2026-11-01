@@ -3751,6 +3751,33 @@ physical storage permission. The slice/str ownership-transfer controls are
 retained in the iterator suite; this does not add a str value-observation API.
 The remaining candidates and final combined dual-backend matrix are still open.
 
+**Nested wand trigger diagnosis (2026-11-01).** Candidate 385's minimum
+finishes at 4/5 on each backend. Explicit package capture locals in candidate
+391 also finish at 4/5: Ferrum reports the missing wand, while Silicon times
+out on the positive. All four negative expectations match exactly. A raw
+Ferrum replay of the exact 391 program reproduces the missing second method
+wand; no observer-function failure is reported.
+
+Read-only AST inspection with the pinned Ferrum Silver frontend identifies
+the mismatch precisely. The second contract/package pair has identical bodies,
+but two quantifier triggers retain different free snapshot locals. Wand
+normalization collects holes from the body, not trigger-only expressions, so
+those local names survive in the wand identity. Candidate 396 selects a
+captured sequence that actually occurs in the resource body as the trigger.
+Its own build and four encoding controls pass; both contract/package pairs
+now have identical normalized structures. Its paired minimum and conditional
+replacement/framing gate 397 remain pending. Candidate 393's indexed-output
+reservation experiment retains the original mismatch and was retired before
+verification; its source is preserved, and its reservation change was removed
+from the working encoder. Failed build 395 is retained as compilation evidence.
+`structure394-diagnosis.json` and the `structure393`/`structure396` artifacts
+record the exact comparison. This establishes a diagnosis, not proof success.
+
+Stage-classification candidate 390 finishes at 3/7 on both backends. It removes
+the duplicate physical split restoration, but both full-region positives still
+fail on the tail's indexed indirect resources. Both negatives have the same
+extra error and remain failed checks. The candidate is not adopted.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user has asked to continue through the remaining IM and matrix repairs,

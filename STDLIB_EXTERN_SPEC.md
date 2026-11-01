@@ -48,8 +48,9 @@ Main now uses Ferrum `0e048a4` for development and includes the qualified
 metadata/storage-typing repair from `5602d5ef1` and historical enum snapshot
 reconstruction from `5ec0a95f9`. Enum replacement remains open. Builds come
 from this Prusti branch. Verification uses one worker with Ferrum branch parallelism disabled.
-Changed specifications, negatives and backend differences retain Silicon gates,
-and the final combined revision still needs the full paired matrix.
+Routine specification changes and negative controls use Ferrum under the policy
+above. Major feature sign-off and the final combined revision retain Silicon
+validation.
 
 Remaining repairs include nested-reference restoration, enum replacement,
 owned reference iteration and loop coupling, associated outputs, current-owner
@@ -4199,6 +4200,58 @@ means freezing continuation identities before packaging, preserving one linear
 restoration obligation, and proving pointwise observer laws instead of relying
 on arbitrary recursive unfolding. These are design requirements for the pending
 encoder work, not evidence that any particular installed backend is defective.
+
+### Combined repair checkpoint (2026-11-01, probes 531–540)
+
+The canonical observer candidate 528 completed its prefix-resource gate at 5/5
+on each backend, including both full specification-library proofs. The split
+and inclusive-vector borrow positives still fail. These isolated results do not
+establish the combined encoder or the full cross-crate suites.
+
+Native provenance audits establish these focused results:
+
+| Candidate | Scope | Result |
+|---|---|---|
+| 531 | Concrete resource-group loop summaries and prior alias/owner controls | 10/10 on each backend |
+| 532 | Consume each shared callee obligation once across output packages | 8/12 on each backend; projected owners and generic multi-group restoration still fail |
+| 533 | Conservative projected-field provenance, including equal-typed fields | 12/14 Ferrum; generic multi-group restoration still fails |
+| 535 | Conditional owner-summary composition inside loops | 12/14 Ferrum; aliases selected before the loop still fail |
+| 536 | Functional counter and frame qualification with a checked invariant preserving the loop bound | 4/4 Ferrum, including all three exact postcondition controls |
+| 537 | Joint checked restoration of multi-group owners | 14/14 Ferrum, including both previously failing generic multi-group cases |
+| 539 | Pure alias-selection invariants and pre-loop frames for inactive summary values | 14/14 Ferrum, including aliases selected before and within the loop |
+
+The original functional fixture's missing loop-bound invariant failed even
+without an owner call. Candidate 536 adds a checked invariant, with no stronger
+precondition or changed runtime body; the original failed evidence is retained.
+Candidate 538 was withdrawn before proof execution: permission introspection
+inside the proposed modular loop invariant did not provide an acceptable framing
+argument. Candidate 539 instead uses ordinary ghost selection values and checked
+pre-loop captures. It does not assume facts about a future loop heap.
+
+The joint nested-restoration candidate 534 passes all eight focused Ferrum
+checks. Its repeated-call positive takes 358.38 seconds and its exact false
+postcondition control 482.02 seconds. Individual restoration requests must prove
+the entire combined antecedent. This establishes the focused Rust examples,
+not general independent early restoration of nested lifetimes.
+
+Fresh combined build 540 merges 539, the joint-restoration generalization 537,
+the pending nested indexed observations and reservations, and the canonical
+resource observer changes. The merge retained all pending root encoder work;
+its only textual conflict was a comment about linear callee obligations.
+Source and all six binary hashes are frozen in `build540.json`. Its routine
+Ferrum gate contains 50 owner-handoff programs (75 checks including runtime and
+Rust checks), the accepted 32-check owned-iterator regression set, full generic
+and prefix cross-crate suites, all eight nested-reference programs, and the
+remaining focused borrow regressions. Qualification is running; this is not an
+adoption or a full-matrix result. A fixture-preparation interruption is retained
+separately and is excluded from qualification.
+
+All twenty archival jobs completed with verified lossless payloads. The original
+binary directories retain manifests and checked restore commands. No source,
+proof result or failed-run evidence was discarded. Continue with combined
+qualification, adopt passing changes in logical commits, repair the remaining
+matrix failures, and then complete D1–D6. Silicon follows the major-feature
+policy above rather than running for each intermediate repair.
 
 ## Follow-on scope authorized on 2026-11-01
 

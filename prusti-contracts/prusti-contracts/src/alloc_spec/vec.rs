@@ -1,5 +1,6 @@
 use crate::{
     core_spec::slice::{range_index_model, scalar_index_model},
+    iter_model::ModeledIterator,
     *,
 };
 use alloc::vec::Vec;
@@ -13,7 +14,69 @@ use core::{
 impl<T, A: core::alloc::Allocator> core::iter::IntoIterator for Vec<T, A> {
     #[trusted]
     #[ensures(crate::iter_model::ModeledIterator::remaining(&result) == vec_contents(&self))]
+    #[ensures({
+        let source = old(vec_contents(&self));
+        let tail = result.remaining();
+        forall(move |j: Int| (Int::from(0) <= j && j < source.len()) ==>
+            sequence_resource_state(&tail, j) == old(sequence_resource_state(&source, j)),
+            triggers = [(tail[j],)])
+    })]
+    #[after_expiry(self[_] => {
+        let source = old(vec_contents(&self));
+        let tail = after_call(result.remaining());
+        forall(move |j: Int| (Int::from(0) <= j && j < source.len()) ==>
+            sequence_resource_state(&source, j) == before_expiry(sequence_resource_state(&tail, j)),
+            triggers = [(source[j],)])
+    })]
     fn into_iter(self) -> alloc::vec::IntoIter<T, A>;
+}
+
+// The pinned IntoIter::next moves the first element out and advances the
+// logical tail. Neither this move nor its permission restoration changes
+// referents owned by those elements, including zero-sized elements.
+#[extern_spec]
+impl<T, A: core::alloc::Allocator> Iterator for alloc::vec::IntoIter<T, A> {
+    #[trusted]
+    #[ensures(match &result {
+        Some(value) => old(self.remaining()).len() > Int::from(0)
+            && *value === *old(self.remaining())[0]
+            && self.remaining() == old(self.remaining())[1..],
+        None => old(self.remaining()).len() == Int::from(0)
+            && self.remaining() == old(self.remaining()),
+    })]
+    #[ensures({
+        let source = old(self.remaining());
+        match &result {
+            Some(value) => resource_state(value)
+                == old(sequence_resource_state(&source, Int::from(0))),
+            None => true,
+        }
+    })]
+    #[ensures({
+        let source = old(self.remaining());
+        let tail = self.remaining();
+        forall(move |j: Int| (Int::from(0) <= j && j < tail.len()) ==>
+            sequence_resource_state(&tail, j)
+                == old(sequence_resource_state(&source, j + Int::from(1))),
+            triggers = [(tail[j],)])
+    })]
+    #[after_expiry(self[_] => {
+        let source = old(self.remaining());
+        match &result {
+            Some(value) => sequence_resource_state(&source, Int::from(0))
+                == before_expiry(resource_state(value)),
+            None => true,
+        }
+    })]
+    #[after_expiry(self[_] => {
+        let source = old(self.remaining());
+        let tail = after_call(self.remaining());
+        forall(move |j: Int| (Int::from(1) <= j && j < source.len()) ==>
+            sequence_resource_state(&source, j)
+                == before_expiry(sequence_resource_state(&tail, j - Int::from(1))),
+            triggers = [(source[j],)])
+    })]
+    fn next(&mut self) -> Option<T>;
 }
 
 // These are normal-return contracts for owned elements with stable value
@@ -73,6 +136,27 @@ impl<T, A: core::alloc::Allocator> Vec<T, A> {
     #[trusted]
     #[requires(self.len() < usize::MAX)]
     #[ensures(vec_contents(self) == old(vec_contents(&*self)).append(Seq::single_ref(&value)))]
+    #[ensures({
+        let source = old(vec_contents(&*self));
+        let current = vec_contents(&*self);
+        forall(move |j: Int| (Int::from(0) <= j && j < source.len()) ==>
+            sequence_resource_state(&current, j) == old(sequence_resource_state(&source, j)),
+            triggers = [(current[j],)])
+    })]
+    #[ensures(sequence_resource_state(&vec_contents(&*self), old(vec_contents(&*self)).len())
+        == old(resource_state(&value)))]
+    #[after_expiry(self[_] => {
+        let source = old(vec_contents(&*self));
+        let current = after_call(vec_contents(&*self));
+        forall(move |j: Int| (Int::from(0) <= j && j < source.len()) ==>
+            sequence_resource_state(&source, j) == before_expiry(sequence_resource_state(&current, j)),
+            triggers = [(source[j],)])
+    })]
+    #[after_expiry(value[_] => {
+        let current = after_call(vec_contents(&*self));
+        let index = old(vec_contents(&*self)).len();
+        resource_state(&value) == before_expiry(sequence_resource_state(&current, index))
+    })]
     fn push(&mut self, value: T);
 
     #[trusted]

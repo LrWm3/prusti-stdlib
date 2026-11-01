@@ -8,6 +8,17 @@ use crate::encoders::Pure;
 use task_encoder::{EncodeFullError, TaskEncoder, TaskEncoderDependencies};
 use vir::CastType;
 
+fn field_indices(owner: RustTyDecomposition<'_>) -> Option<(usize, usize)> {
+    match owner.ty.special {
+        RustTySpecial::Vec => Some((1, 2)),
+        RustTySpecial::VecIntoIter => {
+            let len = owner.ty.expect_structlike().fields.len();
+            Some((len - 2, len - 1))
+        }
+        _ => None,
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct OwnedSlice<'vir> {
     pub index: usize,
@@ -20,6 +31,8 @@ pub(crate) struct OwnedSlice<'vir> {
 /// packing concrete referent permissions into generic element resources.
 #[derive(Clone)]
 pub(crate) struct OwnedSliceTyping<'vir> {
+    length_index: usize,
+    elements_index: usize,
     physical: super::use_impure::TyUseImpure<'vir>,
     usize_physical: super::use_impure::TyUseImpure<'vir>,
     usize_pure: TyUsePure<'vir>,
@@ -31,15 +44,19 @@ impl<'vir> OwnedSliceTyping<'vir> {
         deps: &mut TaskEncoderDependencies<'vir, E>,
         owner: RustTyDecomposition<'vir>,
     ) -> Result<Option<Self>, EncodeFullError<'vir, E>> {
-        if owner.ty.special != RustTySpecial::Vec {
+        let Some((length_index, elements_index)) = field_indices(owner) else {
             return Ok(None);
-        }
+        };
         let super::TySpecifics::StructLike(data) = &owner.ty.specifics else {
             unreachable!()
         };
-        let slice = data.fields[2].ty().decompose_normalize(owner.args);
+        let slice = data.fields[elements_index]
+            .ty()
+            .decompose_normalize(owner.args);
         let usize = vir::with_vcx(|vcx| RustTyDecomposition::from_prim_ty(vcx.tcx().types.usize));
         Ok(Some(Self {
+            length_index,
+            elements_index,
             physical: deps.require_dep::<super::use_impure::TyUseImpureEnc>(owner)?,
             usize_physical: deps.require_dep::<super::use_impure::TyUseImpureEnc>(usize)?,
             usize_pure: deps.require_dep::<TyUsePureEnc>(usize)?,
@@ -51,7 +68,7 @@ impl<'vir> OwnedSliceTyping<'vir> {
         let fields = &self.physical.expect_structlike().fields;
         let length = self
             .usize_physical
-            .ref_to_snap(fields[1].field_ref(storage));
+            .ref_to_snap(fields[self.length_index].field_ref(storage));
         let extent = self
             .usize_pure
             .expect_primitive()
@@ -60,7 +77,7 @@ impl<'vir> OwnedSliceTyping<'vir> {
         let mut statements = self.physical.unfold(None, storage, None, None, None);
         statements.push(
             self.typing
-                .establish_extent(fields[2].field_ref(storage), extent),
+                .establish_extent(fields[self.elements_index].field_ref(storage), extent),
         );
         statements.extend(self.physical.fold(None, storage, None, None, None));
         statements
@@ -72,16 +89,15 @@ impl<'vir> OwnedSlice<'vir> {
         deps: &mut TaskEncoderDependencies<'vir, E>,
         owner: RustTyDecomposition<'vir>,
     ) -> Result<Option<Self>, EncodeFullError<'vir, E>> {
-        if owner.ty.special != RustTySpecial::Vec {
+        let Some((length_index, elements_index)) = field_indices(owner) else {
             return Ok(None);
-        }
+        };
         let pure = deps.require_dep::<TyUsePureEnc>(owner)?;
         let fields = &pure.expect_structlike().fields;
-        assert_eq!(fields.len(), 3);
         let usize = vir::with_vcx(|vcx| RustTyDecomposition::from_prim_ty(vcx.tcx().types.usize));
         Ok(Some(Self {
-            index: 2,
-            length: fields[1],
+            index: elements_index,
+            length: fields[length_index],
             usize_ty: deps.require_dep::<TyUsePureEnc>(usize)?,
             cast: deps.require_dep::<GArgsCastEnc<Pure>>(Some(RustTyNormalized {
                 param: RustTyDecomposition::param(),

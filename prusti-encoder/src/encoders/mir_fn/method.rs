@@ -446,6 +446,14 @@ impl TaskEncoder for MethodEnc {
                     label_ctr: 0,
                     call_labels: Default::default(),
                     call_wand_captures: Default::default(),
+                    call_snapshot_locals: Default::default(),
+                    call_post_facts: Default::default(),
+                    call_result_resources: Default::default(),
+                    call_referent_snapshots: Default::default(),
+                    call_referent_entry_snapshots: Default::default(),
+                    call_result_snapshots: Default::default(),
+                    historical_loop_snapshots: Default::default(),
+                    method_snapshot_decls: Vec::new(),
                     wandless_calls: Default::default(),
                     indexed_reads: Default::default(),
                     package_resource_stage: None,
@@ -476,6 +484,7 @@ impl TaskEncoder for MethodEnc {
                                 .decls()
                                 .map(|v| vcx.mk_local_decl_stmt(v, Some(vcx.mk_bool::<false>()))),
                         );
+                        start_stmts.extend(visitor.method_snapshot_decls.iter().copied());
                         visitor.encoded_blocks[0] = vcx.mk_cfg_block(
                             &vir::CfgBlockLabelData::Start,
                             &[],
@@ -483,6 +492,7 @@ impl TaskEncoder for MethodEnc {
                             vcx.mk_goto_stmt(&vir::CfgBlockLabelData::BasicBlock(0)),
                         );
                         visitor.capture_loop_snapshot_frames();
+                        visitor.capture_historical_loop_snapshots();
 
                         visitor.encoded_blocks.push(vcx.mk_cfg_block(
                             vcx.alloc(vir::CfgBlockLabelData::End),

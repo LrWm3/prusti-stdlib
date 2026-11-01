@@ -238,9 +238,9 @@ impl<'a, 'vir> TyUsePureWalker<'a, 'vir> {
             TySpecifics::MutRef((data, ref_domain)) => {
                 let referent_caster = self.encode_normalized(data.referent, ty.0.params)?;
                 let metadata_caster = self.encode_normalized(data.metadata, ty.0.params)?;
-                let metadata_type = self.deps.require_dep::<TyExprEnc>(
-                    data.metadata.decompose_normalize(self.args),
-                )?;
+                let metadata_type = self
+                    .deps
+                    .require_dep::<TyExprEnc>(data.metadata.decompose_normalize(self.args))?;
                 let unit_metadata_type = vir::with_vcx(|vcx| {
                     self.deps
                         .require_dep::<TyExprEnc>(RustTyDecomposition::from_ty(
@@ -267,7 +267,10 @@ impl<'a, 'vir> TyUsePureWalker<'a, 'vir> {
                         metadata_caster: self
                             .encode_normalized(ty.box_metadata_ty(), ty.0.params)?,
                     }),
-                    RustTySpecial::None | RustTySpecial::SliceIterMut | RustTySpecial::Vec => None,
+                    RustTySpecial::None
+                    | RustTySpecial::SliceIterMut
+                    | RustTySpecial::Vec
+                    | RustTySpecial::VecIntoIter => None,
                 };
                 TySpecifics::StructLike(self.encode_structlike(data, ty.0.params, box_data)?)
             }
@@ -584,7 +587,8 @@ impl<'vir> TyUsePureArray<'vir> {
         snap: vir::ExprGenCSnap<'vir, Curr, Next>,
         index: vir::ExprGenInt<'vir, Curr, Next>,
     ) -> vir::ExprGenSnap<'vir, Curr, Next> {
-        let res = super::indexed::observe_element(self.pure.index_access.call()(snap, index), index);
+        let res =
+            super::indexed::observe_element(self.pure.index_access.call()(snap, index), index);
         self.caster.cast_to_caller_ctx(res.upcast_ty())
     }
 
@@ -596,7 +600,9 @@ impl<'vir> TyUsePureArray<'vir> {
     ) -> vir::ExprGenSnap<'vir, Curr, Next> {
         vir::with_vcx(|vcx| {
             self.caster.cast_to_caller_ctx(
-                vcx.mk_seq_index_expr(sequence, index).downcast_ty::<vir::PSnap>().upcast_ty(),
+                vcx.mk_seq_index_expr(sequence, index)
+                    .downcast_ty::<vir::PSnap>()
+                    .upcast_ty(),
             )
         })
     }
@@ -610,7 +616,8 @@ impl<'vir> TyUsePureArray<'vir> {
     ) -> vir::ExprGenSnap<'vir, Curr, Next> {
         vir::with_vcx(|vcx| {
             let element = super::indexed::observe_element(
-                vcx.mk_seq_index_expr(self.to_seq(snap, len), index).downcast_ty(),
+                vcx.mk_seq_index_expr(self.to_seq(snap, len), index)
+                    .downcast_ty(),
                 index,
             );
             self.caster

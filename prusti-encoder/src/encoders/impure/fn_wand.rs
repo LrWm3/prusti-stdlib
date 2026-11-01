@@ -42,6 +42,202 @@ pub(crate) type CallWand<'vir> = (
     Vec<vir::Stmt<'vir>>,
 );
 
+/// Observations made together at one call share their captured value. In
+/// particular, an ADT projection of a captured snapshot must remain a
+/// projection of that value when the loop forgets unrelated ghost locals.
+#[derive(Default)]
+struct CallSnapshots<'vir> {
+    slot: usize,
+    values: Vec<(vir::ExprDyn<'vir>, vir::ExprDyn<'vir>)>,
+}
+
+struct SnapshotSubstitute<'vir>(FxHashMap<&'vir str, vir::ExprDyn<'vir>>);
+
+impl<'vir> Folder<'vir, (), !> for SnapshotSubstitute<'vir> {
+    fn fold_expr(&mut self, e: vir::ExprDyn<'vir>) -> Option<vir::ExprDyn<'vir>> {
+        if let vir::ExprKindData::Local(local) = e.kind {
+            self.0.get(local.name).copied()
+        } else {
+            e.super_fold_with(self)
+        }
+    }
+}
+
+impl<'vir> CallSnapshots<'vir> {
+    /// A consequence of a functional postcondition that refers only to
+    /// captured values. Dropping an unstable conjunct or weakening either
+    /// branch is sound; antecedents and negated expressions stay intact.
+    fn stable_consequence(
+        vcx: &'vir vir::VirCtxt<'vir>,
+        fact: vir::ExprBool<'vir>,
+    ) -> vir::ExprBool<'vir> {
+        use vir::{BinOpKind as B, ExprKindData as K};
+        struct Stable(bool);
+        impl<'vir> Folder<'vir, (), !> for Stable {
+            fn fold_expr(&mut self, e: vir::ExprDyn<'vir>) -> Option<vir::ExprDyn<'vir>> {
+                match e.kind {
+                    K::Old(_)
+                    | K::Field(..)
+                    | K::PredicateApp(_)
+                    | K::PredicatePerm(_)
+                    | K::Unfolding(_)
+                    | K::AccField(_)
+                    | K::Wand(_)
+                    | K::InhaleExhale(_) => {
+                        self.0 = false;
+                    }
+                    K::FuncApp(app)
+                        if app.target.starts_with("p_")
+                            || app.target.starts_with("indexed_")
+                            || app.target.starts_with("indirect_") =>
+                    {
+                        self.0 = false
+                    }
+                    _ => {}
+                }
+                e.super_fold_with(self)
+            }
+        }
+        let stable = |expr: vir::ExprDyn<'vir>| {
+            let mut check = Stable(true);
+            let _ = expr.fold_with(&mut check);
+            check.0
+        };
+        match fact.kind {
+            K::BinOp(op) if matches!(op.kind, B::And | B::Or) => vcx
+                .mk_bin_op_expr(
+                    op.kind,
+                    Self::stable_consequence(vcx, op.lhs.downcast_ty()),
+                    Self::stable_consequence(vcx, op.rhs.downcast_ty()),
+                )
+                .downcast_ty(),
+            K::BinOp(op) if op.kind == B::Implies && stable(op.lhs) => vcx
+                .mk_bin_op_expr(
+                    B::Implies,
+                    op.lhs.downcast_ty::<vir::Bool>(),
+                    Self::stable_consequence(vcx, op.rhs.downcast_ty()),
+                )
+                .downcast_ty(),
+            K::Ternary(branch) if stable(branch.cond.as_dyn()) => vcx.mk_ternary_expr(
+                branch.cond,
+                Self::stable_consequence(vcx, branch.then.downcast_ty()),
+                Self::stable_consequence(vcx, branch.else_.downcast_ty()),
+            ),
+            K::Let(binding) if stable(binding.val) => vcx.mk_let_expr(
+                vcx.mk_local_decl(binding.name, binding.val.ty()),
+                binding.val,
+                Self::stable_consequence(vcx, binding.expr.downcast_ty()),
+            ),
+            _ if stable(fact.as_dyn()) => fact,
+            _ => vcx.mk_bool::<true>(),
+        }
+    }
+
+    fn bind<E: TaskEncoder>(
+        &mut self,
+        bindings: &SnapshotBindings<'vir>,
+        visitor: &mut ImpureEncVisitor<'vir, '_, E>,
+    ) -> SnapshotSubstitute<'vir> {
+        let mut substitute = SnapshotSubstitute(FxHashMap::default());
+        for &(decl, value) in bindings.borrow().iter() {
+            let value = value.fold_with(&mut substitute).unwrap_or(value);
+            let captured = self.capture(value.as_dyn(), visitor);
+            substitute.0.insert(decl.name, captured);
+        }
+        substitute
+    }
+
+    fn bind_used<E: TaskEncoder>(
+        &mut self,
+        bindings: &SnapshotBindings<'vir>,
+        facts: &[vir::ExprBool<'vir>],
+        visitor: &mut ImpureEncVisitor<'vir, '_, E>,
+    ) -> SnapshotSubstitute<'vir> {
+        struct Uses<'vir>(FxHashSet<&'vir str>);
+        impl<'vir> Folder<'vir, (), !> for Uses<'vir> {
+            fn fold_expr(&mut self, expr: vir::ExprDyn<'vir>) -> Option<vir::ExprDyn<'vir>> {
+                if let vir::ExprKindData::Local(local) = expr.kind {
+                    self.0.insert(local.name);
+                }
+                expr.super_fold_with(self)
+            }
+        }
+        let mut used = Uses(FxHashSet::default());
+        for fact in facts {
+            let _ = fact.fold_with(&mut used);
+        }
+        // Bindings are dependency ordered. Walk backwards to include the
+        // observations used by another retained observation, then emit forwards.
+        for (decl, value) in bindings.borrow().iter().rev() {
+            if used.0.contains(decl.name) {
+                let _ = value.fold_with(&mut used);
+            }
+        }
+        let mut substitute = SnapshotSubstitute(FxHashMap::default());
+        for &(decl, value) in bindings.borrow().iter() {
+            if used.0.contains(decl.name) {
+                let value = value.fold_with(&mut substitute).unwrap_or(value);
+                let captured = self.capture(value.as_dyn(), visitor);
+                substitute.0.insert(decl.name, captured);
+            }
+        }
+        substitute
+    }
+
+    fn same(a: vir::ExprDyn<'vir>, b: vir::ExprDyn<'vir>) -> bool {
+        use vir::ExprKindData as K;
+        if a.ty() != b.ty() {
+            return false;
+        }
+        if std::ptr::eq(a.kind, b.kind) {
+            return true;
+        }
+        match (a.kind, b.kind) {
+            (K::Local(a), K::Local(b)) => a.name == b.name && a.ty == b.ty,
+            (K::Const(a), K::Const(b)) => a == b,
+            (K::Old(a), K::Old(b)) => a.label == b.label && Self::same(a.expr, b.expr),
+            (K::FuncApp(a), K::FuncApp(b)) => {
+                a.target == b.target
+                    && a.reveal == b.reveal
+                    && a.result_ty == b.result_ty
+                    && a.typ_var_map == b.typ_var_map
+                    && a.args.len() == b.args.len()
+                    && a.args.iter().zip(b.args).all(|(a, b)| Self::same(a, b))
+            }
+            (K::AdtDestructor(a, ad), K::AdtDestructor(b, bd)) => ad == bd && Self::same(a, b),
+            _ => false,
+        }
+    }
+
+    fn capture<E: TaskEncoder>(
+        &mut self,
+        value: vir::ExprDyn<'vir>,
+        visitor: &mut ImpureEncVisitor<'vir, '_, E>,
+    ) -> vir::ExprDyn<'vir> {
+        if let Some((_, saved)) = self
+            .values
+            .iter()
+            .find(|(read, _)| Self::same(*read, value))
+        {
+            return saved;
+        }
+        let saved = if let vir::ExprKindData::Old(old) = value.kind
+            && let vir::ExprKindData::AdtDestructor(base, field) = old.expr.kind
+        {
+            // ADT destructors are heap independent. Capture their base on
+            // the same old heap, then keep the projection explicit.
+            let read = visitor.vcx.maybe_apply_label(*base, Some(old.label));
+            field.call()(self.capture(read, visitor))
+        } else {
+            let local = visitor.call_snapshot_local(&mut self.slot, value.ty());
+            visitor.stmt(visitor.vcx.mk_pure_assign_stmt(local, value));
+            local
+        };
+        self.values.push((value, saved));
+        saved
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ResourceStage {
     Storage,
@@ -261,6 +457,7 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
                     package_script.push(vcx.mk_exhale_stmt(expiry_postcondition.expr(
                         args,
                         Some(PostCapture {
+                            freeze_current: false,
                             label: Some(vir::OldLabel::Label(label)),
                             bindings: None,
                             memo: None,
@@ -682,11 +879,10 @@ impl<'vir> WandEncOutput<'vir> {
             return Ok(Vec::new());
         }
         let vcx = visitor.vcx;
+        let mut captures = CallSnapshots::default();
         let mut capture = |value: vir::ExprSnap<'vir>| {
             if materialize {
-                let local = visitor.new_tmp(value.ty());
-                visitor.stmt(visitor.vcx.mk_pure_assign_stmt(local, value));
-                local
+                captures.capture(value.as_dyn(), visitor).downcast_ty()
             } else {
                 value
             }
@@ -719,27 +915,34 @@ impl<'vir> WandEncOutput<'vir> {
                 continue;
             };
             if let Some(bindings) = bindings {
+                let resources = wand_data
+                    .lhs
+                    .iter()
+                    .filter(|node| node.mir_local() == mir::RETURN_PLACE)
+                    .filter_map(|node| {
+                        self.encode_predicates_for_function_shape_node(
+                            vcx,
+                            visitor.deps,
+                            *node,
+                            Some(call_ctx),
+                            Some(vir::OldLabel::Label(label_post)),
+                            Some(bindings),
+                            |i| args[i],
+                        )
+                    })
+                    .collect::<Vec<_>>();
                 // Capture in dependency order. These are the same post-call
                 // observations bound outside the callee's returned wand; no
                 // read is moved out of its quantifier or expiry heap.
-                struct Substitute<'vir>(FxHashMap<&'vir str, vir::ExprDyn<'vir>>);
-                impl<'vir> Folder<'vir, (), !> for Substitute<'vir> {
-                    fn fold_expr(&mut self, e: vir::ExprDyn<'vir>) -> Option<vir::ExprDyn<'vir>> {
-                        if let vir::ExprKindData::Local(local) = e.kind {
-                            self.0.get(local.name).copied()
-                        } else {
-                            e.super_fold_with(self)
-                        }
-                    }
-                }
-                let mut substitute = Substitute(FxHashMap::default());
-                for &(decl, value) in bindings.borrow().iter() {
-                    let value = value.fold_with(&mut substitute).unwrap_or(value);
-                    let local = visitor.new_tmp(value.ty());
-                    visitor.stmt(visitor.vcx.mk_pure_assign_stmt(local, value));
-                    substitute.0.insert(decl.name, local.as_dyn());
-                }
+                let mut substitute = captures.bind(bindings, visitor);
                 wand = wand.fold_with(&mut substitute).unwrap_or(wand);
+                let resources = resources
+                    .into_iter()
+                    .map(|resource| resource.fold_with(&mut substitute).unwrap_or(resource))
+                    .collect();
+                visitor
+                    .call_result_resources
+                    .insert((visitor.current_block.unwrap(), id), resources);
             }
             let signature = RustSignature::new(self.function_data.def_id());
             let mut convert = |node: FunctionShapeNode<Generalized>,
@@ -788,6 +991,97 @@ impl<'vir> WandEncOutput<'vir> {
                 after.extend(convert((*node).into(), false, label_pre)?);
             }
             wands.push((id, wand, before, after));
+        }
+        if materialize {
+            let def_id = self.function_data.def_id();
+            visitor
+                .call_result_snapshots
+                .insert(visitor.current_block.unwrap(), args[mir::RETURN_PLACE]);
+            let signature = RustSignature::new(def_id);
+            for (index, source) in signature.inputs.iter().enumerate() {
+                let task = source.decompose_normalize(call_ctx);
+                let crate::encoders::ty::TySpecifics::MutRef(data) = task.ty.specifics else {
+                    continue;
+                };
+                let domain = visitor
+                    .deps
+                    .require_dep::<crate::encoders::TyUsePureEnc>(task)?;
+                let inner = data.referent.decompose_context(task.ty.params, task.args);
+                let inner = visitor
+                    .deps
+                    .require_dep::<crate::encoders::TyUseImpureEnc>(inner)?;
+                let address = domain
+                    .expect_mutref()
+                    .deref_access(args[(index + 1).into()].downcast_ty());
+                for (label, entry) in [(label_pre, true), (label_post, false)] {
+                    let read = vcx.mk_local_labelled_old_expr(inner.ref_to_snap(address), label);
+                    if let Some((_, captured)) = captures
+                        .values
+                        .iter()
+                        .find(|(value, _)| CallSnapshots::same(*value, read.as_dyn()))
+                    {
+                        let caster = visitor.deps.require_dep::<GArgsCastEnc<Pure>>(
+                            data.referent
+                                .decompose_compare_normalize(task.ty.params, task.args),
+                        )?;
+                        let captured = caster.cast_to_caller_ctx(captured.downcast_ty());
+                        let snapshots = if entry {
+                            &mut visitor.call_referent_entry_snapshots
+                        } else {
+                            &mut visitor.call_referent_snapshots
+                        };
+                        snapshots.insert((visitor.current_block.unwrap(), index), captured);
+                    }
+                }
+            }
+            let spec =
+                visitor
+                    .deps
+                    .require_dep::<MirSpecEnc>((def_id, def_id, MirSpecEncMode::Impure))?;
+            if !spec.post_templates.is_empty() {
+                let signature = RustSignature::new(def_id);
+                let mut spec_args = Vec::new();
+                for (index, ty) in signature.inputs.iter().enumerate() {
+                    let normalized = ty.decompose_compare_normalize(signature.gparams, call_ctx);
+                    let caster = visitor.deps.require_dep::<GArgsCastEnc<Pure>>(normalized)?;
+                    spec_args.push(caster.cast_to_callee_ctx(args[(index + 1).into()]));
+                }
+                let normalized = signature
+                    .output
+                    .decompose_compare_normalize(signature.gparams, call_ctx);
+                let caster = visitor.deps.require_dep::<GArgsCastEnc<Pure>>(normalized)?;
+                let result = caster.cast_to_callee_ctx(args[mir::RETURN_PLACE]);
+                let spec_args = PledgeExpr::pledge_args(result, spec_args);
+                let bindings = &*vcx.alloc(std::cell::RefCell::new(Vec::new()));
+                let capture = Some(PostCapture {
+                    freeze_current: true,
+                    label: Some(vir::OldLabel::Label(label_post)),
+                    bindings: Some(bindings),
+                    memo: Some(vcx.alloc(std::cell::RefCell::new(Default::default()))),
+                });
+                let generics = self.generics_subst(Some(call_ctx), vcx, visitor.deps);
+                let facts = vcx.with_local_subst(generics, || {
+                    spec.post_templates
+                        .iter()
+                        .map(|post| post.expr_at_label(spec_args, label_pre, capture))
+                        .collect::<Vec<_>>()
+                });
+                // Select the stable consequence before emitting its observations.
+                // Discarded postcondition branches may read a referent that exists
+                // only under a guard (for example Option::Some after next()).
+                let facts = facts
+                    .into_iter()
+                    .map(|fact| CallSnapshots::stable_consequence(vcx, fact))
+                    .collect::<Vec<_>>();
+                let mut substitute = captures.bind_used(bindings, &facts, visitor);
+                let facts = facts
+                    .into_iter()
+                    .map(|fact| fact.fold_with(&mut substitute).unwrap_or(fact))
+                    .collect();
+                visitor
+                    .call_post_facts
+                    .insert(visitor.current_block.unwrap(), facts);
+            }
         }
         Ok(wands)
     }
@@ -956,6 +1250,7 @@ impl<'vir> WandEncOutput<'vir> {
             pledge_args
         };
         let capture = Some(PostCapture {
+            freeze_current: false,
             label: output_heap_label.map(vir::OldLabel::Label),
             bindings: output_bindings,
             memo: output_bindings.map(|_| &*vcx.alloc(std::cell::RefCell::new(Default::default()))),
@@ -976,7 +1271,7 @@ impl<'vir> WandEncOutput<'vir> {
                     *g,
                     call_ctx,
                     Some(pledge_old_label.map_or(vir::OldLabel::None, vir::OldLabel::Label)),
-                    None,
+                    output_bindings,
                     |i| pledge_args[i],
                 )
             })
@@ -992,7 +1287,7 @@ impl<'vir> WandEncOutput<'vir> {
                 *g,
                 call_ctx,
                 Some(pledge_old_label.map_or(vir::OldLabel::None, vir::OldLabel::Label)),
-                None,
+                output_bindings,
                 |i| pledge_args[i],
             )
         });
@@ -1521,17 +1816,20 @@ impl<'vir> WandEncOutput<'vir> {
             selected = *target;
         }
         let lifetime = if opaque {
-            // `self[_]` names a collection's element resources. Vec also
-            // contains an allocator parameter, which is not an element.
+            // `self[_]` names a collection's element resources. Vec and its
+            // owned iterator also contain an allocator, which is not an element.
             let mut collection = selected;
             while let ty::TyKind::Ref(_, inner, _) = collection.kind() {
                 collection = *inner;
             }
             if let ty::TyKind::Adt(_, args) = collection.kind()
-                && RustTyDecomposition::from_ty(collection, self.g_params(vcx, None))
-                    .ty
-                    .special
-                    == crate::encoders::ty::RustTySpecial::Vec
+                && matches!(
+                    RustTyDecomposition::from_ty(collection, self.g_params(vcx, None))
+                        .ty
+                        .special,
+                    crate::encoders::ty::RustTySpecial::Vec
+                        | crate::encoders::ty::RustTySpecial::VecIntoIter
+                )
             {
                 selected = args.type_at(0);
             }

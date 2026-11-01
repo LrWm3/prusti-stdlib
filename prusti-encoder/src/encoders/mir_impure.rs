@@ -175,6 +175,18 @@ where
     /// Call-time observations, shared by expiry scripts and retained loop
     /// obligations. Conversion statements still execute only on expiry.
     pub call_wand_captures: FxHashMap<mir::BasicBlock, Vec<super::impure::fn_wand::CallWand<'vir>>>,
+    /// The duplicated loop prefix and repeated body update the same call-time
+    /// snapshot variables, so retained obligations have one identity at a cut.
+    pub call_snapshot_locals: FxHashMap<(mir::BasicBlock, usize), vir::ExprDyn<'vir>>,
+    pub call_post_facts: FxHashMap<mir::BasicBlock, Vec<vir::ExprBool<'vir>>>,
+    pub call_result_resources: FxHashMap<(mir::BasicBlock, usize), Vec<vir::ExprBool<'vir>>>,
+    pub call_referent_snapshots: FxHashMap<(mir::BasicBlock, usize), vir::ExprSnap<'vir>>,
+    pub call_referent_entry_snapshots: FxHashMap<(mir::BasicBlock, usize), vir::ExprSnap<'vir>>,
+    pub call_result_snapshots: FxHashMap<mir::BasicBlock, vir::ExprSnap<'vir>>,
+    /// Shallow local snapshots captured at each execution of a MIR location.
+    pub method_snapshot_decls: Vec<vir::Stmt<'vir>>,
+    pub historical_loop_snapshots:
+        FxHashMap<(Place<'vir>, SnapshotLocation), (vir::ExprSnap<'vir>, vir::ExprSnap<'vir>)>,
     /// Blocks whose call terminator was not encoded as an impure method call
     /// (pure functions, intrinsics, `prusti_contracts` builtins) and thus
     /// created no wand to apply on expiry.
@@ -2213,6 +2225,39 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         self.vcx.mk_local_ex(local)
     }
 
+    /// Snapshots read outside the package or loop that first requested them
+    /// need a declaration in the enclosing method's scope.
+    pub(crate) fn new_method_snapshot<T: CompType>(
+        &mut self,
+        ty: vir::Type<'vir, T>,
+    ) -> vir::Expr<'vir, T> {
+        let name = vir::vir_format!(self.vcx, "_tmp{}", self.tmp_ctr);
+        let local = vir::vir_local_decl! { self.vcx; [name] : [ty] };
+        self.tmp_ctr += 1;
+        self.method_snapshot_decls
+            .push(self.vcx.mk_local_decl_stmt(local, None));
+        self.vcx.mk_local_ex(local)
+    }
+
+    pub(crate) fn call_snapshot_local<T: CompType>(
+        &mut self,
+        slot: &mut usize,
+        ty: vir::Type<'vir, T>,
+    ) -> vir::Expr<'vir, T>
+    where
+        vir::Dyn: vir::TransmuteFrom<T>,
+    {
+        let key = (self.current_block.unwrap(), *slot);
+        *slot += 1;
+        if let Some(local) = self.call_snapshot_locals.get(&key) {
+            assert_eq!(local.ty(), ty.as_dyn());
+            return local.downcast_ty();
+        }
+        let local = self.new_tmp(ty);
+        self.call_snapshot_locals.insert(key, local.as_dyn());
+        local
+    }
+
     pub(crate) fn new_label(&mut self, base: &str) -> &'vir str {
         let name = vir::vir_format!(self.vcx, "{base}{}", self.label_ctr);
         self.label_ctr += 1;
@@ -2266,7 +2311,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
     /// conditional moves are still accessible at the point where this label is inserted.
     /// `loop_pres` is used to generate a unique label when `block` is encoded multiple times
     /// (see the comment in [Self::visit_body]).
-    fn block_end_label(&self, block: mir::BasicBlock, loop_pres: &[usize]) -> &'vir str {
+    pub(crate) fn block_end_label(&self, block: mir::BasicBlock, loop_pres: &[usize]) -> &'vir str {
         let pres = Self::loop_pres_suffix(loop_pres);
         vir::vir_format!(self.vcx, "_after_{}{pres}", block.index())
     }

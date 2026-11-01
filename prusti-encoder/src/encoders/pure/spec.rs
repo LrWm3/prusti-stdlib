@@ -118,6 +118,9 @@ pub struct MirSpecEncOutput<'vir> {
     pub pres: Vec<(vir::ExprBool<'vir>, Span)>,
     /// Each postcondition paired with the source span of its spec item.
     pub posts: Vec<(vir::ExprBool<'vir>, Span)>,
+    /// Reifiable functional posts, used to retain the facts needed by a
+    /// captured call obligation across a loop boundary.
+    pub post_templates: Vec<PledgeExpr<'vir>>,
     pub pledges: Vec<EncodedPledge<'vir>>,
     pub pre_args: &'vir FxHashMap<mir::Local, vir::ExprSnap<'vir>>,
     #[allow(dead_code)]
@@ -324,6 +327,7 @@ impl TaskEncoder for MirSpecEnc {
                 }
                 MirSpecEncMode::PureWithResult | MirSpecEncMode::PureWithoutResult => all_args,
             };
+            let mut post_templates = Vec::new();
             let posts: Vec<(vir::ExprBool<'_>, Span)> = posts
                 .iter()
                 .filter_map(|spec_def_id| {
@@ -338,6 +342,7 @@ impl TaskEncoder for MirSpecEnc {
                             )])
                         });
                         let expr = spec.expr.downcast_ty::<vir::Bool>();
+                        post_templates.push(PledgeExpr::new(*spec_def_id, expr));
                         let expr =
                             expr.reify(vcx, (*spec_def_id, post_args, vir::OldLabel::None, None));
                         let expr = expr.realloc_span();
@@ -415,6 +420,7 @@ impl TaskEncoder for MirSpecEnc {
             let data = MirSpecEncOutput {
                 pres,
                 posts,
+                post_templates,
                 pledges,
                 pre_args,
                 post_args,

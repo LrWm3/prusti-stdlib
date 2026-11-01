@@ -147,6 +147,7 @@ pub enum PrustiBuiltin {
     MutSliceLen,
     MutSliceContents,
     VecContents,
+    OwnedIterContents,
     MutSliceReferentValue,
     ResourceState,
     SequenceResourceState,
@@ -271,6 +272,7 @@ impl PrustiBuiltin {
                     "mut_slice_len" => Self::MutSliceLen,
                     "mut_slice_contents" => Self::MutSliceContents,
                     "vec_contents" => Self::VecContents,
+                    "owned_iter_contents" => Self::OwnedIterContents,
                     "resource_state" => Self::ResourceState,
                     "sequence_resource_state" => Self::SequenceResourceState,
                     "sequence_resource_states" => Self::SequenceResourceStates,
@@ -613,13 +615,13 @@ impl PrustiBuiltinEnc {
                     .metadata_access(slice)
                     .upcast_ty()
             }
-            PrustiBuiltin::VecContents => {
+            PrustiBuiltin::VecContents | PrustiBuiltin::OwnedIterContents => {
                 let owner_ty = RustTyDecomposition::from_ty(
                     BuiltinCtxt::deref(ctxt.sig.inputs()[0]),
                     ctxt.args.context(),
                 );
                 let owned = crate::encoders::ty::owned_slice::OwnedSlice::new(ctxt.deps, owner_ty)?
-                    .expect("vec_contents requires Vec");
+                    .expect("collection contents requires an owned logical slice");
                 let owner = ctxt.deref_operand::<vir::CSnap>(0)?;
                 let pure = ctxt.e_input_deref(0)?;
                 let field = &owner_ty.ty.expect_structlike().fields[owned.index];

@@ -3988,8 +3988,9 @@ reservation. The native implementation remains open.
 Own rebuild 491 fixes historical snapshot declaration scope and selects
 retained postcondition observations before emitting their heap reads. The
 affected library and three clients encode; the full library now passes
-Viper parsing and type checking. Gate 492 passes all eight Ferrum checks;
-paired Silicon and broader owned-loop gates remain pending.
+Viper parsing and type checking. Gate 492 passes all eight checks on each
+backend, with complete source/build provenance. Broader owned-loop
+qualification remains separate.
 
 The independent naming fix is accepted in `adf34ef15`: generated Viper names
 use stable crate and item identities instead of random specification UUIDs.
@@ -3999,8 +4000,18 @@ existing current-resource reservation failure. Clean-main replay 506 reproduces
 that failure on both backends with identical original diagnostics; the exact
 negative still passes. This failure remains open. Candidate 500 combines the
 scope/capture repair with the accepted names; six complete programs repeat
-identically, excluding comments, across fresh encodings 500/502. Its solver
-gate is pending. Obsolete naming candidates 494/498 and owned minimum 491
+identically, excluding comments, across fresh encodings 500/502. Its minimum
+gate passes all 20 checks on each backend, including the library, owned
+whole-prefix loops, native mutable loops and extra-`next` negatives. Audit 500
+confirms complete coverage and provenance. Gate 510 passes all 13 additional
+checks on each backend, covering owned reference writes, indexed mutation and
+owned-value regressions. Their audited union covers exactly the 32 checks of
+the earlier broader gate, with identical fixture sources and no waived
+failures. This owned-iterator repair is adopted with PCG `9dfaf88ca` and eight
+regression fixtures. The PCG pin removes phantom post-call outputs for moved
+owned arguments. `owned500-qualification.json` records the build and complete
+paired coverage; the final combined matrix and unrelated repairs remain open.
+Obsolete naming candidates 494/498 and owned minimum 491
 are superseded rather than counted as additional passing proof gates.
 
 **Native current-owner handoff prototype (2026-11-01).** Candidate 504 emits
@@ -4018,11 +4029,34 @@ positives and exact false-postcondition controls. The conditional negative
 requires that its call branch runs. All generated methods are checked; this
 is native encoder evidence, unlike the earlier edited-stub experiments.
 
-The prototype remains unadopted. Concrete callers, multiple owners, instantiated
-resource-group mappings, unbounded loop composition and broader regression
-qualification remain required. Package-local captures and continuations must
-not escape their proof scope. `handoff505-qualification.json` records the
-native source/build audit and these limits.
+Candidate 513 adds conservative MIR input provenance through uniquely defined
+direct reborrows and moves. Address/type guards alone (509/512) still try to
+apply an already consumed continuation for another owner. Provenance narrows
+the selected continuations without introducing an aliasing assumption; Viper
+still checks every application. All 28 native checks pass on both backends:
+the earlier cases, concrete callers, two generic owner parameters, and two
+owners of the same generic type, each with an exact false-postcondition
+control. `handoff513-qualification.json` checks source, binary and diagnostic
+provenance. Projected and ambiguous aliases still need qualification.
+
+The unbounded native-loop baseline 508 fails both expectations. Prototype 514
+introduces one checked current-to-entry continuation per opaque input owner,
+composes it at ordinary borrow expiry, and carries it through loop invariants.
+Its positive still lacks the current-snapshot equality at the loop boundary;
+its nonempty-loop false-postcondition control is rejected correctly. Rebuild
+515 binds that snapshot when the invariant retains the complete mutable
+reference resource. It encodes and passes Viper scope/type checks. Its positive
+now fails an exhale assertion and the negative produces exactly the intended
+false-postcondition error; the positive diagnostic still needs investigation.
+Broader fixtures 517 cover repeated and conditional
+calls, early returns, calls before/after a loop, nested loops and two owners.
+All six positives pass at runtime; proof checks are gated on the minimum.
+
+These handoff prototypes remain unadopted. Instantiated resource-group
+mappings, unbounded loop proofs and broader regression qualification remain
+required. Package-local captures and continuations must not escape their
+proof scope. Gate 516 also rechecks the generic-resource and borrow suites,
+including the existing `split_pass` failure, on native candidate 513.
 
 ## Follow-on scope authorized on 2026-11-01
 

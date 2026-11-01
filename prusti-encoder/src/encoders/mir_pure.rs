@@ -59,6 +59,9 @@ type PostCaptureKey<'vir> = (
 
 #[derive(Clone, Copy)]
 pub struct PostCapture<'vir> {
+    /// Ordinary postconditions observe the post-call heap. Expiry pledges
+    /// retain their existing current/after_call distinction.
+    pub freeze_current: bool,
     pub label: Option<vir::OldLabel<'vir>>,
     pub bindings: Option<&'vir SnapshotBindings<'vir>>,
     pub memo:
@@ -489,10 +492,8 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
             // read and making the callee's `old` differ from a caller label.
             inline_snapshots: matches!(
                 kind,
-                PureKind::Spec {
-                    allow_before_expiry: true,
-                    ..
-                } | PureKind::SpecBlock(_)
+                PureKind::Spec { .. }
+                    | PureKind::SpecBlock(_)
                     | PureKind::SpecBlockClosure
                     | PureKind::RestorationBlock(_)
                     | PureKind::RestorationBlockClosure
@@ -1519,10 +1520,10 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
             // match with the callee's wand at a call site, where the `old` is
             // labelled. Silicon evaluates the heap-independent parts of a wand
             // when inhaling it, where `old[lhs]` is undefined.
-            let heap_read = self.impure_context
-                && (should_wrap || self.before_expiry_mode)
+            let mutable_heap_read = self.impure_context
                 && matches!(elem, mir::ProjectionElem::Deref)
                 && matches!(place_ty.ty.kind(), TyKind::Ref(.., ty::Mutability::Mut));
+            let heap_read = mutable_heap_read && (should_wrap || self.before_expiry_mode);
             encoded_place = self.encode_place_element(curr_ver, place_ty, *elem, encoded_place)?;
             place_ty = place_ty.projection_ty(self.vcx.tcx(), *elem);
             if heap_read && should_wrap && self.old_mode && !self.spec_block && !self.spec_closure {
@@ -1532,22 +1533,69 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                     inner.ty(),
                     Box::new(move |vcx, lctx: ExprInput<'vir>| {
                         use vir::Reify;
+                        // A retained call obligation can cross a loop cut.
+                        // Freeze its pre-call heap observations alongside the
+                        // post-call observations, instead of retaining a label
+                        // from one particular copy of the loop prefix. This
+                        // wrapper is outside quantified specification closures.
+                        let key = (
+                            std::ptr::from_ref(inner).cast::<()>() as usize,
+                            lctx.0,
+                            std::ptr::from_ref(lctx.1).cast::<()>() as usize,
+                            lctx.2,
+                            Some(lctx.2),
+                        );
+                        if let Some(capture) = lctx.3
+                            && let Some(memo) = capture.memo
+                            && let Some(decl) = memo.borrow().get(&key)
+                        {
+                            return vcx.mk_local_ex(*decl).kind;
+                        }
                         let reified = inner.reify(vcx, lctx);
-                        vcx.mk_old(reified, lctx.2).kind
+                        let value = vcx.mk_old(reified, lctx.2);
+                        if let Some(capture) = lctx.3
+                            && let Some(bindings) = capture.bindings
+                        {
+                            let name =
+                                vir::vir_format!(vcx, "_wand_snapshot_{}", bindings.borrow().len());
+                            let decl = vcx.mk_local_decl(name, value.ty());
+                            bindings.borrow_mut().push((decl, value));
+                            if let Some(memo) = capture.memo {
+                                memo.borrow_mut().insert(key, decl);
+                            }
+                            vcx.mk_local_ex(decl).kind
+                        } else {
+                            value.kind
+                        }
                     }),
                 );
             }
             if heap_read && self.before_expiry_mode {
                 encoded_place.snap = self.vcx.mk_old_lhs_expr(encoded_place.snap);
             }
-            if heap_read && self.after_call_mode {
+            if mutable_heap_read
+                && (self.after_call_mode
+                    || (!self.old_mode
+                        && !self.before_expiry_mode
+                        && !self.spec_block
+                        && !self.spec_closure))
+            {
                 let inner = encoded_place.snap;
+                let explicit_after_call = self.after_call_mode;
                 encoded_place.snap = self.vcx.mk_lazy_expr(
                     "after_call_heap_capture",
                     inner.ty(),
                     Box::new(move |vcx, lctx: ExprInput<'vir>| {
                         use vir::Reify;
-                        let capture = lctx.3.expect("after_call requires a pledge context");
+                        let capture = if explicit_after_call {
+                            lctx.3.expect("after_call requires a pledge context")
+                        } else if let Some(capture) = lctx.3
+                            && capture.freeze_current
+                        {
+                            capture
+                        } else {
+                            return inner.reify(vcx, lctx).kind;
+                        };
                         // Reification visits a shared expression once per use.
                         // One post-call heap read needs only one capture in this
                         // wand. Include its complete argument and temporal context

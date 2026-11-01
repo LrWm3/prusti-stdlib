@@ -327,6 +327,8 @@ pub enum RustTySpecial {
     SliceIterMut,
     /// Initialized elements supplement the allocation's raw-pointer fields.
     Vec,
+    /// The remaining owned elements supplement the iterator's raw pointers.
+    VecIntoIter,
 }
 
 impl<'tcx> RustTyData<'tcx> {
@@ -641,11 +643,21 @@ impl RustTySpecial {
         })
     }
 
+    fn is_vec_into_iter(adt: ty::AdtDef<'_>) -> bool {
+        vir::with_vcx(|vcx| {
+            let tcx = vcx.tcx();
+            tcx.crate_name(adt.did().krate).as_str() == "alloc"
+                && tcx.def_path(adt.did()).to_string_no_crate_verbose()
+                    == "::vec::into_iter::IntoIter"
+        })
+    }
+
     fn from_ty(ty: ty::Ty<'_>) -> Self {
         match ty.kind() {
             ty::TyKind::Adt(adt, _) if adt.is_box() => RustTySpecial::Box,
             ty::TyKind::Adt(adt, _) if Self::is_slice_iter_mut(*adt) => RustTySpecial::SliceIterMut,
             ty::TyKind::Adt(adt, _) if Self::is_vec(*adt) => RustTySpecial::Vec,
+            ty::TyKind::Adt(adt, _) if Self::is_vec_into_iter(*adt) => RustTySpecial::VecIntoIter,
             _ => RustTySpecial::None,
         }
     }
@@ -851,6 +863,28 @@ impl<'tcx> TySpecifics<'tcx, RustTyDatas> {
                             ty: LazyRustTy(elements),
                             address: RustFieldAddress::Constant,
                         });
+                    }
+                    if RustTySpecial::is_vec_into_iter(adt) {
+                        // Raw pointers do not own their pointees in the
+                        // encoding. Retain an independent logical tail, with
+                        // an explicit extent also valid for zero-sized T.
+                        let (length, elements) = vir::with_vcx(|vcx| {
+                            (
+                                vcx.tcx().types.usize,
+                                ty::Ty::new_slice(vcx.tcx(), Self::new_param_ty(0)),
+                            )
+                        });
+                        for (name, ty) in [
+                            ("prusti_remaining_len", length),
+                            ("prusti_remaining_elements", elements),
+                        ] {
+                            data.fields.push(RustFieldData {
+                                name: symbol::Symbol::intern(name),
+                                fid: abi::FieldIdx::from_usize(data.fields.len()),
+                                ty: LazyRustTy(ty),
+                                address: RustFieldAddress::Constant,
+                            });
+                        }
                     }
                     Self::StructLike(data)
                 }

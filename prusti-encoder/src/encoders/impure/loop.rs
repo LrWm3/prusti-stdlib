@@ -9,6 +9,7 @@ use pcg::{
             borrow_flow::{BorrowFlowEdge, BorrowFlowEdgeKind},
             kind::BorrowPcgEdgeKind,
         },
+        edge_data::EdgeData,
         region_projection::{
             ExtractRegionsCtxt, LifetimeProjection, LifetimeProjectionLabel,
             PcgLifetimeProjectionBase, PcgLifetimeProjectionBaseLike,
@@ -209,16 +210,22 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         field.ty().decompose_normalize(child_ty.args),
                     )?;
                     let generic = self.deps.require_dep::<TyUseImpureEnc>(
-                        field.ty().decompose_context(child_ty.ty.params, child_ty.args),
+                        field
+                            .ty()
+                            .decompose_context(child_ty.ty.params, child_ty.args),
                     )?;
-                    let caster = self.deps.require_dep::<GArgsCastEnc<crate::encoders::Pure>>(
-                        field.ty().decompose_compare_normalize(child_ty.ty.params, child_ty.args),
-                    )?;
+                    let caster = self
+                        .deps
+                        .require_dep::<GArgsCastEnc<crate::encoders::Pure>>(
+                            field
+                                .ty()
+                                .decompose_compare_normalize(child_ty.ty.params, child_ty.args),
+                        )?;
                     let concrete_held = has(concrete.ref_to_pred_app(addr, None));
-                    readable.push(self.vcx.mk_disj(&[
-                        concrete_held,
-                        has(generic.ref_to_pred_app(addr, None)),
-                    ]));
+                    readable.push(
+                        self.vcx
+                            .mk_disj(&[concrete_held, has(generic.ref_to_pred_app(addr, None))]),
+                    );
                     fields.push(self.vcx.mk_ternary_expr(
                         concrete_held,
                         concrete.ref_to_snap(addr),
@@ -715,6 +722,103 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             .map_err(|reason| self.unsupported_rvalue(reason.to_string(), self.current_span()))
     }
 
+    /// Preserve the value of a moved call-result field when its destination
+    /// has one dominating definition and is never mutably borrowed. These
+    /// equalities and enum guards are checked loop invariants, not assumptions.
+    fn loop_move_snapshot_facts(
+        &mut self,
+        place: Place<'vir>,
+    ) -> EncodeResult<'vir, Vec<vir::ExprBool<'vir>>, E> {
+        if !place.projection.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut definitions = Vec::new();
+        let mut borrowed = false;
+        for (block, data) in self.body.basic_blocks.iter_enumerated() {
+            for statement in &data.statements {
+                if let mir::StatementKind::Assign(box (destination, ref value)) = statement.kind {
+                    if destination.local == place.local {
+                        definitions.push((block, destination, value.clone()));
+                    }
+                    if let mir::Rvalue::Ref(_, mir::BorrowKind::Mut { .. }, source) = value
+                        && source.local == place.local
+                    {
+                        borrowed = true;
+                    }
+                }
+            }
+        }
+        let [(block, destination, mir::Rvalue::Use(mir::Operand::Move(source), _))] =
+            definitions.as_slice()
+        else {
+            return Ok(Vec::new());
+        };
+        if borrowed
+            || !destination.projection.is_empty()
+            || source.projection.is_empty()
+            || !self
+                .body
+                .basic_blocks
+                .dominators()
+                .dominates(*block, self.current_block.unwrap())
+            || source.projection.iter().any(|p| {
+                !matches!(
+                    p,
+                    mir::ProjectionElem::Downcast(..) | mir::ProjectionElem::Field(..)
+                )
+            })
+        {
+            return Ok(Vec::new());
+        }
+        let calls = self
+            .body
+            .basic_blocks
+            .iter_enumerated()
+            .filter_map(|(bb, data)| {
+                if let mir::TerminatorKind::Call { destination, .. } = data.terminator().kind
+                    && destination.local == source.local
+                    && destination.projection.is_empty()
+                {
+                    Some(bb)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        let [call] = calls.as_slice() else {
+            return Ok(Vec::new());
+        };
+        if !self.body.basic_blocks.dominators().dominates(*call, *block) {
+            return Ok(Vec::new());
+        }
+        let Some(mut saved) = self.call_result_snapshots.get(call).copied() else {
+            return Ok(Vec::new());
+        };
+        let mut facts = Vec::new();
+        let mut source_ty = mir::Place::from(source.local).ty(self.body, self.vcx.tcx());
+        for projection in source.projection {
+            let domain = self.ty_use_pure(source_ty.ty);
+            match projection {
+                mir::ProjectionElem::Downcast(_, variant) => {
+                    let enumeration = domain.expect_enumlike();
+                    facts.push(self.vcx.mk_eq_expr(
+                        enumeration.snap_to_discr_snap(saved.downcast_ty()),
+                        enumeration.variants[variant.index()].data.discr,
+                    ));
+                }
+                mir::ProjectionElem::Field(field, _) => {
+                    saved = domain.expect_variant_opt(source_ty.variant_index)[field]
+                        .read(saved.downcast_ty());
+                }
+                _ => unreachable!(),
+            }
+            source_ty = source_ty.projection_ty(self.vcx.tcx(), projection);
+        }
+        let (_, current, _, _) = self.encode_place_with_snap(place)?;
+        facts.push(self.vcx.mk_eq_expr(current, saved));
+        Ok(facts)
+    }
+
     /// Calculate invariant at loop head
     pub(crate) fn get_loop_inv(
         &mut self,
@@ -801,12 +905,13 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     )
                 }));
             }
+            inv.extend(self.loop_move_snapshot_facts(*place)?);
         }
 
         // Singleton loop abstractions are packaged by `pcs_handle_edge` too.
         // Retain their wands just like grouped abstractions, or entering the
         // loop forgets how to return its borrowed resources to their owner.
-        let edges: Vec<_> = state
+        let mut edges: Vec<_> = state
             .borrow_pcg()
             .graph()
             .edges()
@@ -821,6 +926,32 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 Some((coupled, self.edge_condition(&edge.to_owned_edge())))
             })
             .collect();
+
+        // Graph iteration order is not stable across encodings. Invariant
+        // order also controls the order in which a backend checks resource
+        // observations, so retain a reproducible call and resource order.
+        for (_, guards) in &mut edges {
+            guards.sort_by_cached_key(|guard| format!("{guard:?}"));
+        }
+        edges.sort_by_cached_key(|(edge, guards)| {
+            let mut inputs = edge
+                .inputs(self.pcg_ctxt())
+                .into_iter()
+                .map(|node| format!("{node:?}"))
+                .collect::<Vec<_>>();
+            let mut outputs = edge
+                .outputs()
+                .iter()
+                .map(|node| format!("{node:?}"))
+                .collect::<Vec<_>>();
+            inputs.sort();
+            outputs.sort();
+            let call = match &edge.0 {
+                FunctionCallOrLoop::FunctionCall(call) => call.metadata().location().block.index(),
+                FunctionCallOrLoop::Loop(_) => usize::MAX,
+            };
+            (call, inputs, outputs, format!("{guards:?}"))
+        });
 
         // A restoration target such as `*values` needs the shallow reference
         // value to identify its owner. Preserve that value's predicate without
@@ -932,15 +1063,263 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         // resource predicates. Rebuilding it as a resource-only loop wand
         // would request a different wand and lose the value relation.
         let mut retained_wands = FxHashMap::default();
+        let mut retained_facts = FxHashMap::default();
+        let mut retained_results = FxHashMap::default();
+        let leaf_nodes = state
+            .borrow_pcg()
+            .graph()
+            .frozen_graph()
+            .leaf_nodes(self.pcg_ctxt());
+        let flows = state
+            .borrow_pcg()
+            .graph()
+            .edges()
+            .filter_map(|edge| {
+                if let BorrowPcgEdgeKind::BorrowFlow(flow) = edge.kind() {
+                    Some((*flow, self.edge_condition(&edge.to_owned_edge())))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        let transfers = state
+            .borrow_pcg()
+            .graph()
+            .edges()
+            .filter_map(|edge| {
+                if matches!(
+                    edge.kind(),
+                    BorrowPcgEdgeKind::Abstraction(_) | BorrowPcgEdgeKind::Coupled(_)
+                ) {
+                    return None;
+                }
+                let inputs = edge
+                    .kind()
+                    .blocked_nodes(self.pcg_ctxt())
+                    .filter_map(|node| {
+                        if let PcgNode::LifetimeProjection(projection) = node {
+                            Some(projection)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                let outputs = edge
+                    .kind()
+                    .blocked_by_nodes(self.pcg_ctxt())
+                    .filter_map(|node| {
+                        if let PcgNode::LifetimeProjection(projection) = node {
+                            Some(
+                                projection
+                                    .with_base(PcgLifetimeProjectionBase::from(projection.base())),
+                            )
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                Some((inputs, outputs, self.edge_condition(&edge.to_owned_edge())))
+            })
+            .collect::<Vec<_>>();
         for (edge, condition) in edges {
             if let PcgCoupledEdgeKind(FunctionCallOrLoop::FunctionCall(call)) = &edge
-                && !self
+                && (!self
                     .fpcs_analysis
                     .analysis()
                     .loop_analysis()
                     .in_loop(call.metadata().location().block, loop_id)
+                    || self
+                        .call_wand_captures
+                        .contains_key(&call.metadata().location().block))
             {
+                let call_block = call.metadata().location().block;
+                let mir::TerminatorKind::Call {
+                    args, destination, ..
+                } = &self.body.basic_blocks[call_block].terminator().kind
+                else {
+                    unreachable!()
+                };
+                let args = args.clone();
+                let destination = *destination;
+                let outputs = edge.outputs();
+                let dropped_result = outputs.iter().any(|output| {
+                    let PcgNode::LifetimeProjection(projection) = **output else { return false; };
+                    let MaybeLabelledPlace::Labelled(place) = projection.base() else { return false; };
+                    let at = place.at().location();
+                    let block = &self.body.basic_blocks[at.block];
+                    matches!(place.at(), SnapshotLocation::Before(_))
+                        && at.statement_index == block.statements.len()
+                        && place.place() == Place::from(destination)
+                        && !matches!(destination.ty(self.body, self.vcx.tcx()).ty.kind(), ty::Ref(..))
+                        && matches!(block.terminator().kind, mir::TerminatorKind::Drop { place: dropped, .. } if dropped == destination)
+                        && leaf_nodes.contains(&**output)
+                });
+                // The loop summary and the callee can capture the same
+                // entry owner through different aliases. Reconnect those
+                // observations along the pre-call resource transfers.
+                for input in edge.inputs(self.pcg_ctxt()) {
+                    let PcgNode::LifetimeProjection(projection) = *input else {
+                        continue;
+                    };
+                    let PcgLifetimeProjectionBase::Place(MaybeRemotePlace::Local(source)) =
+                        projection.base()
+                    else {
+                        continue;
+                    };
+                    let Some((index, arg)) = args.iter().enumerate().find(|(_, arg)| {
+                        arg.node
+                            .place()
+                            .is_some_and(|place| Place::from(place) == source.place())
+                    }) else {
+                        continue;
+                    };
+                    let Some(&saved) = self.call_referent_entry_snapshots.get(&(call_block, index))
+                    else {
+                        continue;
+                    };
+                    let ty::Ref(_, referent, _) = arg.node.ty(self.body, self.vcx.tcx()).kind()
+                    else {
+                        continue;
+                    };
+                    let mut pending = vec![(projection, condition.clone())];
+                    let mut seen = FxHashSet::default();
+                    while let Some((node, guards)) = pending.pop() {
+                        if !seen.insert(node) {
+                            continue;
+                        }
+                        if let PcgLifetimeProjectionBase::Place(MaybeRemotePlace::Local(base)) =
+                            node.base()
+                        {
+                            let place = base.place();
+                            let projection_at = match node.label() {
+                                Some(LifetimeProjectionLabel::Location(at)) => Some(at),
+                                _ => None,
+                            };
+                            let at = match base {
+                                MaybeLabelledPlace::Current(_) => projection_at,
+                                MaybeLabelledPlace::Labelled(labelled) => Some(
+                                    projection_at
+                                        .filter(|at| self.snapshot_precedes(*at, labelled.at()))
+                                        .unwrap_or(labelled.at()),
+                                ),
+                            };
+                            if place.projection.is_empty()
+                                && place.ty(self.pcg_ctxt()).ty == *referent
+                                && let Some(at) = at
+                            {
+                                let (_, snapshot, _, _) = self.encode_place_with_snap(place)?;
+                                if let Some(historical) =
+                                    self.historical_loop_local(place, at, snapshot)
+                                {
+                                    inv.push(
+                                        self.vcx
+                                            .mk_bin_op_expr(
+                                                vir::BinOpKind::Implies,
+                                                self.vcx.mk_conj(&guards),
+                                                self.vcx.mk_eq_expr(historical, saved),
+                                            )
+                                            .downcast_ty(),
+                                    );
+                                }
+                            }
+                        }
+                        for (inputs, outputs, guard) in &transfers {
+                            if outputs.contains(&node) {
+                                for input in inputs {
+                                    let mut guards = guards.clone();
+                                    guards.extend_from_slice(guard);
+                                    pending.push((*input, guards));
+                                }
+                            }
+                        }
+                    }
+                }
+                // A post-call resource flow can identify the current owner
+                // of a saved referent value. Keep that equality as a checked
+                // invariant; permissions alone forget the snapshot identity.
+                for output in &outputs {
+                    let PcgNode::LifetimeProjection(projection) = **output else {
+                        continue;
+                    };
+                    if projection.label()
+                        != Some(LifetimeProjectionLabel::Location(SnapshotLocation::After(
+                            call_block,
+                        )))
+                    {
+                        continue;
+                    }
+                    let source = projection.base().place();
+                    let Some((index, arg)) = args.iter().enumerate().find(|(_, arg)| {
+                        arg.node
+                            .place()
+                            .is_some_and(|place| Place::from(place) == source)
+                    }) else {
+                        continue;
+                    };
+                    let Some(&saved) = self.call_referent_snapshots.get(&(call_block, index))
+                    else {
+                        continue;
+                    };
+                    let ty::Ref(_, referent, _) = arg.node.ty(self.body, self.vcx.tcx()).kind()
+                    else {
+                        continue;
+                    };
+                    let start =
+                        projection.with_base(PcgLifetimeProjectionBase::from(projection.base()));
+                    let mut pending = vec![(start, condition.clone())];
+                    let mut seen = FxHashSet::default();
+                    while let Some((node, guards)) = pending.pop() {
+                        if !seen.insert(node) {
+                            continue;
+                        }
+                        if let PcgLifetimeProjectionBase::Place(MaybeRemotePlace::Local(
+                            MaybeLabelledPlace::Current(place),
+                        )) = node.base()
+                            && node.label().is_none()
+                            && place.projection.is_empty()
+                            && place.ty(self.pcg_ctxt()).ty == *referent
+                            && loop_invariant_place_capabilities
+                                .get(&place)
+                                .is_some_and(|cap| !cap.is_write())
+                        {
+                            let (_, current, _, _) = self.encode_place_with_snap(place)?;
+                            inv.push(
+                                self.vcx
+                                    .mk_bin_op_expr(
+                                        vir::BinOpKind::Implies,
+                                        self.vcx.mk_conj(&guards),
+                                        self.vcx.mk_eq_expr(current, saved),
+                                    )
+                                    .downcast_ty(),
+                            );
+                        }
+                        for (flow, guard) in &flows {
+                            if flow.long() == node {
+                                let next = flow.short();
+                                let next =
+                                    next.with_base(PcgLifetimeProjectionBase::from(next.base()));
+                                let mut guards = guards.clone();
+                                guards.extend_from_slice(guard);
+                                pending.push((next, guards));
+                            }
+                        }
+                    }
+                }
+                if let Some(facts) = self.call_post_facts.get(&call.metadata().location().block) {
+                    let (_, guards) = retained_facts
+                        .entry(call.metadata().location().block)
+                        .or_insert_with(|| (facts.clone(), Vec::new()));
+                    guards.push(self.vcx.mk_conj(&condition));
+                }
                 for (id, wand, _, _) in self.encode_function_call_wands(&edge)? {
+                    if dropped_result
+                        && let Some(resources) = self.call_result_resources.get(&(call_block, id))
+                    {
+                        let (_, guards) = retained_results
+                            .entry((call_block, id))
+                            .or_insert_with(|| (resources.clone(), Vec::new()));
+                        guards.push(self.vcx.mk_conj(&condition));
+                    }
                     let (_, guards) = retained_wands
                         .entry((call.metadata().location().block, id))
                         .or_insert_with(|| (wand, Vec::new()));
@@ -977,7 +1356,38 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
 
         // Retain each obligation only where its call ran. Several PCG edges
         // may contribute guards for the same obligation; use their disjunction.
-        for (wand, guards) in retained_wands.into_values() {
+        // Functional call facts can establish the well-definedness of expiry
+        // observations (for example, Some implies a nonempty input sequence).
+        // These are ordinary checked invariants on entry and every backedge.
+        let mut retained_results = retained_results.into_iter().collect::<Vec<_>>();
+        retained_results.sort_by_key(|(key, _)| *key);
+        for (_, (resources, guards)) in retained_results {
+            inv.push(
+                self.vcx
+                    .mk_bin_op_expr(
+                        vir::BinOpKind::Implies,
+                        self.vcx.mk_disj(&guards),
+                        self.vcx.mk_conj(&resources),
+                    )
+                    .downcast_ty(),
+            );
+        }
+        let mut retained_facts = retained_facts.into_iter().collect::<Vec<_>>();
+        retained_facts.sort_by_key(|(key, _)| *key);
+        for (_, (facts, guards)) in retained_facts {
+            inv.push(
+                self.vcx
+                    .mk_bin_op_expr(
+                        vir::BinOpKind::Implies,
+                        self.vcx.mk_disj(&guards),
+                        self.vcx.mk_conj(&facts),
+                    )
+                    .downcast_ty(),
+            );
+        }
+        let mut retained_wands = retained_wands.into_iter().collect::<Vec<_>>();
+        retained_wands.sort_by_key(|(key, _)| *key);
+        for (_, (wand, guards)) in retained_wands {
             inv.push(
                 self.vcx
                     .mk_bin_op_expr(
@@ -1059,6 +1469,99 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         }
     }
 
+    /// A body invariant splits a loop prefix into two CFG copies. Preserve a
+    /// local's historical value in one variable updated by either copy; an
+    /// old[label] in the invariant cannot name both executions of that point.
+    fn historical_loop_local(
+        &mut self,
+        place: Place<'vir>,
+        at: SnapshotLocation,
+        snapshot: vir::ExprSnap<'vir>,
+    ) -> Option<vir::ExprSnap<'vir>> {
+        if !place.projection.is_empty()
+            || matches!(place.ty(self.pcg_ctxt()).ty.kind(), ty::TyKind::Ref(..))
+            || !matches!(at, SnapshotLocation::Before(_) | SnapshotLocation::After(_))
+            || self
+                .fpcs_analysis
+                .analysis()
+                .loop_analysis()
+                .loops(at.location().block)
+                .next()
+                .is_none()
+        {
+            return None;
+        }
+        if let Some((saved, _)) = self.historical_loop_snapshots.get(&(place, at)) {
+            return Some(*saved);
+        }
+        let saved = self.new_method_snapshot(snapshot.ty());
+        self.historical_loop_snapshots
+            .insert((place, at), (saved, snapshot));
+        Some(saved)
+    }
+
+    pub(crate) fn capture_historical_loop_snapshots(&mut self) {
+        let mut labels = FxHashMap::<_, Vec<_>>::default();
+        for (&(_, at), &(saved, snapshot)) in &self.historical_loop_snapshots {
+            let mut names = FxHashSet::default();
+            for block in &self.encoded_blocks {
+                let (bb, pres) = match block.label.label {
+                    vir::CfgBlockLabelData::BasicBlock(bb)
+                    | vir::CfgBlockLabelData::BasicBlockTerminator(bb) => (*bb, Vec::new()),
+                    vir::CfgBlockLabelData::PreLoopBasicBlock(bb, pres)
+                    | vir::CfgBlockLabelData::PreLoopBasicBlockTerminator(bb, pres) => {
+                        (*bb, pres.iter().map(|p| **p).collect())
+                    }
+                    _ => continue,
+                };
+                if bb != at.location().block.index() {
+                    continue;
+                }
+                let label = match at {
+                    SnapshotLocation::Before(at) => self.location_label(
+                        crate::encoders::mir_impure::LocationLabelPrefix::Before,
+                        at.location(),
+                        &pres,
+                    ),
+                    SnapshotLocation::After(bb) => self.block_end_label(bb, &pres),
+                    _ => unreachable!(),
+                };
+                if names.insert(label) {
+                    labels.entry(label).or_default().push((saved, snapshot));
+                }
+            }
+        }
+        let mut captured = Vec::new();
+        for block in &mut self.encoded_blocks {
+            let mut statements = Vec::new();
+            for &statement in block.stmts {
+                statements.push(statement);
+                if let vir::StmtKindData::Label(label) = statement.kind
+                    && let Some(snapshots) = labels.get(label)
+                {
+                    for &(saved, snapshot) in snapshots {
+                        statements.push(self.vcx.mk_pure_assign_stmt(saved, snapshot));
+                        captured.push(saved);
+                    }
+                }
+            }
+            *block = self.vcx.mk_cfg_block(
+                block.label.label,
+                block.label.invariants,
+                self.vcx.alloc_slice(&statements),
+                block.terminator,
+            );
+        }
+        assert!(
+            self.historical_loop_snapshots
+                .values()
+                .all(|(saved, _)| captured
+                    .iter()
+                    .any(|candidate| std::ptr::eq(*candidate, *saved))),
+            "historical loop snapshot has no executable capture point"
+        );
+    }
+
     pub(crate) fn encode_pcg_node<T: PcgLifetimeProjectionBaseLike<'vir>>(
         &mut self,
         node: &PcgNode<'vir, MaybeLabelledPlace<'vir>, T>,
@@ -1132,7 +1635,13 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     MaybeLabelledPlace::Current(p),
                 )) if heap_label.is_some() => {
                     let (_, snap, ty, _) = self.encode_place_with_snap(p)?;
-                    (self.vcx.maybe_apply_label(snap, heap_label), ty)
+                    let Some(LifetimeProjectionLabel::Location(at)) = r.label() else {
+                        unreachable!()
+                    };
+                    let snap = self
+                        .historical_loop_local(p, at, snap)
+                        .unwrap_or_else(|| self.vcx.maybe_apply_label(snap, heap_label));
+                    (snap, ty)
                 }
                 PcgLifetimeProjectionBase::Place(MaybeRemotePlace::Local(
                     MaybeLabelledPlace::Labelled(p),
@@ -1145,7 +1654,13 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     // its saved shallow value and use the projection's heap label
                     // only for resources reached through that value.
                     let (_, snap, ty, _) = self.encode_place_with_snap(p.place())?;
-                    (self.vcx.maybe_apply_label(snap, heap_label), ty)
+                    let Some(LifetimeProjectionLabel::Location(at)) = r.label() else {
+                        unreachable!()
+                    };
+                    let snap = self
+                        .historical_loop_local(p.place(), at, snap)
+                        .unwrap_or_else(|| self.vcx.maybe_apply_label(snap, heap_label));
+                    (snap, ty)
                 }
                 PcgLifetimeProjectionBase::Place(p) => {
                     let (snap, ty, _) = self.encode_maybe_remote_place_snap(p, old_outer)?;
@@ -1226,6 +1741,11 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
     ) -> EncodeResult<'vir, (vir::ExprSnap<'vir>, mir::PlaceTy<'vir>, TyUseImpure<'vir>), E> {
         let p = Self::get_place(place);
         let (_, place_snap, ty, ty_out) = self.encode_place_with_snap(p)?;
+        if let MaybeRemotePlace::Local(MaybeLabelledPlace::Labelled(labelled)) = place
+            && let Some(snapshot) = self.historical_loop_local(p, labelled.at(), place_snap)
+        {
+            return Ok((snapshot, ty, ty_out));
+        }
         let place_snap = self.configure_old(place, place_snap, old_outer);
         Ok((place_snap, ty, ty_out))
     }

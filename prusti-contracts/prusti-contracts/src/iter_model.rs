@@ -1,6 +1,6 @@
 //! Finite iterator observations used by verification contracts.
 
-use crate::{pure, Seq};
+use crate::{Seq, pure};
 
 // Only implementations whose iterator behavior has been reviewed may expose
 // the conditional `Iterator::next` contract.
@@ -49,7 +49,7 @@ mod shared_slice {
 mod owned_vec {
     use super::*;
     #[cfg(feature = "prusti")]
-    use crate::{refine_trait_spec, trusted};
+    use crate::refine_trait_spec;
     use alloc::vec::IntoIter;
 
     #[cfg(feature = "prusti")]
@@ -57,13 +57,19 @@ mod owned_vec {
     #[cfg(not(feature = "prusti"))]
     impl<T> sealed::Sealed for IntoIter<T> {}
 
+    /// Observe the same logical tail that owns the remaining element resources.
+    #[cfg(feature = "prusti")]
+    #[pure]
+    fn owned_iter_contents<T, A: core::alloc::Allocator>(value: &IntoIter<T, A>) -> Seq<T> {
+        Seq::from_slice(value.as_slice())
+    }
+
     #[cfg(feature = "prusti")]
     #[refine_trait_spec]
     impl<T, A: core::alloc::Allocator> ModeledIterator for IntoIter<T, A> {
-        #[trusted]
         #[pure]
         fn remaining(&self) -> Seq<T> {
-            Seq::new()
+            owned_iter_contents(self)
         }
     }
 

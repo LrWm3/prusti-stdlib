@@ -5597,6 +5597,31 @@ now produce the exact expected diagnostics. The clearing/rotation and full-owner
 groups are skipped. Diagnostic 748 locates the remaining observation error in
 the complete direct client before another revision. No candidate is adopted.
 
+Candidate 749 moves the guarded historical entry observations outside both
+restoration packages. The direct optional client then passes (22.57 seconds),
+as do all four exact negatives; only the generic wrapper fails its final value
+frame. The complete gate is **8/9 audited**. Inspection shows that the returned
+conditional history has no value frames because `transfer_frames` does not
+traverse conditional expressions.
+
+Candidate 751 adds correspondence for conditional resources with stable guards,
+retaining both discriminants, quantifier ranges and complete resource keys.
+Its own build, three protocol tests, seven encodings and seven AST checks pass.
+The existing optional gate now passes **9/9 audited checks**, including the
+direct positive (19.17 seconds), generic wrapper (4.42 seconds) and all four
+exact negatives. Clearing/rotation controls and the full owner-history gate
+remain in progress. Exact recovery `6c66c7425` is pushed; main has not adopted
+this encoder candidate and combined qualification remains open.
+
+The enum candidates 747 and 750 both remain **8/9 audited**. Observer reveals
+and a direct two-resource-permutation proof branch do not establish the final
+physical value frame. Diagnostic 752's unguarded initial observation also fails:
+its chosen expansion key is initialized only for an earlier selected variant.
+Diagnostic 753 instead uses the actual argument index and checks the current
+variant/address guard before observing that wrapper. It retains the entire
+original program, final quantified frame and a checked scalar equality; it is
+queued after 751 as localization evidence. No enum repair is accepted yet.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user initially authorized the remaining IM and matrix repairs followed by

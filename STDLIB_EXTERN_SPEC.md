@@ -5401,6 +5401,24 @@ Rust negative can also differ in cleanup/control flow, so its earlier success
 does not establish a solver defect. No backend setting is adopted from these
 pending diagnostics.
 
+Research review for the remaining restoration work reinforces two constraints.
+[Dardinier et al., *Sound Automation of Magic Wands* (CAV 2022), Section 4](https://dardinier.me/papers/CAV22_Wands.pdf)
+shows why arbitrary fractional wands cannot generally be recombined. Our
+application of that result is to retain separately checked ordinary packages
+over half-resource operands, rather than split an existing wand or add a
+recombination axiom. The current checked models establish only their stated
+resource and frame obligations.
+
+[Becker, *Generalized Verification Support for Magic Wands* (2017), Sections 4.3–4.4](https://ethz.ch/content/dam/ethz/special-interest/infk/chair-program-method/pm/documents/Education/Theses/Nils_Becker_BA_report.pdf)
+describes lost value information for inhaled wands and explicit `old[lhs]`
+frames as one workaround; it also describes observing a wand through an
+`applying` expression in loop invariants. This supports investigating checked
+frame/coherence obligations and stable observation captures. It does not
+establish that the current backend has the historical implementation limitation,
+nor justify weakening any current permission check. Any use of an `applying`
+observation must itself prove the required antecedent and match the retained
+wand; no such new encoder change is adopted here.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user initially authorized the remaining IM and matrix repairs followed by

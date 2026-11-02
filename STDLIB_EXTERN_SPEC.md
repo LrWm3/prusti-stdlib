@@ -65,7 +65,7 @@ different compilers are never added together.
 |---|---|---|
 | Whole matrix | Last complete matrix 339: 1,755/1,842; 87 failures, none waived | Rebuild final source and complete both backends with exact coverage |
 | Ownership, enum, local history, associated output | 793 audited 124/124; historical 722 audited 129/129 on its own compiler | Preserve as separate reference gates; rerun affected families after each repair |
-| Heavy prefix | H1 native positive hits 600s twice; exact negative passes in 309.70s; current exact program passes unlogged CLI in 297.49s | H2 isolated build, ownership/adapter checks and full AST pass; preserved-input native positive running; no accepted repair |
+| Heavy prefix | H1 positive hits 600s twice; H2 positive also hits 600s; both exact negatives pass | Successor patches stopped; identity-preserving reduced model running on frozen H1; neither experiment is integrated |
 | Region iterator | 794: 3/7; missing tail indexed resources in both positives and wrong early errors in both negatives | 809's checked tail-snapshot equality succeeds, but the original resource assertion still fails; model review before a repair |
 | Nested calls | 794: 9/11; repeated positive missing wand, postcondition control times out | Full replay 810 times out at 600s with solver logging; previous failed hypotheses require model review |
 | Extra `next` | 794: 3/6; positive timeout and two wrong diagnostics | Retain all six controls; check as an affected regression of prefix framing |
@@ -182,8 +182,35 @@ the permission conjunction's node, short-circuit undefined division correctly an
 reject the exact false assertion. The full generated program passes AST consistency
 checking. Crate identifiers and every non-parenthesis token, in order, match H1;
 the recorded parentheses-only diff reflects the reviewed pure-conjunction change.
-The preserved-input full Rust positive is the next falsifier. These structural and
-unit results do not qualify H2, and the immutable integration baseline stays put.
+The preserved-input full Rust positive **times out at 600s** (608.78s elapsed;
+outer watchdog not fired; source unchanged). H2 is therefore also falsified as a
+sufficient repair. Its exact native negative passes in 340.35s with complete
+coverage, matching source/binary provenance and no accepted negative.
+These structural and unit results do not qualify H2, and the immutable integration
+baseline stays put. No successor patch is planned.
+
+The required model review now distinguishes basic ownership composition from
+the cost of additional observations. A separate diagnostic worktree uses H1's
+frozen compiler and retains the mutable owner, per-yield writes, prefix slot/state
+histories, length/position bounds, early break and iterator expiry. It removes
+exemplar, original-slot and untouched-suffix observations only in the reduced
+fixture, with a nonempty exact false-assertion companion. If this still fails,
+localize its first obligation as a smaller reproducer. If both controls behave
+as intended, add back one observation family at a time to locate the cost trigger.
+A passing reduction does not establish the full case or isolate solver naming
+effects by itself. The original acceptance source and all its obligations remain
+unchanged. Evidence and the experiment's interpretation are recorded before
+execution in `prefix-model-reduction-plan.json`.
+
+The first ownership-only reduction is audited 3/4: its positive fails final
+entry-indexed permission restoration in 155.97s, while its exact negative passes
+in 107.63s. This is a different location from the full-case timeout, and removing
+slot-identity facts can underconstrain the physical resource keys. It is not yet
+a reproducer of the original failure. The next recorded reduction therefore
+retains original slot identity, prefix/tail identity relationships and a checked
+final slot-identity assertion, omitting only referent-value observations. Its
+source, interpretation and fixed H1 provenance are recorded separately; the
+required acceptance files remain unchanged.
 
 Build H1 from the frozen baseline in its own worktree, check the complete generated
 programs, then run the native positive and exact negative. If they pass, run all

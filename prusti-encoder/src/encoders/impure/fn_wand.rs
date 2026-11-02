@@ -54,6 +54,72 @@ struct CallSnapshots<'vir> {
     values: Vec<(vir::ExprDyn<'vir>, vir::ExprDyn<'vir>)>,
 }
 
+/// Whole indexed histories can keep unconditional old storage observations
+/// inline at the final package. This retains their relation to the recorded
+/// heap; scalar histories and mixed physical/resource stages keep captures.
+fn whole_indexed_restoration(wand: vir::Wand<'_>) -> bool {
+    fn indexed_only(expr: vir::ExprBool<'_>) -> bool {
+        struct Indexed {
+            seen: bool,
+            other: bool,
+        }
+        impl<'vir> Folder<'vir, (), !> for Indexed {
+            fn fold_expr(&mut self, expr: vir::ExprDyn<'vir>) -> Option<vir::ExprDyn<'vir>> {
+                match expr.kind {
+                    vir::ExprKindData::PredicateApp(app) => {
+                        if matches!(app.target, "indexed_indirect_resources" | "indexed_p_Param") {
+                            self.seen = true;
+                        } else {
+                            self.other = true;
+                        }
+                    }
+                    vir::ExprKindData::Wand(_)
+                    | vir::ExprKindData::AccField(_)
+                    | vir::ExprKindData::PredicatePerm(_) => self.other = true,
+                    _ => {}
+                }
+                expr.super_fold_with(self)
+            }
+        }
+        let mut indexed = Indexed {
+            seen: false,
+            other: false,
+        };
+        let _ = expr.fold_with(&mut indexed);
+        indexed.seen && !indexed.other
+    }
+    indexed_only(wand.lhs) && indexed_only(wand.rhs)
+}
+
+fn unconditional_old_storage(expr: vir::ExprDyn<'_>) -> bool {
+    let vir::ExprKindData::Old(old) = expr.kind else {
+        return false;
+    };
+    if old.label == vir::OldLabel::Lhs {
+        return false;
+    }
+    let vir::ExprKindData::FuncApp(app) = old.expr.kind else {
+        return false;
+    };
+    if app.target != "p_Param_snap" {
+        return false;
+    }
+    struct Guarded(bool);
+    impl<'vir> Folder<'vir, (), !> for Guarded {
+        fn fold_expr(&mut self, expr: vir::ExprDyn<'vir>) -> Option<vir::ExprDyn<'vir>> {
+            if matches!(expr.kind, vir::ExprKindData::Ternary(_))
+                || matches!(expr.kind, vir::ExprKindData::Old(old) if old.label == vir::OldLabel::Lhs)
+            {
+                self.0 = true;
+            }
+            expr.super_fold_with(self)
+        }
+    }
+    let mut guarded = Guarded(false);
+    let _ = expr.fold_with(&mut guarded);
+    !guarded.0
+}
+
 struct SnapshotSubstitute<'vir>(FxHashMap<&'vir str, vir::ExprDyn<'vir>>);
 
 impl<'vir> Folder<'vir, (), !> for SnapshotSubstitute<'vir> {
@@ -718,9 +784,14 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
                     }
                 }
             }
+            let inline_storage = whole_indexed_restoration(wand);
             let mut substitute = Substitute(FxHashMap::default());
             for &(decl, value) in bindings.borrow().iter() {
                 let value = value.fold_with(&mut substitute).unwrap_or(value);
+                if inline_storage && unconditional_old_storage(value.as_dyn()) {
+                    substitute.0.insert(decl.name, value.as_dyn());
+                    continue;
+                }
                 let local = self.new_tmp(value.ty());
                 wand_packages.push(self.vcx.mk_pure_assign_stmt(local, value));
                 substitute.0.insert(decl.name, local.as_dyn());

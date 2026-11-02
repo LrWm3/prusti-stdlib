@@ -58,9 +58,6 @@ pub(crate) type SnapshotBindings<'vir> =
 pub(crate) struct ExprInput<'vir> {
     pub snap: vir::ExprSnap<'vir>,
     pub heap_label: Option<vir::OldLabel<'vir>>,
-    /// If set, use the entry heap for only this many ancestor references.
-    /// The restored descendant and its elements are then observed currently.
-    pub old_ancestors: Option<usize>,
     pub bindings: Option<&'vir SnapshotBindings<'vir>>,
     pub guard: Option<vir::ExprBool<'vir>>,
     /// A slice's extent is supplied by its enclosing pointer metadata.
@@ -78,7 +75,6 @@ impl<'vir> ExprInput<'vir> {
         Self {
             snap,
             heap_label: None,
-            old_ancestors: None,
             bindings: None,
             guard: None,
             extent: None,
@@ -482,14 +478,6 @@ impl TaskEncoder for IndirectPredicatesEnc {
                                             ExprInput {
                                                 snap: ref_domain
                                                     .cast_to_caller_ctx(inner_snap.downcast_ty()),
-                                                heap_label: if input.old_ancestors == Some(1) {
-                                                    None
-                                                } else {
-                                                    input.heap_label
-                                                },
-                                                old_ancestors: input
-                                                    .old_ancestors
-                                                    .map(|n| n.saturating_sub(1)),
                                                 resource_path: vcx.alloc_slice(
                                                     &input
                                                         .resource_path

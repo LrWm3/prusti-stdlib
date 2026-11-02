@@ -1089,11 +1089,13 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         vcx.mk_predicate_perm_expr(view.resource),
                     )
                     .downcast_ty::<vir::Bool>();
-                let needed = vcx.mk_conj(&[
-                    held,
+                let mut needed = view.guards.clone();
+                needed.push(held);
+                needed.push(
                     vcx.mk_unary_op_expr(vir::UnOpKind::Not, raw.upcast_ty())
                         .downcast_ty(),
-                ]);
+                );
+                let needed = vcx.mk_conj(&needed);
                 let opened = self.new_tmp(vir::TYPE_BOOL);
                 self.stmt(vcx.mk_pure_assign_stmt(opened, needed));
                 self.stmt(vcx.mk_if_stmt(

@@ -23,6 +23,7 @@ pub(crate) struct ResourceConversionEnc;
 #[derive(Clone)]
 pub(crate) struct ScalarResourceView<'vir> {
     pub resource: vir::PredicateApp<'vir>,
+    pub guards: Vec<vir::ExprBool<'vir>>,
     pub to_generic: Vec<vir::Stmt<'vir>>,
 }
 
@@ -78,6 +79,7 @@ impl<'vir> ResourceConversion<'vir> {
                 let address = reference.deref_access(snapshot.downcast_ty());
                 vec![ScalarResourceView {
                     resource: physical.ref_to_pred_app(address, None),
+                    guards: Vec::new(),
                     to_generic: cast.cast_to_callee_ctx(address).into_iter().collect(),
                 }]
             }
@@ -85,7 +87,30 @@ impl<'vir> ResourceConversion<'vir> {
                 .iter()
                 .flat_map(|(field, nested)| nested.scalar_views(field.read(snapshot.downcast_ty())))
                 .collect(),
-            // Guarded and quantified layouts retain their existing conversion.
+            ConversionKind::Enum {
+                discriminant,
+                variants,
+            } => vir::with_vcx(|vcx| {
+                variants
+                    .iter()
+                    .flat_map(|(tag, fields)| {
+                        let guard =
+                            vcx.mk_eq_expr(discriminant.call()(snapshot.downcast_ty()), *tag);
+                        fields.iter().flat_map(move |(field, nested)| {
+                            nested
+                                .scalar_views(field.read(snapshot.downcast_ty()))
+                                .into_iter()
+                                .map(move |mut view| {
+                                    // A payload's address is meaningful only in its variant.
+                                    // Preserve outer-to-inner guard order for nested enums.
+                                    view.guards.insert(0, guard);
+                                    view
+                                })
+                        })
+                    })
+                    .collect()
+            }),
+            // Quantified and non-scalar layouts retain their existing conversion.
             _ => Vec::new(),
         }
     }

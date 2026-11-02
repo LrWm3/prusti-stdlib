@@ -290,7 +290,6 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         let Some(array) = indirect.array else {
             return Ok(());
         };
-        self.flush_scalar_reclosures();
         let mut old_outer = WandOldOuter::Label(label);
         let index = self
             .vcx
@@ -430,7 +429,6 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         let Some(array) = indirect.array else {
             return Ok(());
         };
-        self.flush_scalar_reclosures();
         let mut old_outer = WandOldOuter::Label(label);
         let index = if fold {
             index

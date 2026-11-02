@@ -5535,6 +5535,38 @@ by its clearing/rotation controls if the existing group passes. Candidate 724
 and diagnostic 725 remain serially queued. The mandatory pause before D1–D6
 has not yet been reached.
 
+Candidate 723 completes at **3/9 audited checks**: all six native optional-owner
+cases fail while packaging the current-resource reservation. Its later clearing,
+rotation and full-owner groups are skipped. Candidate 724 completes at **8/9**:
+the enum replacement positive advances past the initial packing failure but
+fails a later physical scalar conversion. All four exact negative controls,
+including the new wrong-current-value control, pass. Neither candidate is
+adopted; their original failures and complete provenance remain recorded.
+
+Full-program diagnostic 725 locates the region failure at the checked indexed
+tail-resource assertion, lines 4325–4346, in the shared generic `next` definition.
+Diagnostic 726 locates the enum failure at the historical replacement-reference
+conversion, lines 8548–8549. Both preserve the original complete programs and
+fail; they are localization evidence, not passing qualification.
+
+The outer-wand model exposes a missing obligation in 723's proposed contract.
+A future caller can change the owner pointer, so the outer antecedent must supply
+the current resource together with a checked current-to-post history. Model 731
+composes that history with the saved post-to-entry history and checks explicit
+physical and current-value frames. Its positive and false, missing-history and
+wrong-current-value controls all match. Models 727 and 728 retain the exact
+missing-current and missing-frame failures. All six outcomes and full AST checks
+are audited in `audit727-734.json`; byte-exact models are committed under the
+iterator suite's `known_limits`. This finite proof guides the next encoder
+revision but does not establish native optional-owner support.
+
+Candidate 735 is independently based on 724. It defers scalar reclosure past
+bookkeeping-only removed assignment and aggregate edges; actual array repacks,
+unsize conversions and existing call/phase boundaries still close wrappers.
+Its own build and three protocol tests pass. Fresh encoding, complete AST and
+native enum/scalar regression checks are required before adoption. Restoration,
+combined qualification and the mandatory pause remain the active scope.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user initially authorized the remaining IM and matrix repairs followed by

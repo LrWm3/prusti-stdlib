@@ -716,3 +716,26 @@ Exact inputs and commands are retained in `probe716` through `probe719` and
 uncaptured model 711 fails wand matching and remains failed evidence. These
 finite models do not establish Rust integration, unbounded collections, or a
 Silicon sign-off.
+
+## Outer restoration with caller history (2026-11-02)
+
+`owner_outer_history.vpr` checks a delayed outer wand whose caller may replace
+an owner's pointer after the wand is created. Its antecedent supplies the
+current resource and a checked current-to-post continuation. The body composes
+that continuation with the saved post-to-entry history. Explicit checked
+`old[lhs]` frames preserve the owner pointer and current resource value. The
+client replaces the pointer, changes the current value, and restores the entry
+resource without assuming that the current and entry owners coincide.
+
+The positive and its `_false`, `_missing_history` and `_wrong_current` controls
+match all four expectations on Ferrum `0e048a4`. Two additional controls retain
+the failed approaches: `_missing_current` fails its reservation package, and
+`_missing_frame` fails the pointer-value assertion. All six programs pass full
+AST checks and take under 0.2 seconds each. Only the intended error is reported
+by each negative. Sources, commands, hashes and exact positions are audited in
+`target/stdlib-matrix-20261031-1236/audit727-734.json`.
+
+These are finite proof models, not qualification of the Rust optional-owner
+encoder or unbounded collections. They explain why promising current ownership
+without the caller's current-to-post history is insufficient. Silicon sign-off
+remains part of the combined milestone gate.

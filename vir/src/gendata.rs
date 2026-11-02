@@ -292,6 +292,11 @@ impl<'vir, Curr: 'vir, Next: 'vir, T: CompType> ExprGenData<'vir, Curr, Next, T>
         }
     }
 
+    /// Replace an expression's kind without losing its diagnostic provenance.
+    pub fn with_kind(&'vir self, kind: ExprKindGen<'vir, Curr, Next>) -> &'vir Self {
+        with_vcx(|vcx| vcx.alloc(Self::new_inner(kind, self.debug_info, self.span, self.ty())))
+    }
+
     /// Create a copy of this expression, but with its span set to the current
     /// top span. This allows error handlers to be attached to an expression
     /// that was constructed elsewhere (by calling `realloc_span` within a

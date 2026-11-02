@@ -6,6 +6,7 @@
 
 mod encoders;
 mod trait_support;
+mod paired_resources;
 pub mod request;
 
 use prusti_interface::{
@@ -173,7 +174,7 @@ pub fn test_entrypoint<'tcx>(
         error.emit(env_diagnostic);
     }
 
-    let program = program.mk_program();
+    let program = paired_resources::lower(program.mk_program());
 
     request::RequestWithContext {
         program: program.to_ref(),

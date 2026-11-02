@@ -54,25 +54,24 @@ struct CallSnapshots<'vir> {
     values: Vec<(vir::ExprDyn<'vir>, vir::ExprDyn<'vir>)>,
 }
 
-/// Whole indexed histories can keep unconditional old storage observations
-/// inline at the final package. This retains their relation to the recorded
-/// heap; scalar histories and mixed physical/resource stages keep captures.
+/// Indexed physical histories can keep unconditional old storage observations
+/// inline at the final package. Generic-resource-only histories retain captures:
+/// their loop abstractions use the captured identity when matching a later wand.
+/// Mixed and scalar stages also retain their existing capture policy.
 fn whole_indexed_restoration(wand: vir::Wand<'_>) -> bool {
-    fn indexed_only(expr: vir::ExprBool<'_>) -> bool {
+    fn indexed_physical(expr: vir::ExprBool<'_>) -> bool {
         struct Indexed {
-            seen: bool,
+            physical: bool,
             other: bool,
         }
         impl<'vir> Folder<'vir, (), !> for Indexed {
             fn fold_expr(&mut self, expr: vir::ExprDyn<'vir>) -> Option<vir::ExprDyn<'vir>> {
                 match expr.kind {
-                    vir::ExprKindData::PredicateApp(app) => {
-                        if matches!(app.target, "indexed_indirect_resources" | "indexed_p_Param") {
-                            self.seen = true;
-                        } else {
-                            self.other = true;
-                        }
-                    }
+                    vir::ExprKindData::PredicateApp(app) => match app.target {
+                        "indexed_p_Param" => self.physical = true,
+                        "indexed_indirect_resources" => {}
+                        _ => self.other = true,
+                    },
                     vir::ExprKindData::Wand(_)
                     | vir::ExprKindData::AccField(_)
                     | vir::ExprKindData::PredicatePerm(_) => self.other = true,
@@ -82,13 +81,13 @@ fn whole_indexed_restoration(wand: vir::Wand<'_>) -> bool {
             }
         }
         let mut indexed = Indexed {
-            seen: false,
+            physical: false,
             other: false,
         };
         let _ = expr.fold_with(&mut indexed);
-        indexed.seen && !indexed.other
+        indexed.physical && !indexed.other
     }
-    indexed_only(wand.lhs) && indexed_only(wand.rhs)
+    indexed_physical(wand.lhs) && indexed_physical(wand.rhs)
 }
 
 fn unconditional_old_storage(expr: vir::ExprDyn<'_>) -> bool {
@@ -205,19 +204,11 @@ impl<'vir> CallSnapshots<'vir> {
     fn bind<E: TaskEncoder>(
         &mut self,
         bindings: &SnapshotBindings<'vir>,
-        inline_storage: bool,
         visitor: &mut ImpureEncVisitor<'vir, '_, E>,
     ) -> SnapshotSubstitute<'vir> {
         let mut substitute = SnapshotSubstitute(FxHashMap::default());
         for &(decl, value) in bindings.borrow().iter() {
             let value = value.fold_with(&mut substitute).unwrap_or(value);
-            // Match the contract's old storage observation directly for whole
-            // indexed stages, as final packaging already does. Guarded reads,
-            // indexed deep observers and mixed/scalar stages retain captures.
-            if inline_storage && unconditional_old_storage(value.as_dyn()) {
-                substitute.0.insert(decl.name, value.as_dyn());
-                continue;
-            }
             let captured = self.capture(value.as_dyn(), visitor);
             substitute.0.insert(decl.name, captured);
         }
@@ -1498,8 +1489,7 @@ impl<'vir> WandEncOutput<'vir> {
                 // Capture in dependency order. These are the same post-call
                 // observations bound outside the callee's returned wand; no
                 // read is moved out of its quantifier or expiry heap.
-                let mut substitute =
-                    captures.bind(bindings, whole_indexed_restoration(wand), visitor);
+                let mut substitute = captures.bind(bindings, visitor);
                 wand = wand.fold_with(&mut substitute).unwrap_or(wand);
                 let resources = resources
                     .into_iter()

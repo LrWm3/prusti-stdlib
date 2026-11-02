@@ -739,3 +739,20 @@ These are finite proof models, not qualification of the Rust optional-owner
 encoder or unbounded collections. They explain why promising current ownership
 without the caller's current-to-post history is insufficient. Silicon sign-off
 remains part of the combined milestone gate.
+
+## Aligned owner restoration (2026-11-02)
+
+`owner_outer_aligned.vpr` checks a narrower alternative to caller-history
+composition: the outer antecedent requires the physical owner to match the
+captured logical resource key. The client changes the referent value after
+creating the outer wand, then proves that the updated value survives expiry.
+The `_false` and `_wrong_current` controls reject the intended assertions;
+`_changed_owner` rejects application after changing the owner's pointer.
+All four Ferrum expectations and full AST checks match, each under 0.2 seconds;
+exact evidence is in `audit742-745.json` in the matrix evidence directory.
+
+This strengthens the required antecedent. It does not support arbitrary owner
+replacement between wand creation and application; that requires the checked
+caller-history protocol above. A native optional-slice prototype is still
+unqualified. The finite model establishes neither general collection support
+nor a Silicon sign-off.

@@ -5567,6 +5567,36 @@ Its own build and three protocol tests pass. Fresh encoding, complete AST and
 native enum/scalar regression checks are required before adoption. Restoration,
 combined qualification and the mandatory pause remain the active scope.
 
+Candidates 735, 737, 738 and 741 each complete the enum gate at **8/9**,
+with the same replacement positive still failing and all four exact negative
+controls passing. Later scalar groups are skipped. The checked wrapper exposure
+in 738 advances through the physical permission obligations to the final
+cross-indexed/raw value frame. Extending snapshot inlining in 741 does not solve
+that frame. These are preserved recovery checkpoints, not accepted repairs.
+Candidate 747 instead tests checked observer reveals at enum/reference resource
+packing and unpacking on the 738 base; its native gate remains pending.
+
+The exact optional replay 739 corrects an earlier shorthand diagnosis: the first
+failure is missing **physical slice ownership**, at lines 2208–2253, because the
+dependent generic stage precedes its physical stage. Diagnostic 740 moves only
+the existing physical application ahead of it. That passes the first operation
+but fails the caller's current-resource reservation at lines 2415–2428. Neither
+run changes contracts or removes obligations; order alone is insufficient.
+
+Models 742–745 check a narrower optional-owner protocol. Its outer antecedent
+requires the physical owner to agree with the captured post-return resource
+footprint; referent values may still change. The positive, false assertion,
+wrong value and changed-owner controls all match with full AST checks, and the
+byte-exact models are preserved under `known_limits`. This is an explicit,
+checked expiry requirement, not a general replacement for caller histories.
+Native 746 applies it only to the existing optional-slice shape with no
+resource-bearing output. Its build, three unit checks, seven encodings and
+seven AST checks pass, but native qualification is only **5/9**: both positives
+and their assertion-false controls still fail. Both false-postcondition controls
+now produce the exact expected diagnostics. The clearing/rotation and full-owner
+groups are skipped. Diagnostic 748 locates the remaining observation error in
+the complete direct client before another revision. No candidate is adopted.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user initially authorized the remaining IM and matrix repairs followed by

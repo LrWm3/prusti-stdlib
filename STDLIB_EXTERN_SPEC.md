@@ -4933,6 +4933,47 @@ Those failed clients and the latest combined failures remain in the evidence.
 No additional Silicon proof run was made for this small fix; major/final
 qualification retains the user's Silicon policy.
 
+### Projected histories and delayed collection conversion (632–638)
+
+Candidate 632 retains actual struct-field projection paths when grouping owner
+histories. It splits a flat footprint only when the paths account for every
+resource leaf; whole-owner histories, loop summaries and unsupported layouts
+retain the original proof. All ten encodings and structural checks pass. Its
+native Ferrum gate is audited at **102/104**: owner **73/75**, small controls
+**23/23**, and selected-element controls **6/6**. The projected same-type positive
+and exact negative now pass. The generic split-group pair remains failing;
+stabilization is not complete and this combined candidate is not adopted.
+
+The separate-method-solver comparison 613 passes the full iterator positive in
+90.61 seconds, but its negative fails an earlier `next` permission precondition
+in 193.44 seconds. It therefore does not qualify, and backend defaults remain
+unchanged.
+
+The full replacement replay 627 locates the missing scalar permission after a
+later Vec indexing loan expires. The current referent is held inside an indexed
+wrapper when the delayed `mem::replace` continuation requests it. Diagnostic 633
+opens that wrapper, executes every original restoration operation, and closes
+the same wrapper after the intervening physical folds. The complete positive
+verifies in **143.16 seconds**. Diagnostic 635 adds a final false assertion and
+rejects exactly that assertion in **274.64 seconds**, with no earlier error.
+Both source hashes and exact results are audited. These are full-program Viper
+diagnostics, not Rust regression qualification.
+
+Candidate 637 implements temporary scalar exposure using complete resource keys
+and index/path captures from encoded array expansions. A permission check selects
+an actually held wrapper; checked unfolding, generic conversion and refolding
+must restore it before the next call, phase or package boundary. It retains all
+original restoration and frame obligations. Its own Prusti build is complete;
+encoding and native qualification are pending. Build 636 is retained as the
+unverified predecessor before the package-boundary flush was added.
+
+Independent candidate 634 extends explicit checked capture outputs to ordinary
+generic functions, retaining the associated-item interface. Its 13 encodings
+and structural checks pass, but the optional-slice caller still fails with an
+application permission error. Remaining controls and raw localization 638 are
+pending; this candidate is not adopted. All evidence remains under
+`target/stdlib-matrix-20261031-1236`. The mandatory pause below is unchanged.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user initially authorized the remaining IM and matrix repairs followed by

@@ -5033,10 +5033,19 @@ During final restoration, one half can retain observations while the other
 continuation runs, allowing checked overlap facts before full ownership is
 reassembled. The model includes composition, all four cross-owner alias cases,
 and an inhabited construction with an exact final-false control. It does not
-split an existing magic wand. Both structural checks pass; proof results are
-pending. If successful, next test the complete failing generated Rust program,
-including fractional observation/conversion requirements, before considering a
-general implementation. The distinction matters: [Dardinier et al.'s CAV 2022
+split an existing magic wand. Both complete programs pass structural checks;
+the positive passes Ferrum in 0.35 seconds and the negative fails only at its
+intended final assertion in 0.20 seconds. Exact source hashes and diagnostics
+are audited. The two models are preserved in the iterator suite's
+[`known_limits`](prusti-tests/tests/cargo_verify/stdlib_iterator_spec/known_limits/README.md).
+Complete-program experiment 654/655 now changes the scalar and opaque
+continuation interface to paired half-resource continuations and supplies
+checked concrete composition/coherence helpers. The original Rust bodies,
+client obligations and concrete final restoration contract remain; only that
+contract's restoration proof is replaced. Both full-program structural checks
+pass; proof results are pending. Test these actual generic calls and
+fractional observation/conversion requirements before considering a general
+encoder implementation. The distinction matters: [Dardinier et al.'s CAV 2022
 paper](https://dardinier.me/papers/CAV22_Wands.pdf) shows that fractions of
 arbitrary magic wands cannot in general be freely recombined. No such operation
 or additional axiom is proposed here.
@@ -5046,10 +5055,16 @@ positive in 64.25 seconds, reference-write positive in 82.19 seconds, and the
 extra-next exact-false control in 270.29 seconds. The extra-next positive still
 fails an indexed permission obligation (509.80 seconds), and its nonempty
 wrong-result control fails before the intended diagnostic (361.44 seconds).
-These partial results do not qualify the iterator group. Small proof pair
-649/650 runs between completed groups by holding only the broader runner's
-parent; its active verifier is allowed to finish, and the parent is resumed
-afterward. One verifier and disabled Ferrum branch parallelism remain required.
+The completed iterator group is audited at **30/32**, and the generic collection
+group at **10/10**. The prefix library still times out after 600 seconds.
+The fresh checkout omitted the 50 owner fixtures, so its owner group did not
+start; this setup failure is retained. Retry 651 restores the exact fixture
+inventory from 632 and runs all 75 checks on the same own637 compiler in a
+fresh namespace. Do not claim full 170-check coverage until that retry and
+the remaining 643 groups complete. Small proof pairs and the owner retry run
+between completed groups by holding only the broader runner's parent; its
+active verifier is allowed to finish, and the parent is resumed afterward.
+One verifier and disabled Ferrum branch parallelism remain required.
 
 ## Follow-on scope authorized on 2026-11-01
 

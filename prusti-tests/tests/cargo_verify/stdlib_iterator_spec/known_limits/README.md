@@ -653,3 +653,30 @@ in `target/stdlib-matrix-20261031-1236/capture383-qualification.json`.
 These models establish the Viper proof pattern; Rust/PCG integration and
 struct/enum projection paths remain to be implemented and qualified. The earlier
 381 model failed quantified-permission injectivity and remains failed evidence.
+
+## Paired fractional resource continuations (2026-11-02)
+
+[`owner_handoff_half_resources.vpr`](owner_handoff_half_resources.vpr) verifies
+composition and restoration with two separately packaged continuations. Each
+continuation transfers half the resource permission. During final restoration,
+the other half retains observations; checked unfolding relates overlapping
+physical cells before full ownership is reassembled. All four cross-owner
+equal-address cases are covered without assuming disjoint generic keys. An
+inhabited caller changes the resource tags, swaps the two fields, and proves
+both original cell values.
+
+The positive passes Ferrum `0e048a4` in 0.35 seconds. The identical
+[`false` control](owner_handoff_half_resources_false.vpr), with a final false
+assertion, fails only at line 93 in 0.20 seconds. Both complete programs pass
+structural checks. This is a proof model, not Rust encoder qualification, and
+has not had a Silicon sign-off. It does not split an existing wand or assume
+that arbitrary wand fractions can be recombined.
+
+Exact commands, source hashes and diagnostics are retained in
+`target/stdlib-matrix-20261031-1236/probe649`, `probe650` and
+`audit649-650.json`. Runs use one verifier, disabled branch parallelism,
+`--enableMoreCompleteExhale --disableTerminationPlugin --assertTimeout 30000
+--checkTimeout 100 --proverEnableTimeBounds --timeout 600`, and
+`--proverConfigArgs 'smt.qi.eager_threshold=1000 model.partial=false smt.arith.solver=6'`.
+The next qualification is the complete failing generated split-owner program,
+including its actual generic calls and checked resource conversions.

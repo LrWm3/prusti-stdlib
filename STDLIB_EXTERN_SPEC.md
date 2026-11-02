@@ -4964,14 +4964,46 @@ and index/path captures from encoded array expansions. A permission check select
 an actually held wrapper; checked unfolding, generic conversion and refolding
 must restore it before the next call, phase or package boundary. It retains all
 original restoration and frame obligations. Its own Prusti build is complete;
-encoding and native qualification are pending. Build 636 is retained as the
+all eight encodings and structural checks pass. Its focused Ferrum gate is
+audited at **35/35**: selected-element 6/6, small controls 23/23 and replacement
+6/6. The two replacement positives verify in 169.20 and 154.42 seconds; the
+negative rejects exactly its intended false assertion in 287.46 seconds.
+Build 636 is retained as the
 unverified predecessor before the package-boundary flush was added.
 
 Independent candidate 634 extends explicit checked capture outputs to ordinary
 generic functions, retaining the associated-item interface. Its 13 encodings
 and structural checks pass, but the optional-slice caller still fails with an
 application permission error. Remaining controls and raw localization 638 are
-pending; this candidate is not adopted. All evidence remains under
+complete: **52/56** checks pass (generic optional-slice 8/9, metadata 6/7, enum
+5/5, selected-element 6/6, small controls 23/23, explicit suffix 4/6). The
+metadata positive fails a checked raw-sequence helper assertion; the original
+suffix caller still cannot apply its wand. This candidate is not adopted.
+Raw 638 identifies a generic continuation requiring an entry slice-storage
+frame before that frame's physical restoration has run. Reordering those two
+complete applications in 639 clears that error but fails the caller's final
+resource reservation: available entry-snapshot resources do not establish
+resources for the current slice snapshot. Negative 640 fails at the same earlier
+obligation and does not qualify. Neither ordering nor capture witnesses alone
+complete this ownership transition.
+
+The next transport experiment must retain the current nested resources together
+with their entry-restoration continuation, binding parent-storage observations
+at the appropriate restoration stage. It must preserve early owner reuse and
+later reassignment; assuming current storage equals entry storage would bypass
+the problem. Start with complete positive/negative Viper programs and checked
+callee definitions before changing the general encoder.
+
+The implementation is saved and pushed on the temporary recovery branch
+[`stdlib/stabilization-checkpoint`](https://github.com/LrWm3/prusti-stdlib/tree/stdlib/stabilization-checkpoint):
+`266391deb` records candidate 628 and selected-element fixtures, `83e0499f3`
+records the projected-field repair, and `0a0144c75` records delayed scalar
+wrapper conversion. Each commit's encoder, adapter and PCG contents match its
+frozen tested candidate exactly. These are recovery commits, not a declaration
+that combined stabilization is complete. Broader run 643 tests all nine unresolved
+families (170 checks) on the exact 637 compiler. Regression pair 644 additionally
+checks a symbolic index and projected reference field on that same compiler.
+These runs must finish before integration decisions. All evidence remains under
 `target/stdlib-matrix-20261031-1236`. The mandatory pause below is unchanged.
 
 ## Follow-on scope authorized on 2026-11-01

@@ -5270,6 +5270,30 @@ inside the same single-worker queue. No assertion or logical postcondition is
 removed. Diagnostic caller-only programs 700/701 are prepared for fault
 localization if needed; they are not queued and cannot qualify a feature.
 
+The metadata contract-reveal probe 695 passes the complete program in
+245.94 seconds. Its sole-false control 696 rejects exactly the final assertion
+at line 2954 in 334.18 seconds; both source hashes and diagnostics are audited.
+Fallbacks 698/699 are not run. Compiler candidate 702 implements the reveal in
+aggregate-unpack return frames, retaining the original logical contracts. Its
+entire metadata program equals 695 after normalizing comments, whitespace and
+generated crate IDs. Own source `eb3cedb8…`, driver `21f8b7e8…`, three protocol
+unit tests and nineteen encodings/full AST checks pass. One encoding runner
+entry initially named a nonexistent fixture; that failed setup record is kept,
+the name is corrected, and only that entry is re-encoded. Recovery commit
+`4f472b770` contains the exact change; native metadata qualification is pending.
+
+The native indexed-capture candidate 697 now passes **8/8 heavy-prefix checks**
+and **5/5 guarded optional-slice checks**, both audited with complete coverage
+and provenance. Early-break and generic prefix positives take 315.23 and
+183.85 seconds; the three intended negatives take 430.05, 145.02 and 185.71
+seconds. The prior raw672 timeout remains failed; these are fresh native Rust
+results on the later candidate. Repeated nested calls, suffix compatibility,
+cross-crate prefix/generic libraries and ownership regressions remain in the
+serial gate. Candidate 702 follows with its combined native checks. The
+caller-only 700/701 diagnostics run in 702's serial prelude and cannot establish
+whole-program qualification. Main adoption and the final combined matrix remain
+blocked on the outstanding gates and existing repair families.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user initially authorized the remaining IM and matrix repairs followed by

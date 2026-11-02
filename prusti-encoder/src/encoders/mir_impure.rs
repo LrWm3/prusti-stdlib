@@ -958,11 +958,11 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         {
             self.flush_array_closures();
         }
-        if edge_action.is_add()
-            || matches!(edge.kind(), BorrowPcgEdgeKind::Coupled(_))
-            || matches!(edge.kind(), BorrowPcgEdgeKind::BorrowFlow(flow)
-                if matches!(flow.kind(), BorrowFlowEdgeKind::Assignment(_) | BorrowFlowEdgeKind::Aggregate { .. }))
-        {
+        // Removing a scalar move/aggregate edge is bookkeeping only. Closing
+        // an exposed indexed referent there can hide it before the following
+        // physical reference restoration. Actual array repacks close it at
+        // their own resource boundary after identifying a supported layout.
+        if edge_action.is_add() || matches!(edge.kind(), BorrowPcgEdgeKind::Coupled(_)) {
             self.flush_scalar_reclosures();
         }
         let cond_conjuncts = self.edge_condition(edge);
@@ -1020,7 +1020,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         self.stmts(statements);
     }
 
-    fn flush_scalar_reclosures(&mut self) {
+    pub(crate) fn flush_scalar_reclosures(&mut self) {
         let statements = std::mem::take(&mut self.pending_scalar_reclosures);
         self.stmts(statements);
     }
@@ -1162,6 +1162,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     )) = assignment_data.cast_kind()
                     && edge_action.is_remove() =>
             {
+                self.flush_scalar_reclosures();
                 let kind = assignment_data.cast_kind().unwrap();
 
                 // For an unsize operation `let slice = &mut array;` the PCG

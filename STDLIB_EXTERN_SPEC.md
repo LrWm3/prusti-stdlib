@@ -65,7 +65,7 @@ different compilers are never added together.
 |---|---|---|
 | Whole matrix | Last complete matrix 339: 1,755/1,842; 87 failures, none waived | Rebuild final source and complete both backends with exact coverage |
 | Ownership, enum, local history, associated output | 793 audited 124/124; historical 722 audited 129/129 on its own compiler | Preserve as separate reference gates; rerun affected families after each repair |
-| Heavy prefix | H1 native positive hits the 600s limit twice; exact negative passes in 309.70s | Full-program CLI replays pass: 722 in 260.94s, H1 in 272.04s; trace the native invocation with fixed dependency inputs before another encoder change |
+| Heavy prefix | H1 native positive hits 600s twice; exact negative passes in 309.70s; current exact program passes unlogged CLI in 297.49s | H2 isolated build, ownership/adapter checks and full AST pass; preserved-input native positive running; no accepted repair |
 | Region iterator | 794: 3/7; missing tail indexed resources in both positives and wrong early errors in both negatives | 809's checked tail-snapshot equality succeeds, but the original resource assertion still fails; model review before a repair |
 | Nested calls | 794: 9/11; repeated positive missing wand, postcondition control times out | Full replay 810 times out at 600s with solver logging; previous failed hypotheses require model review |
 | Extra `next` | 794: 3/6; positive timeout and two wrong diagnostics | Retain all six controls; check as an affected regression of prefix framing |
@@ -148,6 +148,42 @@ expensive query and its restoration/value/frame obligation; compare proof
 structure through the CLI if needed. Logging results remain diagnostic. Preserve
 the discrepancy before any successor encoder patch or integration. The detailed
 plan, exact inputs and results live under `reconciliation-20261102/`.
+
+The logged native replay fails in 516.32s at `body_restore_prefix!`, after the
+successful `Some` branch. Its first assertion-budget failure checks indexed
+physical permission coverage when applying the saved loop history (Viper line
+10081; SMT query 70710). Subsequent prefix-value and suffix-frame queries also
+exhaust their assertion budgets. The logged CLI fails earlier while matching
+the `next` restoration wand. The **exact same current program** passes the CLI
+without diagnostic logging in 297.49s. Logging changes outcomes and these
+diagnostic failures must not be substituted for the two standard native timeouts.
+
+**Hypothesis H2 (one bounded experiment).** Native and parsed programs group
+pure Boolean conjunctions differently. The traces first diverge in evaluation
+of the pure address/length framing condition, after 19,413 matching SMT commands
+when source-position query IDs and associative pure `and` structure are normalized.
+Normalize only pure conjunctions to right association in the native adapter,
+preserving operand order and every leaf's metadata. Do not reassociate permission
+conjunctions, cross quantifier/let/wand scopes, drop facts, or alter any ownership
+stage, snapshot, history or discharge obligation described above. The proposed
+repair changes pure-query scheduling; it adds no premise about physical addresses.
+
+H2 is an isolated experiment on H1's frozen source, not integration of H1. First
+build and structurally check it, then replay the preserved full Rust invocation
+with unchanged dependency metadata and crate identities to isolate this change.
+The positive must pass within 600s, followed by the native positive/exact-negative
+gate and all affected families before integration. A continued failure falsifies
+H2 as a sufficient repair. With H1 and H2 both unsuccessful, stop successor patches
+and return to the model and reproducer; do not create an H3 patch without new
+distinguishing evidence.
+
+H2's own build and three ownership unit checks pass. Its adapter controls preserve
+the permission conjunction's node, short-circuit undefined division correctly and
+reject the exact false assertion. The full generated program passes AST consistency
+checking. Crate identifiers and every non-parenthesis token, in order, match H1;
+the recorded parentheses-only diff reflects the reviewed pure-conjunction change.
+The preserved-input full Rust positive is the next falsifier. These structural and
+unit results do not qualify H2, and the immutable integration baseline stays put.
 
 Build H1 from the frozen baseline in its own worktree, check the complete generated
 programs, then run the native positive and exact negative. If they pass, run all

@@ -5207,11 +5207,33 @@ No new compiler adoption or full stabilization is claimed.
 Candidate 688 narrows the quantified old-point lowering to expiry pledges,
 where continuation matching requires it, and retains the previous pointwise
 encoding for ordinary postconditions. Its own rebuild and protocol unit tests
-pass; source `c4f63d41…`, driver `33851229…`. The library and both suffix forms
-must pass before compatibility testing resumes. Broader 687 will be skipped
-because its 686 prerequisite failed; preparing or encoding that run does not
-count as verification. Full-program prefix diagnostic 667 also times out at
-600 seconds and remains a failure.
+pass; source `c4f63d41…`, driver `33851229…`. The generic library now passes
+in 160.57 seconds and the complete generic group passes **10/10**. Both suffix
+forms retain **14/14**, focused ownership **12/12**, first-element **6/6** and
+small controls **23/23**. Recovery commit `229c56f8b` matches all 20 changed
+encoder/adapter/VIR files. After removing comments, blank lines and generated
+crate disambiguators only, its entire generic-library Viper program equals the
+previously passing 643 program.
+
+Metadata then passes only **6/7**: `mut_take_slice_pass` fails the aggregate
+unpacking helper's old-state equality postcondition. Candidate 688 therefore
+finishes at **71/72 attempted checks**, not full qualification. The helper is
+unchanged from passing 643; the complete normalized metadata program differs
+only by the call-state label placement in another method. Full-program 690
+adds an explicit assertion of the original postcondition immediately before
+return. That assertion passes, but return checking still fails the identical
+postcondition (405.89 seconds); its negative 691 is skipped. Diagnostic 692
+reveals the old observer's checked definition at the added assertion and is
+in progress. This is not yet evidence of a backend defect.
+
+Prepared broader runs 687 and 689 will be skipped because their respective
+686 and 688 core gates failed; encoding and structural success do not count as
+verification. Full-program prefix diagnostics 667/668 time out at 600 seconds.
+Diagnostic 671, which inlines only two unconditional final-package snapshot
+captures while preserving guarded captures, passes in 307.64 seconds. Its
+negative control 672 remains pending behind the metadata investigation.
+Neither compiler repair is adopted on main, and the mandatory stabilization
+pause remains ahead of D1–D6.
 
 ## Follow-on scope authorized on 2026-11-01
 

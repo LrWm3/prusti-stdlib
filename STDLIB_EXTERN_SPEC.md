@@ -5435,6 +5435,39 @@ Rust implementation. The boundary monitor has resumed the native 710 gate;
 there are no deliberately stopped controllers at this checkpoint. Candidate
 715 remains queued afterward, including its full-program 720/721 prelude.
 
+Candidate 710 completes at **16/17 audited checks**: metadata 7/7 and generic
+9/10. The generic specification library fails loop restoration; later groups
+are skipped. Comparing its complete program with passing 688 identifies only
+the final-package snapshot inlining introduced by 697. Candidate 722 restricts
+that optimization to indexed physical histories on both sides of the wand and
+retains captures for generic-resource-only histories. Its own build, three
+protocol tests, five encodings and five full AST checks pass (source
+`023cb374…`, driver `690e5fef…`). Its generic library program matches 688 after
+removing only comments, blank lines and generated crate identifiers. Fresh
+native verification remains required; textual equality is not qualification.
+
+The full-program solver-context diagnostic 720 fails an enum permission
+assertion in 18.19 seconds; 721 is skipped. No backend setting is changed.
+Candidate 715 also fails the repeated nested-call positive with a missing-wand
+assertion; its remaining controls are still running. Neither experiment is
+adopted. The serial queue next runs 722's generic, metadata, heavy-prefix,
+prefix-library, owner and suffix gates, stopping broadening on failure.
+
+Candidate 723 implements the scoped optional-slice prototype on 722. Predicate
+construction and boundary conversion share a reference-depth policy: observe
+the ancestor option at entry, then the restored slice currently. The joint
+physical/generic stage retains all parent frames and the complete entry-resource
+continuation. Primitive resource-free returns are included only for this
+optional-slice shape. Caller history groups are rebased through the actual
+opaque Rust type when the group is unique; runtime owner address/type checks
+and checked continuation applications remain. No trusted axiom or permission
+assumption is added. Its own build and three protocol tests pass (source
+`748d5824…`, driver `f507c8ea…`); encoding and structural checks precede the native
+optional-owner gate. New controls clear the option, rotate reference-containing
+slice elements and reject false or wrong-current-value assertions. This remains
+an unqualified prototype, recorded separately from main. Recovery commits
+`2d7088fa6` and `07a562398` preserve the exact 722 and 723 compiler sources.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user initially authorized the remaining IM and matrix repairs followed by

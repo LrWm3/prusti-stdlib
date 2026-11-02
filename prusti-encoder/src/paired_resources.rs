@@ -168,21 +168,22 @@ impl<'vir> Lower<'vir> {
                     let stmts = self.statements(block.stmts);
                     let terminator = match block.terminator {
                         vir::TerminatorStmtData::GotoIf(branch) => {
-                            let branch = branch.fold_with(self).unwrap_or(branch);
                             let targets = branch
                                 .targets
                                 .iter()
                                 .map(|target| {
                                     self.vcx.alloc(vir::GotoIfTargetGenData {
+                                        value: target.value.fold_with(self).unwrap_or(target.value),
                                         statements: self.statements(target.statements),
                                         ..**target
                                     })
                                 })
                                 .collect::<Vec<_>>();
                             let branch = self.vcx.alloc(vir::GotoIfData {
+                                value: branch.value.fold_with(self).unwrap_or(branch.value),
                                 targets: self.vcx.alloc_slice(&targets),
                                 otherwise_statements: self.statements(branch.otherwise_statements),
-                                ..*branch
+                                ..**branch
                             });
                             self.vcx.alloc(vir::TerminatorStmtData::GotoIf(branch))
                         }
@@ -205,6 +206,138 @@ impl<'vir> Lower<'vir> {
             body,
             ..*method
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn continuation<'vir>(vcx: &'vir vir::VirCtxt<'vir>) -> vir::Wand<'vir> {
+        let ty = vcx.mk_local_ex(vcx.mk_local_decl("T", vir::TYPE_TYVAL));
+        let p = |name| {
+            let addr = vcx.mk_local_ex(vcx.mk_local_decl(name, vir::TYPE_REF));
+            vcx.mk_predicate_app_expr(vcx.alloc(vir::PredicateAppData {
+                target: "p_Param",
+                args: vcx.alloc_slice(&[addr.as_dyn(), ty.as_dyn()]),
+                perm: None,
+            }))
+        };
+        vcx.mk_wand(p("current"), p("entry"))
+    }
+
+    fn proof<'vir>(
+        vcx: &'vir vir::VirCtxt<'vir>,
+        wand: vir::Wand<'vir>,
+    ) -> &'vir [vir::Stmt<'vir>] {
+        vcx.alloc_slice(&[vcx.mk_package_stmt(
+            wand,
+            vcx.alloc_slice(&[
+                vcx.mk_assert_stmt(vcx.mk_wand_expr(wand)),
+                vcx.mk_apply_stmt(wand),
+            ]),
+        )])
+    }
+
+    fn check_packages(statements: &[vir::Stmt<'_>]) {
+        assert_eq!(
+            statements.len(),
+            2,
+            "a complete continuation owns two separately proved packages"
+        );
+        for stmt in statements {
+            let vir::StmtKindData::Package(wand, body) = stmt.kind else {
+                panic!("package expected")
+            };
+            assert!(
+                !paired(wand),
+                "an already fractional operand must not be selected again"
+            );
+            assert_eq!(body.len(), 2);
+            let vir::StmtKindData::Assert(obligation) = body[0].kind else {
+                panic!("assert expected")
+            };
+            assert!(
+                matches!(obligation.kind, vir::ExprKindData::Wand(_)),
+                "each half proof consumes and requires one instance"
+            );
+            assert!(matches!(body[1].kind, vir::StmtKindData::Apply(_)));
+        }
+    }
+
+    #[test]
+    fn linear_packages_and_complete_applications_agree() {
+        vir::init_vcx(vir::VirCtxt::new_without_tcx());
+        vir::with_vcx(|vcx| {
+            let wand = continuation(vcx);
+            let mut lower = Lower { vcx, half: false };
+            let lowered = lower.statements(proof(vcx, wand));
+            check_packages(lowered);
+            check_packages(lower.statements(lowered));
+            assert_eq!(lower.statements(&[vcx.mk_apply_stmt(wand)]).len(), 2);
+            let post = vcx.mk_wand_expr(wand).fold_with(&mut lower).unwrap();
+            assert!(
+                matches!(post.kind, vir::ExprKindData::BinOp(op) if op.kind == vir::BinOpKind::And)
+            );
+        });
+    }
+
+    #[test]
+    fn branch_edge_proofs_are_lowered_once_in_their_permission_context() {
+        vir::init_vcx(vir::VirCtxt::new_without_tcx());
+        vir::with_vcx(|vcx| {
+            let proof = proof(vcx, continuation(vcx));
+            let label = &vir::CfgBlockLabelData::Start;
+            let branch = vcx.alloc(vir::GotoIfData {
+                value: vcx.mk_uint::<0>().as_dyn(),
+                targets: vcx.alloc_slice(&[vcx.mk_goto_if_target(
+                    vcx.mk_uint::<0>().as_dyn(),
+                    label,
+                    proof,
+                )]),
+                otherwise: label,
+                otherwise_statements: proof,
+            });
+            let block = vcx.mk_cfg_block(
+                label,
+                &[],
+                &[],
+                vcx.alloc(vir::TerminatorStmtData::GotoIf(branch)),
+            );
+            let method = vcx.mk_method_unchecked(
+                "test",
+                &[],
+                &[],
+                &[],
+                &[],
+                Some(vcx.alloc_slice(&[block])),
+            );
+            let method = Lower { vcx, half: false }.method(method);
+            let vir::TerminatorStmtData::GotoIf(branch) = method.body.unwrap().blocks[0].terminator
+            else {
+                panic!("branch expected")
+            };
+            check_packages(branch.targets[0].statements);
+            check_packages(branch.otherwise_statements);
+        });
+    }
+
+    #[test]
+    fn guarded_or_nested_resources_keep_the_existing_protocol() {
+        vir::init_vcx(vir::VirCtxt::new_without_tcx());
+        vir::with_vcx(|vcx| {
+            let wand = continuation(vcx);
+            assert!(paired(wand));
+            let guard = vcx.mk_local_ex(vcx.mk_local_decl("selected", vir::TYPE_BOOL));
+            assert!(!paired(vcx.mk_wand(
+                vcx.mk_ternary_expr(guard, wand.lhs, vcx.mk_bool::<true>()),
+                wand.rhs
+            )));
+            assert!(!paired(vcx.mk_wand(
+                wand.lhs,
+                vcx.mk_conj(&[wand.rhs, vcx.mk_wand_expr(wand)])
+            )));
+        });
     }
 }
 

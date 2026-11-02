@@ -3289,6 +3289,137 @@ impl<'vir> WandEncOutput<'vir> {
     }
 }
 
+type OwnerCompositionArguments = (vir::ManyPSnap, vir::ManyTyVal);
+
+/// Compose abstract histories in a checked method with immutable resource keys.
+/// The shared continuation lowering gives this method two half continuations
+/// per logical input and output, exactly as at its callers. The helper never
+/// borrows the caller's current resource or assumes an intermediate identity.
+pub(crate) struct OwnerCompositionEnc;
+
+impl TaskEncoder for OwnerCompositionEnc {
+    task_encoder::encoder_cache!(OwnerCompositionEnc);
+    const ENCODER_NAME: &'static str = "owner continuation composition encoder";
+    type TaskDescription<'vir> = ();
+    type OutputFullDependency<'vir> = vir::MethodIdn<'vir, OwnerCompositionArguments>;
+    type OutputFullLocal<'vir> = vir::Method<'vir>;
+
+    fn task_to_key<'vir>(_task: &Self::TaskDescription<'vir>) -> Self::TaskKey<'vir> {}
+
+    fn do_encode_full<'vir>(
+        task: &Self::TaskKey<'vir>,
+        deps: &mut TaskEncoderDependencies<'vir, Self>,
+    ) -> EncodeFullResult<'vir, Self> {
+        deps.emit_output_ref(*task, ())?;
+        deps.require_ref::<crate::encoders::ty::resources::ResourceGroupEnc>(
+            RustTyDecomposition::param(),
+        )?;
+        vir::with_vcx(|vcx| {
+            let snapshots = vcx.alloc_slice(&[
+                vcx.mk_local_decl("composition_current", vir::TYPE_PSNAP),
+                vcx.mk_local_decl("composition_middle", vir::TYPE_PSNAP),
+                vcx.mk_local_decl("composition_entry", vir::TYPE_PSNAP),
+                vcx.mk_local_decl("composition_current_metadata", vir::TYPE_PSNAP),
+                vcx.mk_local_decl("composition_middle_metadata", vir::TYPE_PSNAP),
+                vcx.mk_local_decl("composition_entry_metadata", vir::TYPE_PSNAP),
+            ]);
+            let types = vcx.alloc_slice(&[
+                vcx.mk_local_decl("composition_current_type", vir::TYPE_TYVAL),
+                vcx.mk_local_decl("composition_middle_type", vir::TYPE_TYVAL),
+                vcx.mk_local_decl("composition_entry_type", vir::TYPE_TYVAL),
+            ]);
+            let group = |index: usize| {
+                crate::encoders::ty::resources::group(
+                    vcx.mk_local_ex(snapshots[index]),
+                    vcx.mk_local_ex(types[index]),
+                    vcx.mk_local_ex(snapshots[index + 3]),
+                )
+            };
+            let current = group(0);
+            let middle = group(1);
+            let entry = group(2);
+            let recent = resource_restoration_wand(vcx, current, middle);
+            let summary = resource_restoration_wand(vcx, middle, entry);
+            let combined = resource_restoration_wand(vcx, current, entry);
+            let statements = vcx.alloc_slice(&[vcx.mk_package_stmt(
+                combined,
+                vcx.alloc_slice(&direct_resource_restoration(
+                    vcx,
+                    current,
+                    entry,
+                    vec![vcx.mk_apply_stmt(recent), vcx.mk_apply_stmt(summary)],
+                )),
+            )]);
+            let block = vcx.mk_cfg_block(
+                &vir::CfgBlockLabelData::Start,
+                &[],
+                statements,
+                &vir::TerminatorStmtGenData::Exit,
+            );
+            let method = vir::MethodIdn::<OwnerCompositionArguments>::new(
+                vir::ViperIdent::new("owner_resource_compose"),
+                (
+                    vcx.alloc_slice(&[vir::TYPE_PSNAP; 6]),
+                    vcx.alloc_slice(&[vir::TYPE_TYVAL; 3]),
+                ),
+            );
+            Ok((
+                vcx.mk_method(
+                    method,
+                    (snapshots, types),
+                    &[],
+                    vcx.alloc_slice(&[vcx.mk_wand_expr(recent), vcx.mk_wand_expr(summary)]),
+                    vcx.alloc_slice(&[vcx.mk_wand_expr(combined)]),
+                    Some(vcx.alloc_slice(&[block])),
+                ),
+                method,
+            ))
+        })
+    }
+
+    fn emit_outputs<'vir>(program: &mut task_encoder::Program<'vir>) {
+        for method in Self::all_outputs_local_no_errors(program) {
+            program.add_method(method);
+        }
+    }
+}
+
+/// The helper covers one whole opaque group with complete resource keys.
+/// Conditional, indexed and concrete groups keep their existing checked proof.
+fn opaque_composition_keys<'vir>(
+    current: vir::ExprBool<'vir>,
+    middle: vir::ExprBool<'vir>,
+    entry: vir::ExprBool<'vir>,
+) -> Option<([vir::ExprPSnap<'vir>; 6], [vir::ExprTyVal<'vir>; 3])> {
+    fn key(expr: vir::ExprBool<'_>) -> Option<&[vir::ExprDyn<'_>]> {
+        let vir::ExprKindData::PredicateApp(app) = expr.kind else {
+            return None;
+        };
+        (app.target == "indirect_resources"
+            && app.args.len() == 3
+            && app.perm.is_none_or(|p| {
+                matches!(p.kind, vir::ExprKindData::Const(vir::ConstData::FullPerm))
+            }))
+        .then_some(app.args)
+    }
+    let (current, middle, entry) = (key(current)?, key(middle)?, key(entry)?);
+    Some((
+        [
+            current[0].downcast_ty(),
+            middle[0].downcast_ty(),
+            entry[0].downcast_ty(),
+            current[2].downcast_ty(),
+            middle[2].downcast_ty(),
+            entry[2].downcast_ty(),
+        ],
+        [
+            current[1].downcast_ty(),
+            middle[1].downcast_ty(),
+            entry[1].downcast_ty(),
+        ],
+    ))
+}
+
 /// One checked continuation per stable generic input owner. Its snapshot
 /// locals change only after composing an actual borrow-expiry continuation.
 #[derive(Clone)]
@@ -3555,23 +3686,30 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
         let vcx = self.vcx;
         let reservation = vcx.mk_wand(vcx.mk_bool::<true>(), current);
         self.stmt(vcx.mk_package_stmt(reservation, &[]));
-        let compose = [
-            vcx.mk_apply_stmt(restored.continuation),
-            vcx.mk_apply_stmt(resource_restoration_wand(
-                vcx,
-                summary.current,
-                summary.entry,
-            )),
-        ];
-        self.stmt(vcx.mk_package_stmt(
-            resource_restoration_wand(vcx, current, summary.entry),
-            vcx.alloc_slice(&direct_resource_restoration(
-                vcx,
-                current,
-                summary.entry,
-                compose.to_vec(),
-            )),
-        ));
+        if let Some((snapshots, types)) =
+            opaque_composition_keys(current, summary.current, summary.entry)
+        {
+            let compose = self.deps.require_dep::<OwnerCompositionEnc>(()).unwrap();
+            self.stmt((compose)(vcx.alloc_slice(&snapshots), vcx.alloc_slice(&types)).alloc());
+        } else {
+            let compose = [
+                vcx.mk_apply_stmt(restored.continuation),
+                vcx.mk_apply_stmt(resource_restoration_wand(
+                    vcx,
+                    summary.current,
+                    summary.entry,
+                )),
+            ];
+            self.stmt(vcx.mk_package_stmt(
+                resource_restoration_wand(vcx, current, summary.entry),
+                vcx.alloc_slice(&direct_resource_restoration(
+                    vcx,
+                    current,
+                    summary.entry,
+                    compose.to_vec(),
+                )),
+            ));
+        }
         self.stmt(vcx.mk_apply_stmt(reservation));
         for assignment in assignments {
             self.stmt(assignment);

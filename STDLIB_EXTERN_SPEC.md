@@ -5294,6 +5294,31 @@ caller-only 700/701 diagnostics run in 702's serial prelude and cannot establish
 whole-program qualification. Main adoption and the final combined matrix remain
 blocked on the outstanding gates and existing repair families.
 
+Candidate 697 finishes with **22/24 audited checks**: heavy-prefix 8/8,
+guarded optional 5/5 and nested 9/11. The repeated nested positive and its
+false-postcondition control both fail a final physical value-frame package;
+the negative is not accepted. Later groups are skipped. Caller-only
+diagnostics 700/701 respectively time out and fail an earlier wand-availability
+assertion; neither qualifies the complete program or establishes a backend bug.
+
+Candidate 702 finishes metadata at **6/7 audited checks**. The native slice
+positive still fails the aggregate-unpack return equality, despite raw 695/696
+passing. Its later groups are skipped. Thus the reveal change remains an
+unadopted experiment. The unchanged-contract ordering fallback 698/699 is now
+being tested separately; the previous raw success does not waive this failure.
+
+Checked models 703–707 pass all five expected outcomes: physical snapshot
+coherence across two half-permission indexed wrappers, a two-permutation
+restoration composition, two sole-false controls and a missing-intermediate-frame
+control that fails the intended final package. Their sources are preserved in
+`stdlib_iterator_spec/known_limits/indexed_physical_*.vpr`; these are finite
+models, not native or unbounded qualification. Own compiler candidate 708
+strengthens checked physical transfer frames to compare independent source and
+target indices with equal underlying address/type. Permission keys and guards
+remain unchanged. Build and three protocol unit tests pass; generated-program
+checks and the native regression gate remain pending. No main adoption or
+stabilization completion is claimed.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user initially authorized the remaining IM and matrix repairs followed by

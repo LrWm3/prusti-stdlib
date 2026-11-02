@@ -680,3 +680,21 @@ Exact commands, source hashes and diagnostics are retained in
 `--proverConfigArgs 'smt.qi.eager_threshold=1000 model.partial=false smt.arith.solver=6'`.
 The next qualification is the complete failing generated split-owner program,
 including its actual generic calls and checked resource conversions.
+
+## Indexed physical value frames (2026-11-02)
+
+`indexed_physical_coherence.vpr` proves that two half-permission wrappers over
+the same physical cell preserve and agree on its snapshot, despite different
+index/path keys. Its `_false` control rejects only the final false assertion.
+`indexed_physical_permutation.vpr` composes two checked restoration wands that
+permute two cells and restore their original indexing. Both original values
+are preserved. Its `_false` control rejects the final assertion, while
+`_missing_frame` rejects the final package's value frame after removing the
+intermediate value guarantees. Permission operands remain present throughout.
+
+All five expectations match on Ferrum `0e048a4`, with complete AST checks,
+one worker and branch parallelism disabled. Exact sources, commands, timings
+and diagnostics are in `audit703-707.json` and `probe703` through `probe707`
+under `target/stdlib-matrix-20261031-1236`. Each run takes under 0.3 seconds.
+These checked finite models do not qualify the Rust encoder or unbounded
+indexed collections. Silicon sign-off remains deferred to the combined gate.

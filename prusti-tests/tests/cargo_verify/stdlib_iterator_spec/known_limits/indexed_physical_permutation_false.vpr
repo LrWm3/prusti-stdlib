@@ -1,0 +1,44 @@
+// Checked finite model of physical snapshots across two index permutations.
+predicate physical(x: Ref)
+predicate indexed(i: Int, path: Seq[Int], x: Ref) { acc(physical(x), write) }
+function read(x: Ref): Int
+  requires acc(physical(x), write)
+function observe(i: Int, path: Seq[Int], x: Ref): Int
+  requires acc(indexed(i, path, x), write)
+{ unfolding acc(indexed(i, path, x), write) in read(x) }
+method compose(x: Ref, y: Ref)
+  requires (acc(indexed(0, Seq(0), x), write) && acc(indexed(1, Seq(0), y), write)) --* (acc(indexed(0, Seq(1), y), write) && acc(indexed(1, Seq(1), x), write) && observe(0, Seq(1), y) == old[lhs](observe(1, Seq(0), y)) && observe(1, Seq(1), x) == old[lhs](observe(0, Seq(0), x)))
+  requires (acc(indexed(0, Seq(1), y), write) && acc(indexed(1, Seq(1), x), write)) --* (acc(indexed(0, Seq(2), x), write) && acc(indexed(1, Seq(2), y), write) && observe(0, Seq(2), x) == old[lhs](observe(1, Seq(1), x)) && observe(1, Seq(2), y) == old[lhs](observe(0, Seq(1), y)))
+  ensures (acc(indexed(0, Seq(0), x), write) && acc(indexed(1, Seq(0), y), write)) --* (acc(indexed(0, Seq(2), x), write) && acc(indexed(1, Seq(2), y), write) && observe(0, Seq(2), x) == old[lhs](observe(0, Seq(0), x)) && observe(1, Seq(2), y) == old[lhs](observe(1, Seq(0), y)))
+{
+  package (acc(indexed(0, Seq(0), x), write) && acc(indexed(1, Seq(0), y), write)) --* (acc(indexed(0, Seq(2), x), write) && acc(indexed(1, Seq(2), y), write) && observe(0, Seq(2), x) == old[lhs](observe(0, Seq(0), x)) && observe(1, Seq(2), y) == old[lhs](observe(1, Seq(0), y))) {
+    apply (acc(indexed(0, Seq(0), x), write) && acc(indexed(1, Seq(0), y), write)) --* (acc(indexed(0, Seq(1), y), write) && acc(indexed(1, Seq(1), x), write) && observe(0, Seq(1), y) == old[lhs](observe(1, Seq(0), y)) && observe(1, Seq(1), x) == old[lhs](observe(0, Seq(0), x)))
+    apply (acc(indexed(0, Seq(1), y), write) && acc(indexed(1, Seq(1), x), write)) --* (acc(indexed(0, Seq(2), x), write) && acc(indexed(1, Seq(2), y), write) && observe(0, Seq(2), x) == old[lhs](observe(1, Seq(1), x)) && observe(1, Seq(2), y) == old[lhs](observe(0, Seq(1), y)))
+  }
+}
+method client(x: Ref, y: Ref)
+  requires x != y
+  requires acc(physical(x), write) && acc(physical(y), write)
+{
+  var before_x: Int := read(x)
+  var before_y: Int := read(y)
+  package (acc(indexed(0, Seq(0), x), write) && acc(indexed(1, Seq(0), y), write)) --* (acc(indexed(0, Seq(1), y), write) && acc(indexed(1, Seq(1), x), write) && observe(0, Seq(1), y) == old[lhs](observe(1, Seq(0), y)) && observe(1, Seq(1), x) == old[lhs](observe(0, Seq(0), x))) {
+    unfold acc(indexed(0, Seq(0), x), write)
+    unfold acc(indexed(1, Seq(0), y), write)
+    fold acc(indexed(0, Seq(1), y), write)
+    fold acc(indexed(1, Seq(1), x), write)
+  }
+  package (acc(indexed(0, Seq(1), y), write) && acc(indexed(1, Seq(1), x), write)) --* (acc(indexed(0, Seq(2), x), write) && acc(indexed(1, Seq(2), y), write) && observe(0, Seq(2), x) == old[lhs](observe(1, Seq(1), x)) && observe(1, Seq(2), y) == old[lhs](observe(0, Seq(1), y))) {
+    unfold acc(indexed(0, Seq(1), y), write)
+    unfold acc(indexed(1, Seq(1), x), write)
+    fold acc(indexed(0, Seq(2), x), write)
+    fold acc(indexed(1, Seq(2), y), write)
+  }
+  compose(x, y)
+  fold acc(indexed(0, Seq(0), x), write)
+  fold acc(indexed(1, Seq(0), y), write)
+  apply (acc(indexed(0, Seq(0), x), write) && acc(indexed(1, Seq(0), y), write)) --* (acc(indexed(0, Seq(2), x), write) && acc(indexed(1, Seq(2), y), write) && observe(0, Seq(2), x) == old[lhs](observe(0, Seq(0), x)) && observe(1, Seq(2), y) == old[lhs](observe(1, Seq(0), y)))
+  assert observe(0, Seq(2), x) == before_x
+  assert observe(1, Seq(2), y) == before_y
+  assert false
+}

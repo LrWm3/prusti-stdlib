@@ -1,0 +1,29 @@
+// Checked model of snapshot coherence through distinct indexed wrappers.
+// Abstract physical storage and full-spelling observer preconditions match Prusti.
+predicate physical(x: Ref)
+predicate indexed(i: Int, path: Seq[Int], x: Ref) { acc(physical(x), write) }
+function read(x: Ref): Int
+  requires acc(physical(x), write)
+function observe(i: Int, path: Seq[Int], x: Ref): Int
+  requires acc(indexed(i, path, x), write)
+{ unfolding acc(indexed(i, path, x), write) in read(x) }
+method coherence(i: Int, j: Int, a: Seq[Int], b: Seq[Int], x: Ref)
+  requires acc(indexed(i, a, x), 1/2) && acc(indexed(j, b, x), 1/2)
+  ensures acc(indexed(i, a, x), 1/2) && acc(indexed(j, b, x), 1/2)
+  ensures observe(i, a, x) == observe(j, b, x)
+  ensures observe(i, a, x) == old(observe(i, a, x))
+  ensures observe(j, b, x) == old(observe(j, b, x))
+{
+  unfold acc(indexed(i, a, x), 1/2)
+  unfold acc(indexed(j, b, x), 1/2)
+  fold acc(indexed(i, a, x), 1/2)
+  fold acc(indexed(j, b, x), 1/2)
+}
+method client(x: Ref)
+  requires acc(physical(x), write)
+{
+  fold acc(indexed(0, Seq[Int](), x), 1/2)
+  fold acc(indexed(1, Seq(0), x), 1/2)
+  coherence(0, 1, Seq[Int](), Seq(0), x)
+  assert observe(0, Seq[Int](), x) == observe(1, Seq(0), x)
+}

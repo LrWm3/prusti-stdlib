@@ -30,6 +30,11 @@ implementation, or unsafe internals of the standard library.
 
 ## Current qualification checkpoint (2026-11-01)
 
+**Current stopping point (latest user instruction).** Finish restoration and
+stabilize the existing generic collection and ownership proofs, including the
+combined qualification below, then pause and report back. Do not start D1–D6
+or schedule automation; the user wants to schedule automation work next.
+
 **Current backend policy (updated by the user on 2026-11-01).** Use Ferrum
 for routine implementation, specification changes, negative controls and regression
 checks. Run Silicon at major feature sign-off points, such as completed nested
@@ -59,8 +64,17 @@ passes its 32-check regression gate; retained yields across loop backedges remai
 in D2 below. Frozen experimental builds are
 kept separate from adopted changes; an encoding success or a checked Viper model
 does not establish the corresponding Rust feature. The separately authorized
-[D1–D6 follow-on scope](#follow-on-scope-authorized-on-2026-11-01) is also part of
-the remaining work.
+[D1–D6 follow-on scope](#follow-on-scope-authorized-on-2026-11-01) remains planned
+for a later resumption, after the mandatory pause above.
+
+The isolated historical-reference address repair is adopted in `606494f2d`.
+The newer combined candidate remains unaccepted: its wider gate 577, using
+frozen build 591, has audited results of 30/32 owned-iterator checks, 27/75
+owner-handoff checks, and 10/10 generic cross-crate checks. No negative was
+unexpectedly accepted. Missing value frames in generic trait calls and owner
+continuations are being repaired in candidates 600 and 601; their structural
+checks pass, but native qualification is still queued. These partial results
+do not supersede the last complete matrix or establish stabilization.
 
 ### Historical repair evidence (2026-11-01, probes 408–449)
 

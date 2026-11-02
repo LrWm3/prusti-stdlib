@@ -43,52 +43,102 @@ combined qualification. A small fix or intermediate candidate does not trigger a
 Silicon rerun. This supersedes the earlier per-change paired-validation policy
 recorded below. Keep one verifier worker and Ferrum branch parallelism off.
 
-The full dual-backend matrix has run: 1,755 of 1,842 checks passed at frozen
-revision `225eb7714` (matrix 339). Its 87 failures include positive proofs,
-negative tests with extra or incorrect diagnostics, library checks and timeouts;
-none are waived. This is the last complete matrix result, not a claim about
-the newer combined implementation.
+The single integration baseline is **`c2631cfb0`**, tagged
+`stdlib-restoration-baseline-20261102`, in `/tmp/prusti-restoration-integration`.
+Its complete git tree and SHA-256 manifest capture encoder, interface, VIR,
+contracts, adapter and PCG. All 478 compiler-source files match frozen 793; all
+six binary hashes match its build record. PCG is `791e4ca`, Ferrum is `0e048a4`.
+The original six pending main-tree files are backed up byte-for-byte and remain
+untouched. Experiments and future builds use isolated worktrees. This baseline
+is not a qualified combined implementation.
 
-Main now uses Ferrum `0e048a4` for development and includes the qualified
-metadata/storage-typing repair from `5602d5ef1` and historical enum snapshot
-reconstruction from `5ec0a95f9`. Enum replacement remains open. Builds come
-from this Prusti branch. Verification uses one worker with Ferrum branch parallelism disabled.
-Routine specification changes and negative controls use Ferrum under the policy
-above. Major feature sign-off and the final combined revision retain Silicon
-validation.
+The fixed [acceptance list](STDLIB_RESTORATION_ACCEPTANCE.json) contains **790
+Rust client cases and 2,198 matrix checks in 24 jobs**, including every failure
+from full matrix 339. Expected outcomes, exact negative locations, source hashes,
+libraries, runtime checks and the existing 180/600-second matrix limits are
+recorded. Per-case evidence and provenance are in
+`target/stdlib-matrix-20261031-1236/reconciliation-20261102/`.
+Historical 600-second passes do not qualify a 180-second matrix job. Counts from
+different compilers are never added together.
 
-Remaining repairs include combined nested-reference qualification, enum
-replacement, associated outputs, current-owner resource handoff and cross-crate
-prefix qualification. The accepted owned-iterator resource and loop repair
-passes its 32-check regression gate; retained yields across loop backedges remain
-in D2 below. Frozen experimental builds are
-kept separate from adopted changes; an encoding success or a checked Viper model
-does not establish the corresponding Rust feature. The separately authorized
-[D1–D6 follow-on scope](#follow-on-scope-authorized-on-2026-11-01) remains planned
-for a later resumption, after the mandatory pause above.
+| Area | Current evidence | Next gate |
+|---|---|---|
+| Whole matrix | Last complete matrix 339: 1,755/1,842; 87 failures, none waived | Rebuild final source and complete both backends with exact coverage |
+| Ownership, enum, local history, associated output | 793 audited 124/124; historical 722 audited 129/129 on its own compiler | Preserve as separate reference gates; rerun affected families after each repair |
+| Heavy prefix | 794: 7/8; early positive whole-program timeout at 600s | Selected first family; one frame-narrowing hypothesis below |
+| Region iterator | 794: 3/7; missing tail indexed resources in both positives and wrong early errors in both negatives | 809's checked tail-snapshot equality succeeds, but the original resource assertion still fails; model review before a repair |
+| Nested calls | 794: 9/11; repeated positive missing wand, postcondition control times out | Finish active full replay 810 and inspect its solver trace; previous failed hypotheses require model review |
+| Extra `next` | 794: 3/6; positive timeout and two wrong diagnostics | Retain all six controls; check as an affected regression of prefix framing |
+| Prefix/suffix expansion | 794 skipped 17 client proofs after the heavy failure | Skipped remains unresolved; historical 722 passes do not qualify this baseline |
+| Array contract selection | 800: 3/6; positive and two exact negatives fail, out-of-bounds control passes | Separate prerequisite investigation for existing `mut_option_owner_*` RangeFull clients; no array changes in the baseline |
+| Unstarted experiments | 806, 807, 812 and raw 813 retired before native execution | Source, binaries and structural evidence preserved; no automatic successor queue |
 
-The isolated historical-reference address repair is adopted in `606494f2d`.
-The newer combined candidate remains unaccepted: its wider gate 577, using
-frozen build 591, finished at **112/170 checks** with complete coverage and
-source/build provenance (`audit577.json`). Results are 30/32 owned-iterator checks, 27/75
-owner-handoff checks, 10/10 generic cross-crate checks, 11/12 prefix checks,
-9/11 nested-reference checks, 3/7 whole-region checks, 7/8 enum checks and
-7/7 metadata checks, with all 8 further prefix checks passing. No negative was
-unexpectedly accepted. Candidate 601 subsequently passes 23/23 small checks,
-32/75 owner checks and 12/14 iterator checks. A checked direct-restoration proof
-branch in 611 improves ownership to 59/75 while retaining 23/23 small checks.
-The 16 remaining owner failures involve multiple owners, projected fields or
-split groups. The iterator's extra-next false control fails too early, and its
-nonempty false-result control times out. Neither candidate is adopted. These
-partial results do not supersede the last complete matrix or establish stabilization.
-Candidate 628 now passes **71/75 owner checks**, retaining the original value
-frames. Only the generic split-group and same-type projected-field pairs remain
-in that gate; its small-control checks also pass 23/23. This candidate is still
-unadopted, and the other combined failures listed above remain open.
-Successor 681 now passes **80/80 ownership checks**, including the new
-zero-iteration boundary controls, using separately verified composition
-helpers. Its focused gate passes 12/12. Associated-output and combined
-collection qualification remain in progress; this is not full stabilization.
+Detailed prior experiments below are historical evidence, not current status.
+No accepted-negative error, wrong diagnostic, timeout, skipped group, encoding-only
+success or raw Viper diagnostic counts as acceptance. The latest user workflow
+requires one failure family and one falsifiable hypothesis at a time. After two
+materially different hypotheses fail for one symptom, review the model and
+produce a distinguishing reproducer before any successor patch.
+
+### Selected family: heavy-prefix ownership invariant and experiment
+
+The representative is `mut_native_resource_early_pass`, with the exact
+`mut_native_resource_early_false` control. The generic-prefix positive and both
+its exact controls belong to the affected family. All source assertions and
+prefix/suffix value obligations remain required.
+
+The physical owner is the original mutable slice of mutable references. Its
+storage predicate describes the reference slots; indexed physical predicates
+protect each referenced `u32`. An indexed key includes its logical index, path,
+physical address and type. Distinct logical indices do not establish distinct
+physical addresses, including for generic or zero-sized elements. This repair
+introduces no address-distinctness premise or permission-query invariant.
+
+At entry, `original` captures the slot/reference sequence and `initial_states`
+captures each referent's resource state. At loop position `k`, the source is
+partitioned into a consumed prefix and the live iterator tail. The prefix ghost
+sequences record exactly `k` slots and updated states; the tail retains the
+remaining permissions and its unchanged suffix observations. The saved
+`body_restore_prefix!` history connects these pieces to the entry owner.
+
+Each `next` call creates a restoration obligation from its captured post-call
+result/tail resources to the pre-call owner resources. A `Some` result temporarily
+exposes the selected physical resource; after writing 7 and recording its state,
+that borrow expires and its existing history is consumed exactly once. Loop
+restoration carries the composed history across the backedge. At an early break,
+`position == limit`; dropping the iterator discharges the remaining tail history
+and returns the original owner with unchanged slot identities, prefix values 7,
+and the untouched suffix states. Current resources, entry resources and the
+history connecting them cannot be substituted for one another.
+
+**Hypothesis H1.** Variant-result frame generation added quantified cross-products
+between every optional yield and a plain restored owner. They are derived
+additional guarantees, not source pledges or ownership permissions. Their solver
+cost caused the early-prefix regression. Restricting these added variant frames
+to variant-containing restored owners should recover the earlier proof while
+retaining the non-variant frames and the optional-owner guarantees that 793 needs.
+The preserved 806 patch is the one proposed change; 812's separate fixed-path
+pruning and every array/interface experiment remain excluded.
+
+The falsifier is a failure or timeout of the complete Rust positive or an
+incorrect diagnostic in its exact negative. Do not change the 600s whole-program,
+30,000ms assertion or 100ms internal check limits. The 794 positive explicitly
+hit the whole-program limit; this does not identify which internal query was
+expensive. Historical 722 passes in 208.35s under matching settings. After removing
+comments and generated crate identifiers only, 806's complete positive Viper
+program matches 722's exactly; the 793-to-806 difference is retained for review.
+This supports H1 but is not native qualification of the repaired integration.
+
+Build H1 from the frozen baseline in its own worktree, check the complete generated
+programs, then run the native positive and exact negative. If they pass, run all
+affected previously passing families before integrating: the full heavy-prefix
+group, extra-next controls, enum, optional/local histories, first-element and
+replacement controls, owner histories, generic/prefix libraries and suffix
+restoration. Inventory generated-program changes when deciding whether any other
+family uses the changed path. A new failure or material slowdown stops integration.
+Identical programs with different outcomes require backend investigation; repeat
+an identical run only to distinguish variability. Larger diagnostic allowances,
+if needed, are separate and never qualify a control.
 
 ### Historical repair evidence (2026-11-01, probes 408–449)
 

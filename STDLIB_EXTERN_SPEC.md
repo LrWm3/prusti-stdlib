@@ -85,7 +85,7 @@ Candidate 628 now passes **71/75 owner checks**, retaining the original value
 frames. Only the generic split-group and same-type projected-field pairs remain
 in that gate; its small-control checks also pass 23/23. This candidate is still
 unadopted, and the other combined failures listed above remain open.
-Successor 680 now passes **80/80 ownership checks**, including the new
+Successor 681 now passes **80/80 ownership checks**, including the new
 zero-iteration boundary controls, using separately verified composition
 helpers. Its focused gate passes 12/12. Associated-output and combined
 collection qualification remain in progress; this is not full stabilization.
@@ -5152,12 +5152,16 @@ continuation cannot satisfy a full slice-conversion contract. No failure is
 waived. Candidate 681 restricts pairing to opaque indirect histories and keeps
 physical continuations full. Its own rebuild, three protocol unit tests and
 11 encodings/structural checks pass; the audited native gates are now **12/12
-focused, 80/80 ownership, 6/6 first-element and 23/23 small controls**. The
-six replacement checks remain in progress. Recovery commit `7a5c8d600`
+focused, 80/80 ownership, 6/6 first-element, 23/23 small controls and
+6/6 replacement checks** (127/127 across these gates, with the focused
+ownership cases also included in the full group). Recovery commit `7a5c8d600`
 preserves this restriction and matches frozen source `a6e9e1a8…` / driver
-`0808b5e5…`. Main adoption and combined qualification remain outstanding. The projected/dynamic replacement pair separately passes its four
-checks on frozen compiler 637; its completed runner awaits the serial
-interleave's release before the final audit record is written.
+`0808b5e5…`. Main adoption and combined qualification remain outstanding. The projected/dynamic
+replacement pair separately passes an audited 4/4 checks on frozen compiler 637.
+The explicit whole-state suffix capture in 647 passes only 4/7 checks; both
+raw whole-state diagnostics 645/646 fail an indexed-resource precondition.
+These failures remain open. Existing nested-reference cases are prepared for
+a serial rerun on the exact 681 compiler.
 
 Further serial Ferrum work covers projected/dynamic indexed replacement,
 whole-state suffix captures, guarded optional resource frames, and the

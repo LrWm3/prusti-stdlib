@@ -1,0 +1,94 @@
+// Diagnostic proof model: two independently packaged continuations over half
+// resource permissions. This does not split or fraction an existing wand.
+field value: Int
+
+predicate cell(x: Ref) { acc(x.value, write) }
+predicate pair(tag: Int, left: Ref, right: Ref) {
+  acc(cell(left), write) && acc(cell(right), write)
+}
+
+function read(x: Ref): Int
+  requires acc(cell(x), 1/2)
+{ unfolding acc(cell(x), 1/2) in x.value }
+
+method compose(ct: Int, cl: Ref, cr: Ref, mt: Int, ml: Ref, mr: Ref,
+               et: Int, el: Ref, er: Ref)
+  requires acc(pair(ct, cl, cr), 1/2) --* acc(pair(mt, ml, mr), 1/2)
+  requires acc(pair(ct, cl, cr), 1/2) --* acc(pair(mt, ml, mr), 1/2)
+  requires acc(pair(mt, ml, mr), 1/2) --* acc(pair(et, el, er), 1/2)
+  requires acc(pair(mt, ml, mr), 1/2) --* acc(pair(et, el, er), 1/2)
+  ensures acc(pair(ct, cl, cr), 1/2) --* acc(pair(et, el, er), 1/2)
+  ensures acc(pair(ct, cl, cr), 1/2) --* acc(pair(et, el, er), 1/2)
+{
+  package acc(pair(ct, cl, cr), 1/2) --* acc(pair(et, el, er), 1/2) {
+    apply acc(pair(ct, cl, cr), 1/2) --* acc(pair(mt, ml, mr), 1/2)
+    apply acc(pair(mt, ml, mr), 1/2) --* acc(pair(et, el, er), 1/2)
+  }
+  package acc(pair(ct, cl, cr), 1/2) --* acc(pair(et, el, er), 1/2) {
+    apply acc(pair(ct, cl, cr), 1/2) --* acc(pair(mt, ml, mr), 1/2)
+    apply acc(pair(mt, ml, mr), 1/2) --* acc(pair(et, el, er), 1/2)
+  }
+}
+
+method restore(ct: Int, cl: Ref, cr: Ref, et: Int, el: Ref, er: Ref)
+  requires acc(pair(ct, cl, cr), write)
+  requires acc(pair(ct, cl, cr), 1/2) --* acc(pair(et, el, er), 1/2)
+  requires acc(pair(ct, cl, cr), 1/2) --* acc(pair(et, el, er), 1/2)
+  ensures acc(pair(et, el, er), write)
+  ensures cl == el ==> (unfolding acc(pair(et, el, er), write) in read(el)) ==
+    old(unfolding acc(pair(ct, cl, cr), write) in read(cl))
+  ensures cl == er ==> (unfolding acc(pair(et, el, er), write) in read(er)) ==
+    old(unfolding acc(pair(ct, cl, cr), write) in read(cl))
+  ensures cr == el ==> (unfolding acc(pair(et, el, er), write) in read(el)) ==
+    old(unfolding acc(pair(ct, cl, cr), write) in read(cr))
+  ensures cr == er ==> (unfolding acc(pair(et, el, er), write) in read(er)) ==
+    old(unfolding acc(pair(ct, cl, cr), write) in read(cr))
+{
+  unfold acc(pair(ct, cl, cr), 1/2)
+  var left: Int := read(cl)
+  var right: Int := read(cr)
+  apply acc(pair(ct, cl, cr), 1/2) --* acc(pair(et, el, er), 1/2)
+  unfold acc(pair(et, el, er), 1/2)
+  assert cl == el ==> read(el) == left
+  assert cl == er ==> read(er) == left
+  assert cr == el ==> read(el) == right
+  assert cr == er ==> read(er) == right
+  fold acc(pair(ct, cl, cr), 1/2)
+  apply acc(pair(ct, cl, cr), 1/2) --* acc(pair(et, el, er), 1/2)
+  fold acc(pair(et, el, er), 1/2)
+}
+
+method inhabited()
+{
+  var x: Ref
+  var y: Ref
+  x := new(value)
+  y := new(value)
+  x.value := 7
+  y.value := 9
+  fold acc(cell(x), write)
+  fold acc(cell(y), write)
+  fold acc(pair(0, x, y), write)
+  package acc(pair(0, x, y), 1/2) --* acc(pair(1, x, y), 1/2) {
+    unfold acc(pair(0, x, y), 1/2)
+    fold acc(pair(1, x, y), 1/2)
+  }
+  package acc(pair(0, x, y), 1/2) --* acc(pair(1, x, y), 1/2) {
+    unfold acc(pair(0, x, y), 1/2)
+    fold acc(pair(1, x, y), 1/2)
+  }
+  package acc(pair(1, x, y), 1/2) --* acc(pair(2, y, x), 1/2) {
+    unfold acc(pair(1, x, y), 1/2)
+    fold acc(pair(2, y, x), 1/2)
+  }
+  package acc(pair(1, x, y), 1/2) --* acc(pair(2, y, x), 1/2) {
+    unfold acc(pair(1, x, y), 1/2)
+    fold acc(pair(2, y, x), 1/2)
+  }
+  compose(0, x, y, 1, x, y, 2, y, x)
+  restore(0, x, y, 2, y, x)
+  unfold acc(pair(2, y, x), write)
+  assert read(x) == 7
+  assert read(y) == 9
+  assert false
+}

@@ -1,0 +1,75 @@
+field link: Ref
+field value: Int
+predicate storage(owner: Ref) { acc(owner.link, write) }
+predicate resource(cell: Ref) { acc(cell.value, write) }
+function pointer(owner: Ref): Ref
+  requires acc(storage(owner), write)
+{ unfolding acc(storage(owner), write) in owner.link }
+function contents(cell: Ref): Int
+  requires acc(resource(cell), write)
+{ unfolding acc(resource(cell), write) in cell.value }
+// The caller returns the current resource plus its checked history.
+method compose_outer(owner: Ref, entry: Ref, post: Ref)
+  requires acc(resource(post), write) --* acc(resource(entry), write)
+  ensures (acc(storage(owner), write) &&
+    (let observed_current == (pointer(owner)) in
+      (acc(resource(observed_current), write) &&
+      (acc(resource(observed_current), write) --* acc(resource(post), write))))) --* (acc(storage(owner), write) &&
+    (let observed_current == (pointer(owner)) in
+      (acc(resource(observed_current), write) &&
+      (acc(resource(observed_current), write) --* acc(resource(entry), write)))))
+{
+  package (acc(storage(owner), write) &&
+    (let observed_current == (pointer(owner)) in
+      (acc(resource(observed_current), write) &&
+      (acc(resource(observed_current), write) --* acc(resource(post), write))))) --* (acc(storage(owner), write) &&
+    (let observed_current == (pointer(owner)) in
+      (acc(resource(observed_current), write) &&
+      (acc(resource(observed_current), write) --* acc(resource(entry), write))))) {
+    var current: Ref := pointer(owner)
+    package true --* acc(resource(current), write) {}
+    package acc(resource(current), write) --* acc(resource(entry), write) {
+      apply acc(resource(current), write) --* acc(resource(post), write)
+      apply acc(resource(post), write) --* acc(resource(entry), write)
+    }
+    apply true --* acc(resource(current), write)
+  }
+}
+method client()
+{
+  var owner: Ref
+  var entry: Ref
+  var post: Ref
+  var current: Ref
+  owner := new(link)
+  entry := new(value)
+  post := new(value)
+  current := new(value)
+  entry.value := 4
+  post.value := 7
+  current.value := 13
+  fold acc(resource(entry), write)
+  fold acc(resource(post), write)
+  fold acc(resource(current), write)
+  owner.link := post
+  fold acc(storage(owner), write)
+  package acc(resource(post), write) --* acc(resource(entry), write) {}
+  compose_outer(owner, entry, post)
+  unfold acc(storage(owner), write)
+  owner.link := current
+  fold acc(storage(owner), write)
+  package acc(resource(current), write) --* acc(resource(post), write) {}
+  apply (acc(storage(owner), write) &&
+    (let observed_current == (pointer(owner)) in
+      (acc(resource(observed_current), write) &&
+      (acc(resource(observed_current), write) --* acc(resource(post), write))))) --* (acc(storage(owner), write) &&
+    (let observed_current == (pointer(owner)) in
+      (acc(resource(observed_current), write) &&
+      (acc(resource(observed_current), write) --* acc(resource(entry), write)))))
+  assert pointer(owner) == current
+  assert contents(current) == 13
+  unfold acc(resource(current), write)
+  current.value := 17
+  fold acc(resource(current), write)
+  apply acc(resource(current), write) --* acc(resource(entry), write)
+}

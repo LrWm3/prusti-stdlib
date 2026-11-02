@@ -1,0 +1,67 @@
+field link: Ref
+field value: Int
+predicate storage(owner: Ref) { acc(owner.link, write) }
+predicate resource(cell: Ref) { acc(cell.value, write) }
+function pointer(owner: Ref): Ref
+  requires acc(storage(owner), write)
+{ unfolding acc(storage(owner), write) in owner.link }
+function contents(cell: Ref): Int
+  requires acc(resource(cell), write)
+{ unfolding acc(resource(cell), write) in cell.value }
+// Require the physical owner and captured logical footprint to agree at expiry.
+method aligned_outer(owner: Ref, entry: Ref)
+  requires acc(storage(owner), write) && pointer(owner) == entry
+  requires acc(resource(entry), write)
+  ensures acc(storage(owner), write) && pointer(owner) == entry
+  ensures acc(resource(entry), write)
+  ensures (acc(storage(owner), write) && pointer(owner) == entry && acc(resource(entry), write)) --* (acc(storage(owner), write) &&
+    (let current == (pointer(owner)) in
+      (acc(resource(current), write) &&
+      (acc(resource(current), write) --* acc(resource(entry), write)))) &&
+    pointer(owner) == old[lhs](pointer(owner)) &&
+    contents(pointer(owner)) == old[lhs](contents(pointer(owner))))
+{
+  package true --* (acc(storage(owner), write) && pointer(owner) == entry && acc(resource(entry), write)) {}
+  package (acc(storage(owner), write) && pointer(owner) == entry && acc(resource(entry), write)) --* (acc(storage(owner), write) &&
+    (let current == (pointer(owner)) in
+      (acc(resource(current), write) &&
+      (acc(resource(current), write) --* acc(resource(entry), write)))) &&
+    pointer(owner) == old[lhs](pointer(owner)) &&
+    contents(pointer(owner)) == old[lhs](contents(pointer(owner)))) {
+    var current: Ref := pointer(owner)
+    package true --* acc(resource(current), write) {}
+    package acc(resource(current), write) --* acc(resource(entry), write) {}
+    apply true --* acc(resource(current), write)
+  }
+  apply true --* (acc(storage(owner), write) && pointer(owner) == entry && acc(resource(entry), write))
+}
+
+method client()
+{
+  var owner: Ref
+  var entry: Ref
+  var other: Ref
+  owner := new(link)
+  entry := new(value)
+  other := new(value)
+  owner.link := entry
+  entry.value := 4
+  other.value := 9
+  fold acc(storage(owner), write)
+  fold acc(resource(entry), write)
+  fold acc(resource(other), write)
+  aligned_outer(owner, entry)
+  unfold acc(resource(entry), write)
+  entry.value := 13
+  fold acc(resource(entry), write)
+  // Optional changed-owner control is inserted here.
+  apply (acc(storage(owner), write) && pointer(owner) == entry && acc(resource(entry), write)) --* (acc(storage(owner), write) &&
+    (let current == (pointer(owner)) in
+      (acc(resource(current), write) &&
+      (acc(resource(current), write) --* acc(resource(entry), write)))) &&
+    pointer(owner) == old[lhs](pointer(owner)) &&
+    contents(pointer(owner)) == old[lhs](contents(pointer(owner))))
+  assert pointer(owner) == entry
+  assert contents(entry) == 14
+  apply acc(resource(entry), write) --* acc(resource(entry), write)
+}

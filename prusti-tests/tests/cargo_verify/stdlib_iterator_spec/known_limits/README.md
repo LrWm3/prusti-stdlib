@@ -653,3 +653,48 @@ in `target/stdlib-matrix-20261031-1236/capture383-qualification.json`.
 These models establish the Viper proof pattern; Rust/PCG integration and
 struct/enum projection paths remain to be implemented and qualified. The earlier
 381 model failed quantified-permission injectivity and remains failed evidence.
+
+## Paired fractional resource continuations (2026-11-02)
+
+[`owner_handoff_half_resources.vpr`](owner_handoff_half_resources.vpr) verifies
+composition and restoration with two separately packaged continuations. Each
+continuation transfers half the resource permission. During final restoration,
+the other half retains observations; checked unfolding relates overlapping
+physical cells before full ownership is reassembled. All four cross-owner
+equal-address cases are covered without assuming disjoint generic keys. An
+inhabited caller changes the resource tags, swaps the two fields, and proves
+both original cell values.
+
+The positive passes Ferrum `0e048a4` in 0.35 seconds. The identical
+[`false` control](owner_handoff_half_resources_false.vpr), with a final false
+assertion, fails only at line 93 in 0.20 seconds. Both complete programs pass
+structural checks. This is a proof model, not Rust encoder qualification, and
+has not had a Silicon sign-off. It does not split an existing wand or assume
+that arbitrary wand fractions can be recombined.
+
+Exact commands, source hashes and diagnostics are retained in
+`target/stdlib-matrix-20261031-1236/probe649`, `probe650` and
+`audit649-650.json`. Runs use one verifier, disabled branch parallelism,
+`--enableMoreCompleteExhale --disableTerminationPlugin --assertTimeout 30000
+--checkTimeout 100 --proverEnableTimeBounds --timeout 600`, and
+`--proverConfigArgs 'smt.qi.eager_threshold=1000 model.partial=false smt.arith.solver=6'`.
+The next qualification is the complete failing generated split-owner program,
+including its actual generic calls and checked resource conversions.
+
+## Indexed physical value frames (2026-11-02)
+
+`indexed_physical_coherence.vpr` proves that two half-permission wrappers over
+the same physical cell preserve and agree on its snapshot, despite different
+index/path keys. Its `_false` control rejects only the final false assertion.
+`indexed_physical_permutation.vpr` composes two checked restoration wands that
+permute two cells and restore their original indexing. Both original values
+are preserved. Its `_false` control rejects the final assertion, while
+`_missing_frame` rejects the final package's value frame after removing the
+intermediate value guarantees. Permission operands remain present throughout.
+
+All five expectations match on Ferrum `0e048a4`, with complete AST checks,
+one worker and branch parallelism disabled. Exact sources, commands, timings
+and diagnostics are in `audit703-707.json` and `probe703` through `probe707`
+under `target/stdlib-matrix-20261031-1236`. Each run takes under 0.3 seconds.
+These checked finite models do not qualify the Rust encoder or unbounded
+indexed collections. Silicon sign-off remains deferred to the combined gate.

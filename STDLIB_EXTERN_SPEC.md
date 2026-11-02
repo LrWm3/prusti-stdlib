@@ -4787,16 +4787,22 @@ composition. It passes **59/75 owner checks and 23/23 small checks**, an improve
 of 27 owner checks over 601. Eight positives and their eight negative controls
 still fail for multiple owners, projected fields or split groups. Diagnostic 614
 case-splits complete cross-owner keys and considers a permutation of the whole
-footprint; its proof is queued. No key-distinctness assumption or frame removal
+footprint; it still fails a package value frame. Diagnostic 619 instead skips
+each unchanged owner’s history independently, while retaining the original
+contracts and assertions. Its full-program positive and false control are queued.
+No key-distinctness assumption or frame removal
 is used, and 611 is not adopted.
 
 The full nested-call capture diagnostic 596 verifies in 408.46 seconds with
 checked explicit entry/post capture results. Compiler candidate 609 implements
 returned capture witnesses for concrete signatures containing nested sequence
 observations. Generic type/const and trait interfaces retain their previous
-protocol. Its own build and six complete encoding/structural checks pass;
-the native nested positive and exact-negative gate is running. The raw diagnostic
-does not establish native qualification on the newer combined implementation.
+protocol. Its own build and six complete encoding/structural checks pass.
+Native qualification completes at **17/19**: 9/11 nested checks and 8/8 small
+controls. The repeated positive still fails a package value frame in 439.40
+seconds, and its false-postcondition control reaches the backend timeout.
+The raw diagnostic does not establish native qualification on the newer
+combined implementation.
 
 The pairwise indexed-resource coherence lemma 597 and finite-sequence lemma 603
 both verify, including inhabited duplicate-value controls rejected only at their
@@ -4827,6 +4833,36 @@ for native qualification. All evidence remains under
 `target/stdlib-matrix-20261031-1236`, including audits 600, 601, 602, 606, 608, 610
 and 611. Finish the remaining repairs and combined qualification, then observe
 the mandatory pause before D1–D6 and automation work.
+
+### Checked indexed correspondence and guarded captures (615–620)
+
+Diagnostic 616 extends the checked sequence lemma to all pairs of equal resource
+keys, preserving every permission and observation. In the full original program,
+the only failure remains the unsupported second-element assertion. Compiler 617
+implements the checked pair, range and whole-sequence methods, and invokes them
+when restoring scalar resources into an indexed sequence. Its selected-element
+gate passes **6/6**, including the exact negative that must reject the untouched
+second-element claim. The small restoration controls pass **23/23**. These results
+are audited for coverage, source hashes, binary provenance and exact diagnostics.
+Replacement qualification remains open; the initial replacement positive still
+encounters a permission error. No combined encoder adoption is claimed.
+
+Contract experiment 620 reuses the exact own-built 617 compiler and makes only
+an explicit suffix resource-state promise. It places the entire entry observer
+inside `old`, and removes the earlier unconditional selected-resource promise,
+which would be invalid if a later borrower changes that resource’s identity.
+The original failed 602 fixtures remain preserved. The new positive, false-value,
+false-postcondition and weak-contract negative are queued for native checks.
+
+Isolated capture candidate 615 passes **19/21** checks: metadata 7/7, enum 5/5,
+address 4/4 and generic optional-slice 3/5. Capturing only final-package arguments
+does not fix the new generic cases: the temporary output reservation still
+contains a free heap observation inside a variant guard. Candidate 618 applies
+the same guarded capture/substitution to that reservation and its application.
+Its own build, nine encodings and nine complete Viper structural checks pass;
+96 native checks are queued, including the full existing owner-handoff group.
+The original pending encoder files were restored byte for byte after each build.
+Neither capture candidate is adopted on the strength of structural checks alone.
 
 ## Follow-on scope authorized on 2026-11-01
 

@@ -5171,6 +5171,35 @@ One verifier and disabled Ferrum branch parallelism remain required. Finish
 these existing restoration/collection repairs and the combined qualification,
 then pause before D1–D6 and automation scheduling.
 
+
+The call-boundary repair in 685 moves the caller's old-state label after
+resource packing and before physical argument casts. Full-program diagnostic
+683 verifies in 4.70 seconds; 684 rejects only its final false assertion.
+The rebuilt compiler passes **7/7 whole-state suffix checks**, while the
+original pointwise spelling still fails two of six checks. Those failures
+are retained. Quantified old point observations have different continuation
+shapes at definition and call sites.
+
+Candidate 686 lowers canonical old sequence-resource observations at a bound
+quantifier index to indexing the old sequence of states. The sequence observer's
+full permission precondition remains checked; the lowering adds no axiom or
+assumed frame. Other observation shapes keep their existing encoding.
+Both original and explicit whole-state suffix forms now pass **7/7 checks
+each**, including mutated-value, untouched-value, false-postcondition and
+missing-frame controls. The focused ownership gate passes **12/12** and
+first-element compatibility passes **6/6**, all audited. The full ownership,
+small, generic and metadata gates remain in progress. Eight encodings/full
+AST checks and the three protocol unit tests pass.
+
+Recovery commits `11407f764` (call state), `0b0e730d3` (quantified observation)
+and `a214da3fd` (eight suffix fixtures) are pushed. All recovery encoder/adapter/VIR
+bytes match frozen own686 source `54b5743b…`, driver `48923708…`.
+Broader candidate 687 reuses these exact binaries for the remaining existing
+collection/restoration families after the serial prefix diagnostics and 682
+nested-reference comparison. Guarded-frame candidate 648 is separately audited
+at **53/60**; its optional and whole-region failures remain unresolved.
+No new compiler adoption or full stabilization is claimed.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user initially authorized the remaining IM and matrix repairs followed by

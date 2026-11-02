@@ -30,3 +30,5 @@ still running. The encoder snapshot remains a recovery checkpoint, not a main
 integration or full-matrix qualification. The unselected array conditional
 contract from 764 has been removed from the current candidate; its commit and
 failing fixtures remain preserved.
+
+Array conditional-domain checkpoint d8b6a59ea (candidate 807) builds and passes ten encoding and full AST checks. The standard scalar and reference-containing array domains are emitted; custom-index calls receive no SliceIndex guarantees. This is not native qualification. Native conditional/lifetime controls, array positives/negatives and original optional-owner cases remain queued. The contract is immediate-only; no conditional multi-stage expiry is claimed. Candidate 806 separately narrows derived variant framing after the 793 early-break positive timed out at 600 seconds; its normalized early-break VPR matches passing candidate 722, but native verification is still pending.

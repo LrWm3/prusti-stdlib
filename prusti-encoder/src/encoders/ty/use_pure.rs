@@ -770,6 +770,11 @@ impl<'vir> TyUsePureStruct<'vir> {
 }
 
 impl<'vir> TyUsePureField<'vir> {
+    /// Identity of this field in snapshot projections, before generic casts.
+    pub(crate) fn projection_name(&self) -> &'vir str {
+        self.pure.read.name
+    }
+
     pub fn read<Curr, Next>(
         &self,
         snap: vir::ExprGenCSnap<'vir, Curr, Next>,

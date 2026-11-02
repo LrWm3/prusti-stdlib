@@ -2,6 +2,7 @@ use crate::encoders::{
     EncodeResult, ImpureEncVisitor, MirLocalDefEncOutput, MirSpecEnc, Pure,
     mir_fn::RustSignature,
     mir_pure::PostCapture,
+    mir_shared::PureRvalueEnc,
     pure::spec::{EncodedPledge, MirSpecEncMode, PledgeArgs, PledgeExpr},
     ty::{
         RustTyDecomposition,
@@ -264,6 +265,7 @@ pub(crate) struct RestoredOwnerHandoff<'vir> {
     owner: OwnerIdentity<'vir>,
     group: usize,
     continuation: vir::Wand<'vir>,
+    projection_path: Option<&'vir [&'vir str]>,
     guards: Vec<vir::ExprBool<'vir>>,
 }
 
@@ -277,6 +279,7 @@ impl<'vir> RestoredOwnerHandoff<'vir> {
         visitor: &mut ImpureEncVisitor<'vir, '_, E>,
         root: mir::Local,
         group: usize,
+        fields: &[mir::PlaceElem<'vir>],
         block: mir::BasicBlock,
     ) {
         let Some(node) = visitor
@@ -305,6 +308,20 @@ impl<'vir> RestoredOwnerHandoff<'vir> {
         else {
             return;
         };
+        let &ty::TyKind::Ref(_, mut selected, ty::Mutability::Mut) =
+            visitor.body.local_decls[root].ty.kind()
+        else {
+            return;
+        };
+        let mut path = Vec::new();
+        for field in fields {
+            let mir::ProjectionElem::Field(index, field_ty) = *field else {
+                return;
+            };
+            path.push(visitor.ty_use_pure(selected).expect_structlike()[index].projection_name());
+            selected = field_ty;
+        }
+        self.projection_path = Some(visitor.vcx.alloc_slice(&path));
         self.origin = Some(root);
         self.selection = None;
         self.group = group;
@@ -356,6 +373,7 @@ impl<'vir> OwnerHandoff<'vir> {
             owner: self.owner,
             group: self.group,
             continuation: resource_restoration_wand(visitor.vcx, current, self.entry),
+            projection_path: None,
             guards,
         }
     }
@@ -392,7 +410,8 @@ impl<'vir> OwnerHandoff<'vir> {
         let vcx = visitor.vcx;
         let reservation = vcx.mk_wand(vcx.mk_bool::<true>(), current);
         script.push(vcx.mk_package_stmt(reservation, &[]));
-        let restore = visitor.restore_owner_handoffs(self.owner, self.group, Some(self.argument));
+        let restore =
+            visitor.restore_owner_handoffs(self.owner, self.group, Some(self.argument), None);
         script.push(vcx.mk_package_stmt(
             resource_restoration_wand(vcx, current, self.entry),
             vcx.alloc_slice(&direct_resource_restoration(
@@ -423,12 +442,16 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
         owner: OwnerIdentity<'vir>,
         group: usize,
         origin: Option<mir::Local>,
+        projection_path: Option<&[&str]>,
     ) -> Vec<vir::Stmt<'vir>> {
         let mut restored = self
             .restored_owner_handoffs
             .iter()
             .rev()
             .filter(|handoff| handoff.group == group)
+            .filter(|handoff| {
+                projection_path.is_none_or(|path| handoff.projection_path == Some(path))
+            })
             .filter(|handoff| match (origin, handoff.origin) {
                 (Some(left), Some(right)) => left == right,
                 _ => true,
@@ -747,6 +770,7 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
                             owner,
                             node.region_idx().index(),
                             Some(node.mir_local()),
+                            None,
                         );
                         let mut observe = |label| {
                             self.wands.encode_predicates_for_function_shape_node(
@@ -763,7 +787,43 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
                             .unwrap_or_else(|| self.vcx.mk_bool::<true>());
                         let entry = observe(vir::OldLabel::None)
                             .unwrap_or_else(|| self.vcx.mk_bool::<true>());
-                        owner_restorations.push((current, entry, history));
+                        let mut paths = self
+                            .restored_owner_handoffs
+                            .iter()
+                            .filter(|handoff| {
+                                handoff.group == node.region_idx().index()
+                                    && handoff.origin == Some(node.mir_local())
+                            })
+                            .filter_map(|handoff| handoff.projection_path)
+                            .collect::<Vec<_>>();
+                        paths.sort();
+                        paths.dedup();
+                        // A whole-owner continuation or loop summary cannot be
+                        // split into independent projected-field histories.
+                        if self.restored_owner_handoffs.iter().any(|handoff| {
+                            handoff.group == node.region_idx().index()
+                                && handoff.origin == Some(node.mir_local())
+                                && handoff.projection_path.is_none()
+                        }) || self.owner_summaries.iter().any(|summary| {
+                            summary.group == node.region_idx().index()
+                                && summary.origin == node.mir_local()
+                        }) {
+                            paths.clear();
+                        }
+                        let split = projected_resource_parts(current, entry, &paths);
+                        if let Some(parts) = split {
+                            for (path, current, entry) in parts {
+                                let history = self.restore_owner_handoffs(
+                                    owner,
+                                    node.region_idx().index(),
+                                    Some(node.mir_local()),
+                                    Some(path),
+                                );
+                                owner_restorations.push((current, entry, history));
+                            }
+                        } else {
+                            owner_restorations.push((current, entry, history));
+                        }
                     }
                 }
             }
@@ -2076,6 +2136,80 @@ impl<'vir> WandEncOutput<'vir> {
 /// would unnecessarily forget its current observations. This is a proof
 /// branch only: the original consequent, including every value fact, remains
 /// checked. More complex/quantified layouts keep their original proof script.
+/// Select the exact opaque leaves for known struct-field paths. The complete
+/// enclosing footprint must be covered; conditional/quantified layouts and
+/// ambiguous projections keep the original whole-owner history.
+fn projected_resource_parts<'vir>(
+    current: vir::ExprBool<'vir>,
+    entry: vir::ExprBool<'vir>,
+    paths: &[&'vir [&'vir str]],
+) -> Option<Vec<(&'vir [&'vir str], vir::ExprBool<'vir>, vir::ExprBool<'vir>)>> {
+    fn leaves<'vir>(expr: vir::ExprBool<'vir>, out: &mut Vec<vir::ExprBool<'vir>>) -> bool {
+        match expr.kind {
+            vir::ExprKindData::PredicateApp(app) if app.target == "indirect_resources" => {
+                out.push(expr);
+                true
+            }
+            vir::ExprKindData::BinOp(op) if op.kind == vir::BinOpKind::And => {
+                leaves(op.lhs.downcast_ty(), out) && leaves(op.rhs.downcast_ty(), out)
+            }
+            vir::ExprKindData::Const(vir::ConstData::Bool(true)) => true,
+            _ => false,
+        }
+    }
+    fn matches_path(expr: vir::ExprBool<'_>, path: &[&str]) -> bool {
+        let vir::ExprKindData::PredicateApp(app) = expr.kind else {
+            return false;
+        };
+        let mut value = app.args[0];
+        for expected in path.iter().rev() {
+            loop {
+                let vir::ExprKindData::AdtDestructor(inner, field) = value.kind else {
+                    return false;
+                };
+                value = inner;
+                if field.name == *expected {
+                    break;
+                }
+                if !field.name.starts_with("make_concrete_s_") {
+                    return false;
+                }
+            }
+        }
+        !path.is_empty()
+    }
+    let mut before = Vec::new();
+    let mut after = Vec::new();
+    if paths.is_empty()
+        || !leaves(current, &mut before)
+        || !leaves(entry, &mut after)
+        || before.len() != paths.len()
+        || after.len() != paths.len()
+    {
+        return None;
+    }
+    let mut result = Vec::new();
+    for &path in paths {
+        let left = before
+            .iter()
+            .enumerate()
+            .filter(|(_, value)| matches_path(**value, path))
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>();
+        let right = after
+            .iter()
+            .enumerate()
+            .filter(|(_, value)| matches_path(**value, path))
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>();
+        let ([left], [right]) = (left.as_slice(), right.as_slice()) else {
+            return None;
+        };
+        result.push((path, before.remove(*left), after.remove(*right)));
+    }
+    (before.is_empty() && after.is_empty()).then_some(result)
+}
+
 fn same_resource_footprint<'vir>(
     vcx: &'vir vir::VirCtxt<'vir>,
     current: vir::ExprBool<'vir>,

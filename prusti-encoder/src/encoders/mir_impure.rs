@@ -1238,11 +1238,12 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                             handoff.group(),
                         );
                         let mut restored_handoff = handoff.restore(self, guards, origin, selection);
-                        if let Some((root, group)) = projection {
+                        if let Some((root, group, fields)) = projection {
                             restored_handoff.remap_projected_owner(
                                 self,
                                 root,
                                 group,
+                                &fields,
                                 call.location().block,
                             );
                         }
@@ -1548,7 +1549,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         block: mir::BasicBlock,
         argument: mir::Local,
         group: usize,
-    ) -> Option<(mir::Local, usize)> {
+    ) -> Option<(mir::Local, usize, Vec<mir::PlaceElem<'vir>>)> {
         use pcg::borrow_pcg::{GeneralizedLifetime, region_projection::ExtractRegionsCtxt};
         use prusti_rustc_interface::index::IndexVec;
         if group != 1 {
@@ -1570,7 +1571,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             _ => return None,
         };
         let mut seen = FxHashSet::default();
-        let mut projected = false;
+        let mut fields = Vec::new();
         while seen.insert(local) {
             let mut definitions = Vec::new();
             for data in self.body.basic_blocks.iter() {
@@ -1588,7 +1589,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 }
             }
             if definitions.is_empty() && local.index() > 0 && local.index() <= self.body.arg_count {
-                if !projected {
+                if fields.is_empty() {
                     return None;
                 }
                 let regions: IndexVec<_, GeneralizedLifetime<'vir>> = self
@@ -1607,7 +1608,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     })
                     .collect::<Vec<_>>();
                 return match matches.as_slice() {
-                    [group] => Some((local, *group)),
+                    [group] => Some((local, *group, fields)),
                     _ => None,
                 };
             }
@@ -1622,7 +1623,9 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                             .iter()
                             .all(|part| matches!(part, mir::ProjectionElem::Field(..))) =>
                 {
-                    projected |= source.projection.len() > 1;
+                    let mut prefix = source.projection[1..].to_vec();
+                    prefix.extend(fields);
+                    fields = prefix;
                     source.local
                 }
                 mir::Rvalue::Use(mir::Operand::Move(source) | mir::Operand::Copy(source), _) => {

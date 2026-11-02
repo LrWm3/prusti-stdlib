@@ -5006,6 +5006,51 @@ checks a symbolic index and projected reference field on that same compiler.
 These runs must finish before integration decisions. All evidence remains under
 `target/stdlib-matrix-20261031-1236`. The mandatory pause below is unchanged.
 
+The suffix mismatch is now localized structurally: its quantified old
+heap-dependent point observation retains `old(...)` in the callee wand and
+`old[pre0](...)` in the caller wand. Their shapes differ even when the other
+capture witnesses agree. Full-program experiments 645/646 replace those four
+observations with indexing into an old whole-sequence resource-state snapshot;
+the existing checked sequence-observer postcondition supplies the pointwise
+law. Contract, package and application shapes then agree exactly. Native Rust
+candidate 647 expresses the same entry capture explicitly in the checked
+generic suffix pledge, with selected-value, untouched-value, postcondition and
+missing-frame negative controls. All five encodings and structural checks pass;
+Ferrum proofs remain queued. Neither the original failed fixture nor any
+original full-program obligation has been discarded.
+
+Candidate 648 separately extends checked equal-key transfer frames through
+conditional enum branches, retaining both branch guards. The old traversal
+handled implications but skipped conditional resource expressions. Its own
+Prusti rebuild, 12 encodings and 12 structural checks pass; the native optional
+slice, metadata, enum, region and small ownership controls remain pending. This
+is not yet a qualified repair of the current-versus-entry ownership transition.
+
+For the remaining generic split-owner composition, small proof pair 649/650
+tests a different interface before any encoder change: two independently
+packaged continuations each consume and restore half a resource permission.
+During final restoration, one half can retain observations while the other
+continuation runs, allowing checked overlap facts before full ownership is
+reassembled. The model includes composition, all four cross-owner alias cases,
+and an inhabited construction with an exact final-false control. It does not
+split an existing magic wand. Both structural checks pass; proof results are
+pending. If successful, next test the complete failing generated Rust program,
+including fractional observation/conversion requirements, before considering a
+general implementation. The distinction matters: [Dardinier et al.'s CAV 2022
+paper](https://dardinier.me/papers/CAV22_Wands.pdf) shows that fractions of
+arbitrary magic wands cannot in general be freely recombined. No such operation
+or additional axiom is proposed here.
+
+Run 643 remains active. Its iterator library passes in 213.00 seconds, prefix
+positive in 64.25 seconds, reference-write positive in 82.19 seconds, and the
+extra-next exact-false control in 270.29 seconds. The extra-next positive still
+fails an indexed permission obligation (509.80 seconds), and its nonempty
+wrong-result control fails before the intended diagnostic (361.44 seconds).
+These partial results do not qualify the iterator group. Small proof pair
+649/650 runs between completed groups by holding only the broader runner's
+parent; its active verifier is allowed to finish, and the parent is resumed
+afterward. One verifier and disabled Ferrum branch parallelism remain required.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user initially authorized the remaining IM and matrix repairs followed by

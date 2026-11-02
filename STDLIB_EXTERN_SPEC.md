@@ -5775,6 +5775,41 @@ The existing conditional and lifetime-negative controls must pass first. None
 of these encoding-only results establishes array verification or conditional
 multi-stage expiry support.
 
+### Remaining restoration diagnostics and fixed-path frames (2026-11-02)
+
+Broader native 794 finishes the heavy-prefix family at **7/8**: the early-break
+positive reaches the 600-second limit, while the generic positive and every
+negative control match. Prefix and suffix expansion are recorded as skipped,
+not passed. Its region family remains **3/7**: both positives and both negative
+controls encounter the same early missing tail-resource permission. In the
+nested family, the repeated-call positive still fails wand matching and the
+false-postcondition control times out; the simpler positive passes. These
+failures prevent adoption and milestone sign-off.
+
+Full-program diagnostic 809 adds one checked equality between the current
+iterator-tail snapshot and the tail returned by `split_at_mut`, before the
+restoration package. It retains all original obligations. Diagnostic 810 is an
+unchanged full-program replay of the repeated nested caller, intended to recover
+a precise failure position. Both pass structural checking and await serial
+Ferrum execution. Earlier method-filtered successes remain diagnostic only.
+
+Candidate 812 builds on 806 and omits derived frame clauses between indexed
+resources whose fixed sequence paths are provably different. Those clauses have
+false identity guards. All permissions, applicable frame guarantees and source
+pledges remain. Its own Prusti build, three paired-resource unit checks, eight
+Rust encodings and eight full-program structural checks pass. The complete
+native nested family is queued after the unchanged diagnostic baseline. This is
+a performance hypothesis, not a claimed restoration fix or qualified compiler.
+Its source patch is `fc8ad28846388e52d89f6d36f44cfedac3515bc5b8e1506c91b202e6d6eab69c`;
+the driver is `196dcaaa72be403b1fad8022f24c9c0790c317277c7e8413aab6092e348927e4`.
+
+The queue remains one worker with branch parallelism disabled: complete 794,
+then array candidate 800, diagnostics 809/810, focused 812, and candidates
+806/807. Only sleeping controllers with no child processes were replaced to
+reorder pending work; no active verification was interrupted. Routine checks
+remain Ferrum-only. Complete and combine existing restoration/collection
+repairs, qualify the combined source, then pause before D1–D6 and automation.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user initially authorized the remaining IM and matrix repairs followed by

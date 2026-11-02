@@ -1,3 +1,4 @@
+pub mod array;
 use crate::*;
 
 pub mod eq;

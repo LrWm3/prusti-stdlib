@@ -111,6 +111,14 @@ impl<'vir> FromToVars<'vir> {
     }
 }
 
+/// Call-site refinements selected only with proved Rust bounds.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ConditionalCallSpec {
+    Preconditions,
+    Postconditions,
+    Pledges,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum EdgeAction {
     Add,
@@ -3003,8 +3011,37 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         &self,
         callee: DefId,
         args: ty::GenericArgsRef<'vir>,
-        select_pledges: bool,
+        kind: ConditionalCallSpec,
+    ) -> Vec<(DefId, ty::GenericArgsRef<'vir>)> {
+        let mut selected: Vec<_> = self
+            .direct_conditional_specs_for_call(callee, args, kind)
+            .into_iter()
+            .map(|id| (id, args))
+            .collect();
+        // MIR may name the trait item while the actual call uses a concrete
+        // implementation. Keep each selected spec's own generic substitution;
+        // e.g. IndexMut<Self, I> differs from array IndexMut<T, I, N>.
+        if kind != ConditionalCallSpec::Pledges {
+            let (resolved, context) = self.gargs(args).resolve_method(callee);
+            if resolved != callee {
+                let args = self.vcx.tcx().mk_args(context.args());
+                selected.extend(
+                    self.direct_conditional_specs_for_call(resolved, args, kind)
+                        .into_iter()
+                        .map(|id| (id, args)),
+                );
+            }
+        }
+        selected
+    }
+
+    fn direct_conditional_specs_for_call(
+        &self,
+        callee: DefId,
+        args: ty::GenericArgsRef<'vir>,
+        kind: ConditionalCallSpec,
     ) -> Vec<DefId> {
+        let select_pledges = kind == ConditionalCallSpec::Pledges;
         let tcx = self.vcx.tcx();
         encoders::spec::with_type_spec(|specs| {
             let Some(graph) = specs.get_proc_spec(&callee) else {
@@ -3016,20 +3053,37 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 && tcx
                     .impl_of_assoc(callee)
                     .is_some_and(|impl_id| !tcx.impl_is_of_trait(impl_id));
-            if select_pledges && external_trait_method {
+            let external_trait_impl = graph.base_spec.extern_spec.is_some()
+                && tcx
+                    .impl_of_assoc(callee)
+                    .is_some_and(|id| tcx.impl_is_of_trait(id));
+            // Multi-stage conditional expiry is not supported for trait methods.
+            if select_pledges && (external_trait_method || external_trait_impl) {
                 return Vec::new();
             }
             if (tcx.opt_associated_item(callee).is_some()
                 && !external_trait_method
-                && !external_inherent_method)
+                && !external_inherent_method
+                && !external_trait_impl)
                 || (graph.base_spec.extern_spec.is_some()
                     && !external_trait_method
-                    && !external_inherent_method)
+                    && !external_inherent_method
+                    && !external_trait_impl)
                 || !graph.base_spec.trusted.extract_inherit().unwrap_or(false)
             {
                 return Vec::new();
             }
-            let base_specs: Vec<_> = if select_pledges {
+            if kind == ConditionalCallSpec::Preconditions && !external_trait_impl {
+                return Vec::new();
+            }
+            let base_specs: Vec<_> = if kind == ConditionalCallSpec::Preconditions {
+                graph
+                    .base_spec
+                    .pres
+                    .extract_with_selective_replacement_iter()
+                    .copied()
+                    .collect()
+            } else if select_pledges {
                 graph
                     .base_spec
                     .pledges
@@ -3044,19 +3098,147 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     .copied()
                     .collect()
             };
+            let applicable = |post: &DefId| {
+                // A refinement can make a lifetime early-bound even if it
+                // is late-bound on the function. Its generic slots then do
+                // not match the call's substitutions, so skip it.
+                let spec_args = ty::GenericArgs::identity_for_item(tcx, *post);
+                if spec_args.len() != args.len()
+                    || spec_args.iter().zip(args).any(|(expected, actual)| {
+                        !matches!(
+                            (expected.kind(), actual.kind()),
+                            (
+                                ty::GenericArgKind::Lifetime(_),
+                                ty::GenericArgKind::Lifetime(_)
+                            ) | (ty::GenericArgKind::Type(_), ty::GenericArgKind::Type(_))
+                                | (ty::GenericArgKind::Const(_), ty::GenericArgKind::Const(_))
+                        )
+                    })
+                {
+                    return false;
+                }
+                tcx.param_env(*post).caller_bounds().iter().all(|clause| {
+                    let instantiated = ty::EarlyBinder::bind(tcx, clause)
+                        .instantiate(tcx, args)
+                        .skip_normalization();
+                    if instantiated.has_non_region_infer()
+                        || !instantiated.kind().bound_vars().is_empty()
+                    {
+                        return false;
+                    }
+                    // A same-type bound can produce a projection equality
+                    // whose two sides are syntactically identical. This
+                    // is reflexive without normalizing or erasing regions;
+                    // rustc's predicate solver may not normalize the term.
+                    if let ty::ClauseKind::Projection(projection) =
+                        instantiated.kind().skip_binder()
+                        && let Some(rhs) = projection.term.as_type()
+                        && let ty::TyKind::Alias(_, alias) = rhs.kind()
+                        && let ty::AliasTyKind::Projection { def_id } = alias.kind
+                        && let ty::AliasTermKind::ProjectionTy { def_id: lhs_def_id } =
+                            projection.projection_term.kind
+                        && def_id == lhs_def_id
+                        && alias.args == projection.projection_term.args
+                    {
+                        return true;
+                    }
+                    // A fresh solver does not know MIR's inference regions.
+                    // Universally quantify each occurrence independently:
+                    // proving this stronger goal is sufficient for the call.
+                    let mut variables = Vec::new();
+                    let mut unsupported = false;
+                    let kind = ty::fold_regions(
+                        tcx,
+                        instantiated.kind().skip_binder(),
+                        |region, depth| {
+                            if matches!(region.kind(), ty::RegionKind::ReBound(..)) {
+                                unsupported = true;
+                                return region;
+                            }
+                            let var = ty::BoundVar::from_usize(variables.len());
+                            variables
+                                .push(ty::BoundVariableKind::Region(ty::BoundRegionKind::Anon));
+                            ty::Region::new_bound(
+                                tcx,
+                                depth,
+                                ty::BoundRegion {
+                                    var,
+                                    kind: ty::BoundRegionKind::Anon,
+                                },
+                            )
+                        },
+                    );
+                    if unsupported {
+                        return false;
+                    }
+                    if !variables.is_empty() {
+                        let predicate = tcx.mk_predicate(ty::Binder::bind_with_vars(
+                            ty::PredicateKind::Clause(kind),
+                            tcx.mk_bound_variable_kinds(&variables),
+                        ));
+                        return prusti_interface::environment::EnvQuery::new(tcx)
+                            .prove_poly_trait_without_region_requirements(
+                                predicate,
+                                tcx.param_env(self.def_id),
+                            );
+                    }
+                    if let ty::ClauseKind::Projection(projection) =
+                        instantiated.kind().skip_binder()
+                    {
+                        // Normalize both sides without erasing regions. This
+                        // branch is reached only for a region-free bound; the
+                        // quantified lifetime path above remains conservative.
+                        // Reject every unresolved obligation and every region
+                        // requirement introduced by normalization.
+                        use prusti_rustc_interface::trait_selection::traits::{
+                            ObligationCause, ObligationCtxt,
+                        };
+                        let query = prusti_interface::environment::EnvQuery::new(tcx);
+                        let infcx = query.infer_ctxt();
+                        let ocx = ObligationCtxt::new(&infcx);
+                        let lhs = projection.projection_term.to_term(tcx, ty::IsRigid::No);
+                        let Ok((lhs, rhs)) = ocx.deeply_normalize(
+                            &ObligationCause::dummy(),
+                            tcx.param_env(self.def_id),
+                            ty::Unnormalized::new((lhs, projection.term)),
+                        ) else {
+                            return false;
+                        };
+                        if !ocx.evaluate_obligations_error_on_ambiguity().no_errors()
+                            || !infcx.take_registered_region_obligations().is_empty()
+                            || infcx.leak_check(ty::UniverseIndex::ROOT, None).is_err()
+                        {
+                            return false;
+                        }
+                        let constraints = infcx.take_and_reset_region_constraints();
+                        return constraints.verifys.is_empty()
+                            && constraints.constraints.is_empty()
+                            && lhs == rhs
+                            && !lhs.has_non_region_infer()
+                            && !rhs.has_non_region_infer();
+                    }
+                    prusti_interface::environment::EnvQuery::new(tcx)
+                        .evaluate_predicate(instantiated.as_predicate(), tcx.param_env(self.def_id))
+                })
+            };
             let mut result = Vec::new();
             for conditional in graph.specs_with_constraints.values() {
-                // A conditional precondition can make the refined contract
-                // applicable on a different domain; do not assume its effects.
-                if conditional
+                let pres: Vec<_> = conditional
                     .pres
                     .extract_with_selective_replacement_iter()
-                    .next()
-                    .is_some()
+                    .copied()
+                    .collect();
+                // Only external trait implementations have checked conditional
+                // domains in this path. Never import an effect unless every
+                // precondition's substitutions and bounds can also be selected.
+                if !pres.is_empty()
+                    && (!external_trait_impl || select_pledges || !pres.iter().all(&applicable))
                 {
                     continue;
                 }
-                let selected: Vec<_> = if select_pledges {
+                let selected: Vec<_> = if kind == ConditionalCallSpec::Preconditions {
+                    pres
+                } else if select_pledges {
                     conditional
                         .pledges
                         .extract_with_selective_replacement_iter()
@@ -3074,95 +3256,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     if base_specs.contains(post) {
                         continue;
                     }
-                    // A refinement can make a lifetime early-bound even if it
-                    // is late-bound on the function. Its generic slots then do
-                    // not match the call's substitutions, so skip it.
-                    let spec_args = ty::GenericArgs::identity_for_item(tcx, *post);
-                    if spec_args.len() != args.len()
-                        || spec_args.iter().zip(args).any(|(expected, actual)| {
-                            !matches!(
-                                (expected.kind(), actual.kind()),
-                                (
-                                    ty::GenericArgKind::Lifetime(_),
-                                    ty::GenericArgKind::Lifetime(_)
-                                ) | (ty::GenericArgKind::Type(_), ty::GenericArgKind::Type(_))
-                                    | (ty::GenericArgKind::Const(_), ty::GenericArgKind::Const(_))
-                            )
-                        })
-                    {
-                        continue;
-                    }
-                    let bounds_hold = tcx.param_env(*post).caller_bounds().iter().all(|clause| {
-                        let instantiated = ty::EarlyBinder::bind(tcx, clause)
-                            .instantiate(tcx, args)
-                            .skip_normalization();
-                        if instantiated.has_non_region_infer()
-                            || !instantiated.kind().bound_vars().is_empty()
-                        {
-                            return false;
-                        }
-                        // A same-type bound can produce a projection equality
-                        // whose two sides are syntactically identical. This
-                        // is reflexive without normalizing or erasing regions;
-                        // rustc's predicate solver may not normalize the term.
-                        if let ty::ClauseKind::Projection(projection) =
-                            instantiated.kind().skip_binder()
-                            && let Some(rhs) = projection.term.as_type()
-                            && let ty::TyKind::Alias(_, alias) = rhs.kind()
-                            && let ty::AliasTyKind::Projection { def_id } = alias.kind
-                            && let ty::AliasTermKind::ProjectionTy { def_id: lhs_def_id } =
-                                projection.projection_term.kind
-                            && def_id == lhs_def_id
-                            && alias.args == projection.projection_term.args
-                        {
-                            return true;
-                        }
-                        // A fresh solver does not know MIR's inference regions.
-                        // Universally quantify each occurrence independently:
-                        // proving this stronger goal is sufficient for the call.
-                        let mut variables = Vec::new();
-                        let mut unsupported = false;
-                        let kind = ty::fold_regions(
-                            tcx,
-                            instantiated.kind().skip_binder(),
-                            |region, depth| {
-                                if matches!(region.kind(), ty::RegionKind::ReBound(..)) {
-                                    unsupported = true;
-                                    return region;
-                                }
-                                let var = ty::BoundVar::from_usize(variables.len());
-                                variables
-                                    .push(ty::BoundVariableKind::Region(ty::BoundRegionKind::Anon));
-                                ty::Region::new_bound(
-                                    tcx,
-                                    depth,
-                                    ty::BoundRegion {
-                                        var,
-                                        kind: ty::BoundRegionKind::Anon,
-                                    },
-                                )
-                            },
-                        );
-                        if unsupported {
-                            return false;
-                        }
-                        if !variables.is_empty() {
-                            let predicate = tcx.mk_predicate(ty::Binder::bind_with_vars(
-                                ty::PredicateKind::Clause(kind),
-                                tcx.mk_bound_variable_kinds(&variables),
-                            ));
-                            return prusti_interface::environment::EnvQuery::new(tcx)
-                                .prove_poly_trait_without_region_requirements(
-                                    predicate,
-                                    tcx.param_env(self.def_id),
-                                );
-                        }
-                        prusti_interface::environment::EnvQuery::new(tcx).evaluate_predicate(
-                            instantiated.as_predicate(),
-                            tcx.param_env(self.def_id),
-                        )
-                    });
-                    if bounds_hold {
+                    if applicable(post) {
                         result.push(*post);
                     }
                 }
@@ -3176,9 +3270,9 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         callee: DefId,
         args: ty::GenericArgsRef<'vir>,
     ) -> EncodeResult<'vir, Vec<PledgeExpr<'vir>>, E> {
-        let ids = self.conditional_specs_for_call(callee, args, true);
+        let ids = self.conditional_specs_for_call(callee, args, ConditionalCallSpec::Pledges);
         let mut result = Vec::new();
-        for id in ids {
+        for (id, args) in ids {
             let spec = self.deps.require_dep::<MirPureEnc>(MirPureEncTask {
                 encoding_depth: 0,
                 parent_def_id: id,
@@ -5093,15 +5187,30 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
 
                         let label_pre = self.reserve_label("pre");
                         let (call, main_call_offset) = func_out.call(method_in, dest, label_pre);
-                        let conditional_posts =
-                            self.conditional_specs_for_call(func_def_id, caller_substs, false);
-                        let conditional_args = if conditional_posts.is_empty() {
-                            Vec::new()
+                        let conditional_pres = self.conditional_specs_for_call(
+                            func_def_id,
+                            caller_substs,
+                            ConditionalCallSpec::Preconditions,
+                        );
+                        let conditional_posts = self.conditional_specs_for_call(
+                            func_def_id,
+                            caller_substs,
+                            ConditionalCallSpec::Postconditions,
+                        );
+                        let conditional_args =
+                            if conditional_posts.is_empty() && conditional_pres.is_empty() {
+                                Vec::new()
+                            } else {
+                                args.iter()
+                                    .map(|arg| self.encode_operand_snap_immediate(&arg.node))
+                                    .collect::<EncodeResult<'vir, Vec<_>, E>>()?
+                            };
+                        let conditional_label = if conditional_pres.is_empty() {
+                            label_pre
                         } else {
-                            args.iter()
-                                .map(|arg| self.encode_operand_snap_immediate(&arg.node))
-                                .collect::<EncodeResult<'vir, Vec<_>, E>>()?
+                            self.new_label("conditional_pre")
                         };
+                        let conditional_pre_error = verification_error.clone();
                         vcx.handle_error(
                             "call.precondition:assertion.false",
                             move |reason_span_opt| {
@@ -5121,6 +5230,55 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                                 span.into(),
                             )])
                         });
+                        // Check the selected domain in the caller's physical
+                        // representation, before packing call resources.
+                        if !conditional_pres.is_empty() {
+                            let mut spec_args = FxHashMap::default();
+                            for (index, arg) in conditional_args.iter().enumerate() {
+                                spec_args.insert(
+                                    mir::Local::from(index + 1),
+                                    vcx.mk_local_labelled_old_expr(*arg, conditional_label),
+                                );
+                            }
+                            let spec_args = vcx.alloc(spec_args);
+                            for (pre, spec_substs) in conditional_pres {
+                                let spec = self.deps.require_dep::<MirPureEnc>(MirPureEncTask {
+                                    encoding_depth: 0,
+                                    parent_def_id: pre,
+                                    gargs: self.gargs(spec_substs),
+                                    kind: PureKind::Spec {
+                                        context: self.def_id,
+                                        mode: MirSpecEncMode::Impure,
+                                        allow_after_call: false,
+                                        allow_before_expiry: false,
+                                    },
+                                })?;
+                                let expr = spec.expr.downcast_ty::<vir::Bool>().reify(
+                                    vcx,
+                                    (
+                                        pre,
+                                        spec_args,
+                                        vir::OldLabel::Label(conditional_label),
+                                        None,
+                                    ),
+                                );
+                                let error = conditional_pre_error.clone();
+                                vcx.handle_error(
+                                    "assert.failed:assertion.false",
+                                    move |reason_span| {
+                                        let mut error = error.clone();
+                                        if let Some(reason_span) = reason_span {
+                                            error.add_note_mut(
+                                                "the failing conditional precondition is here",
+                                                Some(reason_span.into()),
+                                            );
+                                        }
+                                        Some(vec![error])
+                                    },
+                                );
+                                self.stmt(vcx.mk_assert_stmt(expr));
+                            }
+                        }
                         let main_call_position =
                             self.current_stmts.as_ref().unwrap().len() + main_call_offset;
                         self.stmts(call);
@@ -5176,16 +5334,16 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                             for (index, arg) in conditional_args.into_iter().enumerate() {
                                 spec_args.insert(
                                     mir::Local::from(index + 1),
-                                    vcx.mk_local_labelled_old_expr(arg, label_pre),
+                                    vcx.mk_local_labelled_old_expr(arg, conditional_label),
                                 );
                             }
                             spec_args.insert(mir::Local::from(args.len() + 1), result);
                             let spec_args = vcx.alloc(spec_args);
-                            for post in conditional_posts {
+                            for (post, spec_substs) in conditional_posts {
                                 let spec = self.deps.require_dep::<MirPureEnc>(MirPureEncTask {
                                     encoding_depth: 0,
                                     parent_def_id: post,
-                                    gargs: self.gargs(caller_substs),
+                                    gargs: self.gargs(spec_substs),
                                     kind: PureKind::Spec {
                                         // Substitutions refer to caller parameters,
                                         // including bounds on associated types.
@@ -5197,7 +5355,12 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                                 })?;
                                 let expr = spec.expr.downcast_ty::<vir::Bool>().reify(
                                     vcx,
-                                    (post, spec_args, vir::OldLabel::Label(label_pre), None),
+                                    (
+                                        post,
+                                        spec_args,
+                                        vir::OldLabel::Label(conditional_label),
+                                        None,
+                                    ),
                                 );
                                 self.stmt(vcx.mk_inhale_stmt(expr));
                             }

@@ -5520,6 +5520,21 @@ failure reporting to locate its exact source operation. Its full AST check
 passes; it is queued after 724, with no method filter or backend-setting change.
 This replay is for fault localization, not qualification.
 
+Candidate 722 completes its selected native gate at **129/129 audited checks**:
+generic library 10, metadata 7, focused prefix 8, exported prefix library 12,
+owner histories 80 and combined suffix restoration 12. The exported prefix
+library passes in 278.82 seconds. All selected coverage, source/build provenance
+and exact negative diagnostics match. The combined suffix selection has 12
+checks; adding the earlier separate seven-check runs would duplicate common
+checks. The exact compiler is retained at recovery `2d7088fa6`.
+
+This qualifies the selected core regressions on one own-built compiler, not the
+full stdlib matrix or the remaining optional-owner, enum, nested-call, region
+and extra-next cases. Native 723 now tests optional-owner restoration, followed
+by its clearing/rotation controls if the existing group passes. Candidate 724
+and diagnostic 725 remain serially queued. The mandatory pause before D1–D6
+has not yet been reached.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user initially authorized the remaining IM and matrix repairs followed by

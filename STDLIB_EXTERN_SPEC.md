@@ -81,6 +81,10 @@ The 16 remaining owner failures involve multiple owners, projected fields or
 split groups. The iterator's extra-next false control fails too early, and its
 nonempty false-result control times out. Neither candidate is adopted. These
 partial results do not supersede the last complete matrix or establish stabilization.
+Candidate 628 now passes **71/75 owner checks**, retaining the original value
+frames. Only the generic split-group and same-type projected-field pairs remain
+in that gate; its small-control checks also pass 23/23. This candidate is still
+unadopted, and the other combined failures listed above remain open.
 
 ### Historical repair evidence (2026-11-01, probes 408–449)
 
@@ -4863,6 +4867,50 @@ Its own build, nine encodings and nine complete Viper structural checks pass;
 96 native checks are queued, including the full existing owner-handoff group.
 The original pending encoder files were restored byte for byte after each build.
 Neither capture candidate is adopted on the strength of structural checks alone.
+
+### Owner history ordering and current capture qualification (621–630)
+
+Full-program diagnostic 625 verifies in 7.32 seconds, with its sole false
+assertion rejected in 7.17 seconds. It compares complete resource keys, bypasses
+unchanged histories, and restores one owner's entry resource before consuming
+another owner's equal-key current resource. Complete permutations need no history
+replay. Every branch proves the original wand, including all value frames; no
+key-distinctness axiom is added. Compiler candidate 628 implements this strategy
+for two flat owner footprints and retains the original strategy for other layouts.
+Its eight encoding and structural checks pass. The full owner gate is audited at
+**71/75**, improving by 12 checks over 611, and the small gate passes **23/23**.
+The remaining positive/negative pairs are `generic_split_groups` and
+`projected_same_type`. Experiment 630 retains projected field histories separately
+and tests the same checked ordering in the latter complete program.
+
+Capture candidate 618 completes at **47/96**. Its generic optional-slice gate is
+4/5, metadata 7/7, enum 5/5, address 4/4 and owner 27/75. The 75 owner outcomes are
+identical to an audited run of the adopted-main compiler (623); these are existing
+failures, not newly introduced capture regressions. The generic definition's
+observer error is repaired, but the generic caller still fails restoration.
+Direct optional-slice experiment 626 passes 4/5: its false controls are exact,
+while the positive cannot prove the returned length after RangeFull indexing.
+Experiment 629 uses built-in array-to-slice coercion to isolate that boundary.
+The original failed clients remain preserved.
+
+Combining captures with the staged encoder exposed an incorrect classification
+of physical storage inside nested references. Candidate 624 classifies the
+resource group's lifetime kind, instead of treating only outer argument group
+zero as physical storage. All 13 encodings and structural checks pass. Its native
+gate completes at **48/52**: selected-element 6/6, small controls 23/23, enum 5/5,
+generic optional-slice 4/5, metadata 6/7 and explicit suffix 4/6. The suffix
+specification's definition verifies, but its caller cannot apply the restoration
+wand. The metadata negative has an extra resource-unpack helper postcondition
+failure as well as the intended false assertion, so it remains a failed check.
+Candidate 622's earlier encoding failure and all intermediate evidence are kept.
+
+The full extra-next false replay 612 fails an earlier indexed-resource permission
+check in 516.78 seconds and reports incomplete quantifier reasoning. This remains
+a failed negative qualification. The separate-method-solver comparison is queued;
+no default backend setting has changed. Source, binary, exact-diagnostic and
+coverage audits remain under `target/stdlib-matrix-20261031-1236`. These repairs
+continue within the current stabilization scope; the mandatory pause below still
+applies before deferred feature work.
 
 ## Follow-on scope authorized on 2026-11-01
 

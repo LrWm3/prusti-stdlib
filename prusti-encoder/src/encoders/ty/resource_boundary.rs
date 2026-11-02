@@ -62,6 +62,34 @@ enum BoundaryKind<'vir> {
 }
 
 impl<'vir> ResourceBoundary<'vir> {
+    pub fn scalar_views_on_heap(
+        &self,
+        snapshot: vir::ExprSnap<'vir>,
+        label: &'vir str,
+    ) -> Vec<super::resource_conversion::ScalarResourceView<'vir>> {
+        vir::with_vcx(|vcx| match &self.kind {
+            BoundaryKind::Leaf(conversion) => conversion.scalar_views(snapshot),
+            BoundaryKind::Reference {
+                reference,
+                physical,
+                nested,
+                ..
+            } => {
+                let address = reference.deref_access(snapshot.downcast_ty());
+                let stored = vcx.mk_local_labelled_old_expr(physical.ref_to_snap(address), label);
+                let value = reference.cast_to_caller_ctx(stored.downcast_ty());
+                nested.scalar_views_on_heap(value, label)
+            }
+            BoundaryKind::Fields(fields) => fields
+                .iter()
+                .flat_map(|(_, field, nested)| {
+                    nested.scalar_views_on_heap(field.read(snapshot.downcast_ty()), label)
+                })
+                .collect(),
+            _ => Vec::new(),
+        })
+    }
+
     pub fn is_empty(&self) -> bool {
         matches!(self.kind, BoundaryKind::Empty)
     }

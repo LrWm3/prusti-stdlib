@@ -1314,7 +1314,7 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         .or_insert_with(|| (facts.clone(), Vec::new()));
                     guards.push(self.vcx.mk_conj(&condition));
                 }
-                for (id, wand, _, _, _) in self.encode_function_call_wands(&edge)? {
+                for (id, wand, _, _, _, _) in self.encode_function_call_wands(&edge)? {
                     if dropped_result
                         && let Some(resources) = self.call_result_resources.get(&(call_block, id))
                     {

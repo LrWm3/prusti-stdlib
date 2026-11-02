@@ -42,6 +42,7 @@ pub(crate) type CallWand<'vir> = (
     Vec<vir::Stmt<'vir>>,
     Vec<vir::Stmt<'vir>>,
     Vec<OwnerHandoff<'vir>>,
+    Vec<crate::encoders::ty::resource_conversion::ScalarResourceView<'vir>>,
 );
 
 /// Observations made together at one call share their captured value. In
@@ -1331,7 +1332,7 @@ impl<'vir> WandEncOutput<'vir> {
                 visitor,
             )?
             .into_iter()
-            .map(|(_, wand, _, _, _)| wand)
+            .map(|(_, wand, _, _, _, _)| wand)
             .collect())
     }
 
@@ -1420,6 +1421,7 @@ impl<'vir> WandEncOutput<'vir> {
                     .insert((visitor.current_block.unwrap(), id), resources);
             }
             let signature = RustSignature::new(self.function_data.def_id());
+            let mut scalar_views = Vec::new();
             let mut convert = |node: FunctionShapeNode<Generalized>,
                                pack,
                                heap|
@@ -1443,6 +1445,10 @@ impl<'vir> WandEncOutput<'vir> {
                                 actual: source.decompose_normalize(call_ctx),
                                 selected: Some(opaque.ty(visitor.vcx.tcx())),
                             })?;
+                    if pack && let Some(label) = heap {
+                        scalar_views
+                            .extend(conversion.scalar_views_on_heap(args[node.mir_local()], label));
+                    }
                     Ok(match heap {
                         Some(label) => {
                             conversion.at_snapshot_on_heap(args[node.mir_local()], pack, label)
@@ -1572,7 +1578,7 @@ impl<'vir> WandEncOutput<'vir> {
                     }
                 }
             }
-            wands.push((id, wand, before, after, handoffs));
+            wands.push((id, wand, before, after, handoffs, scalar_views));
         }
         if materialize {
             let def_id = self.function_data.def_id();

@@ -17,6 +17,15 @@ use super::{
 
 pub(crate) struct ResourceConversionEnc;
 
+/// A scalar referent required by a concrete instantiation of an opaque group.
+/// Its generic cast lets a temporary indexed exposure survive ordinary PCG
+/// storage restoration before the same wrapper is closed again.
+#[derive(Clone)]
+pub(crate) struct ScalarResourceView<'vir> {
+    pub resource: vir::PredicateApp<'vir>,
+    pub to_generic: Vec<vir::Stmt<'vir>>,
+}
+
 #[derive(Clone)]
 pub(crate) struct ResourceConversion<'vir> {
     pub physical: TyUseImpure<'vir>,
@@ -58,6 +67,29 @@ enum ConversionKind<'vir> {
 }
 
 impl<'vir> ResourceConversion<'vir> {
+    pub fn scalar_views(&self, snapshot: vir::ExprSnap<'vir>) -> Vec<ScalarResourceView<'vir>> {
+        match &self.kind {
+            ConversionKind::Mutable {
+                reference,
+                physical,
+                cast,
+                nested,
+            } if nested.has_trivial_resources() => {
+                let address = reference.deref_access(snapshot.downcast_ty());
+                vec![ScalarResourceView {
+                    resource: physical.ref_to_pred_app(address, None),
+                    to_generic: cast.cast_to_callee_ctx(address).into_iter().collect(),
+                }]
+            }
+            ConversionKind::Struct(fields) => fields
+                .iter()
+                .flat_map(|(field, nested)| nested.scalar_views(field.read(snapshot.downcast_ty())))
+                .collect(),
+            // Guarded and quantified layouts retain their existing conversion.
+            _ => Vec::new(),
+        }
+    }
+
     /// A deliberately conservative test for an empty instantiated group.
     /// Finite owned fields can establish emptiness recursively. Unknown types,
     /// arrays, and raw-pointer-backed ownership cannot establish it merely
@@ -372,7 +404,11 @@ impl<'vir> ResourceConversion<'vir> {
             let extent = extent.unwrap_or_else(|| {
                 usize_ty
                     .expect_primitive()
-                    .snap_to_prim(caster.cast_to_caller_ctx(metadata.upcast_ty()).downcast_ty())
+                    .snap_to_prim(
+                        caster
+                            .cast_to_caller_ctx(metadata.upcast_ty())
+                            .downcast_ty(),
+                    )
                     .downcast_ty()
             });
             statements.push(typing.establish_extent(storage, extent));
@@ -575,7 +611,12 @@ impl TaskEncoder for ResourceConversionEnc {
         let resource = ResourceUse::new(deps, *task)?;
         let unit = unit_metadata(deps)?;
         let is_str = vir::with_vcx(|vcx| {
-            task.ty == RustTyDecomposition::from_ty(vcx.tcx().types.str_, super::generics::GParams::empty()).ty
+            task.ty
+                == RustTyDecomposition::from_ty(
+                    vcx.tcx().types.str_,
+                    super::generics::GParams::empty(),
+                )
+                .ty
         });
         let kind = match task.ty.zip(pure).specifics {
             // Only the known byte string has no indirect resources. Keep its

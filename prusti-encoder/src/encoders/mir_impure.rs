@@ -215,6 +215,7 @@ where
         (vir::ExprInt<'vir>, vir::ExprBool<'vir>),
     >,
     pub pending_array_closures: Vec<vir::Stmt<'vir>>,
+    pub pending_scalar_reclosures: Vec<vir::Stmt<'vir>>,
 
     // for the current basic block
     pub current_fpcs: Option<PcgBasicBlock<'enc, 'vir>>,
@@ -957,6 +958,13 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         {
             self.flush_array_closures();
         }
+        if edge_action.is_add()
+            || matches!(edge.kind(), BorrowPcgEdgeKind::Coupled(_))
+            || matches!(edge.kind(), BorrowPcgEdgeKind::BorrowFlow(flow)
+                if matches!(flow.kind(), BorrowFlowEdgeKind::Assignment(_) | BorrowFlowEdgeKind::Aggregate { .. }))
+        {
+            self.flush_scalar_reclosures();
+        }
         let cond_conjuncts = self.edge_condition(edge);
         // For each block `b` where the edge validity depends on the successor taken from `b`,
         // every successor must be valid.
@@ -1010,6 +1018,100 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
     fn flush_array_closures(&mut self) {
         let statements = std::mem::take(&mut self.pending_array_closures);
         self.stmts(statements);
+    }
+
+    fn flush_scalar_reclosures(&mut self) {
+        let statements = std::mem::take(&mut self.pending_scalar_reclosures);
+        self.stmts(statements);
+    }
+
+    /// A delayed scalar obligation can outlive an indexed view of its current
+    /// referent. Expose only a wrapper that is actually held, using the complete
+    /// scalar resource key; its index/path comes from an encoded expansion.
+    /// All operations are checked, and every opened wrapper is restored after
+    /// the intervening physical folds, before another call or phase boundary.
+    fn open_indexed_scalar_views(
+        &mut self,
+        views: &[crate::encoders::ty::resource_conversion::ScalarResourceView<'vir>],
+        guards: &[vir::ExprBool<'vir>],
+    ) {
+        struct Prefixes<'vir>(Vec<[vir::ExprDyn<'vir>; 2]>);
+        impl<'vir> vir::Folder<'vir, (), !> for Prefixes<'vir> {
+            fn fold_expr(&mut self, expr: vir::ExprDyn<'vir>) -> Option<vir::ExprDyn<'vir>> {
+                if let vir::ExprKindData::PredicateApp(app) = expr.kind
+                    && app.target == "indexed_p_Param"
+                {
+                    let prefix = [app.args[0], app.args[1]];
+                    if !self
+                        .0
+                        .iter()
+                        .any(|old| old.iter().zip(&prefix).all(|(a, b)| std::ptr::eq(*a, *b)))
+                    {
+                        self.0.push(prefix);
+                    }
+                }
+                expr.super_fold_with(self)
+            }
+        }
+        let vcx = self.vcx;
+        let mut prefixes = Prefixes(Vec::new());
+        let mut captures = self.array_resource_captures.values().collect::<Vec<_>>();
+        captures.sort_by_cached_key(|(_, resource)| format!("{resource:?}"));
+        for (_, resource) in captures {
+            let _ = resource.fold_with(&mut prefixes);
+        }
+        for view in views {
+            if view.resource.target != "p_Param" {
+                continue;
+            }
+            for prefix in &prefixes.0 {
+                let args = prefix
+                    .iter()
+                    .chain(view.resource.args)
+                    .copied()
+                    .collect::<Vec<_>>();
+                let wrapper = vcx.alloc(vir::PredicateAppData {
+                    target: "indexed_p_Param",
+                    args: vcx.alloc_slice(&args),
+                    perm: None,
+                });
+                let held = vcx
+                    .mk_bin_op_expr(
+                        vir::BinOpKind::CmpLt,
+                        vcx.mk_no_perm(),
+                        vcx.mk_predicate_perm_expr(wrapper),
+                    )
+                    .downcast_ty();
+                let raw = vcx
+                    .mk_bin_op_expr(
+                        vir::BinOpKind::CmpLt,
+                        vcx.mk_no_perm(),
+                        vcx.mk_predicate_perm_expr(view.resource),
+                    )
+                    .downcast_ty::<vir::Bool>();
+                let needed = vcx.mk_conj(&[
+                    held,
+                    vcx.mk_unary_op_expr(vir::UnOpKind::Not, raw.upcast_ty())
+                        .downcast_ty(),
+                ]);
+                let opened = self.new_tmp(vir::TYPE_BOOL);
+                self.stmt(vcx.mk_pure_assign_stmt(opened, needed));
+                self.stmt(vcx.mk_if_stmt(
+                    opened,
+                    vcx.alloc_slice(&[vcx.mk_unfold_stmt(wrapper)]),
+                    &[],
+                ));
+                let mut close = vec![vcx.mk_if_stmt(raw, &[], vcx.alloc_slice(&view.to_generic))];
+                close.push(vcx.mk_fold_stmt(wrapper));
+                let mut condition = guards.to_vec();
+                condition.push(opened);
+                self.pending_scalar_reclosures.push(vcx.mk_if_stmt(
+                    vcx.mk_conj(&condition),
+                    vcx.alloc_slice(&close),
+                    &[],
+                ));
+            }
+        }
     }
 
     fn pcs_handle_edge_conditionless(
@@ -1187,7 +1289,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 let call = call_edge.metadata();
                 // Deduplicate obligations, not entire calls: one call can
                 // produce several wands that expire independently.
-                for (id, wand, before, after, handoffs) in
+                for (id, wand, before, after, handoffs, scalar_views) in
                     self.encode_function_call_wands(coupled)?
                 {
                     let key = (call.location().block, id, edge.conditions().clone());
@@ -1195,6 +1297,8 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         continue;
                     }
                     to_skip.push(key);
+                    let guards = self.edge_condition(edge);
+                    self.open_indexed_scalar_views(&scalar_views, &guards);
                     let (before, after) = self.freshen_call_application(before, after);
                     self.stmts(before);
                     if matches!(
@@ -1827,6 +1931,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             )?;
         }
         self.flush_array_closures();
+        self.flush_scalar_reclosures();
         Ok(())
     }
 
@@ -2217,11 +2322,13 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 }
                 PcgAction::Owned(action) => {
                     self.flush_array_closures();
+                    self.flush_scalar_reclosures();
                     self.pcg_repack(action.kind())?;
                 }
             }
         }
         self.flush_array_closures();
+        self.flush_scalar_reclosures();
         Ok(())
     }
 
@@ -4770,6 +4877,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     )?;
                 }
                 self.flush_array_closures();
+                self.flush_scalar_reclosures();
                 let wand_packages = self.package_wands(borrows, &already_unblocked)?;
                 self.current_fpcs = Some(current_fpcs);
                 self.stmts(wand_packages);

@@ -290,19 +290,25 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         let Some(array) = indirect.array else {
             return Ok(());
         };
-        if !fold && self.package_resource_stage.is_none() {
+        if !fold && self.package_resource_stage.is_none() && self.has_local_collection_histories() {
             let mut old = WandOldOuter::Label(label);
-            let original =
-                self.encode_lifetime_projection_resources(target, &mut old, None, None)?;
-            if let Some(sequence) = super::fn_wand::unique_collection_sequence(
-                self.vcx.mk_conj(&original),
-                "s_Array_to_seq",
-            ) {
-                let ty::TyKind::Array(element, _) = ty.kind() else {
-                    unreachable!()
-                };
-                self.restore_local_collection_histories(*element, sequence);
-            }
+            let PcgLifetimeProjectionBase::Place(place) =
+                target.base().to_pcg_lifetime_projection_base()
+            else {
+                unreachable!()
+            };
+            let address = self.encode_place(owner)?.expr.expect_predicate();
+            let address = self.configure_old(place, address, &mut old);
+            let address = match target.label() {
+                Some(LifetimeProjectionLabel::Location(at)) => self
+                    .vcx
+                    .maybe_apply_label(address, Some(self.get_location_label(at))),
+                _ => address,
+            };
+            let ty::TyKind::Array(element, _) = ty.kind() else {
+                unreachable!()
+            };
+            self.restore_local_collection_histories(*element, address);
         }
         let mut old_outer = WandOldOuter::Label(label);
         let index = self

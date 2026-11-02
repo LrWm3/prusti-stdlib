@@ -4126,10 +4126,19 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
         result
     }
 
+    pub(crate) fn has_local_collection_histories(&self) -> bool {
+        self.restored_owner_handoffs
+            .iter()
+            .any(|history| history.local_collection.is_some())
+    }
+
+    // Array-to-slice unsizing preserves the physical owner address. Match that
+    // owner, not its entry contents: successive calls can permute the same
+    // collection, and their linear histories must compose newest first.
     pub(crate) fn restore_local_collection_histories(
         &mut self,
         element: ty::Ty<'vir>,
-        sequence: vir::ExprSeq<'vir>,
+        address: vir::ExprRef<'vir>,
     ) {
         if self.package_resource_stage.is_some() {
             return;
@@ -4145,7 +4154,7 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
             }
             let mut guards = history.guards;
             guards.push(local.entry_guard);
-            guards.push(self.vcx.mk_eq_expr(local.entry, sequence));
+            guards.push(self.vcx.mk_eq_expr(history.owner.address, address));
             guards.push(
                 self.vcx
                     .mk_eq_expr(local.consumed, self.vcx.mk_bool::<false>()),

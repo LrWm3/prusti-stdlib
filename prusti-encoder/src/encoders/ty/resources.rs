@@ -498,7 +498,7 @@ fn emit_state_adt<'vir>(program: &mut task_encoder::Program<'vir>) {
     });
 }
 
-fn sequence_state_function<'vir>()
+pub(crate) fn sequence_state_function<'vir>()
 -> vir::FunctionIdn<'vir, (vir::Seq, vir::TyVal, vir::Int), vir::Seq> {
     vir::with_vcx(|vcx| {
         vir::FunctionIdn::new(

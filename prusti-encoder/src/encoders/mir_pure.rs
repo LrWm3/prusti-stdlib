@@ -1081,13 +1081,36 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                                         self.current_span(),
                                     ));
                                 }
+                                let old_resource_point = self.spec_closure
+                                    && builtin == PrustiBuiltin::SequenceResourceState;
                                 let expr = if builtin.reads_heap() && self.old_mode {
                                     self.vcx.mk_lazy_expr(
                                         "old_mut_slice_contents",
                                         expr.ty(),
                                         Box::new(move |vcx, lctx: ExprInput<'vir>| {
                                             use vir::Reify;
-                                            vcx.mk_old(expr.reify(vcx, lctx), lctx.2).kind
+                                            let value = expr.reify(vcx, lctx);
+                                            // A bound index cannot be captured outside its
+                                            // quantifier. Capture the sequence observation
+                                            // instead, then index it with the same bound
+                                            // variable. The whole-sequence observer keeps
+                                            // its checked permission precondition; no heap
+                                            // snapshot or frame is assumed here.
+                                            if old_resource_point
+                                                && let vir::ExprKindData::FuncApp(app) = value.kind
+                                                && app.target == "indirect_sequence_element_state"
+                                                && let vir::ExprKindData::Old(index) = app.args[2].kind
+                                                && let vir::ExprKindData::Local(bound) = index.expr.kind
+                                                && bound.name.starts_with("qvar_")
+                                            {
+                                                let states = crate::encoders::ty::resources::sequence_state_function()
+                                                    .call()(app.args[0].downcast_ty(), app.args[1].downcast_ty(), vcx.mk_uint::<0>());
+                                                return vcx.mk_seq_index_expr(
+                                                    vcx.mk_old(states, lctx.2),
+                                                    index.expr.downcast_ty(),
+                                                ).kind;
+                                            }
+                                            vcx.mk_old(value, lctx.2).kind
                                         }),
                                     )
                                 } else if builtin.reads_heap() && self.before_expiry_mode {

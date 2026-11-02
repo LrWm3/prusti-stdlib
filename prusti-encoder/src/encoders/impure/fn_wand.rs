@@ -821,7 +821,8 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
                     }
                     let mut indexed = HasIndexed(false);
                     let _ = expression.fold_with(&mut indexed);
-                    (opaque || (dependent_stages && indexed.0)).then_some(expression)
+                    (opaque || ((dependent_stages || self.reserve_indexed_inputs) && indexed.0))
+                        .then_some(expression)
                 })
                 .collect::<Vec<_>>()
         };
@@ -1117,6 +1118,7 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
             package_script.extend(crate::encoders::ty::indexed_coherence::restoration_calls(
                 self.vcx, wand.lhs, wand.rhs,
             ));
+            package_script.extend(self.expose_restored_scalar_inputs(wand.rhs));
 
             for EncodedPledge {
                 expiry_postcondition,
@@ -3950,6 +3952,118 @@ pub(crate) struct OwnerSummary<'vir> {
 }
 
 impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
+    /// Establish scalar separation from actual primitive field permissions at
+    /// entry, while both the indexed source and standalone input are owned.
+    /// The checked helpers preserve complete keys, variant guards and values.
+    pub(crate) fn prepare_indexed_scalar_separation(
+        &mut self,
+    ) -> EncodeResult<'vir, Vec<vir::Stmt<'vir>>, E> {
+        use crate::encoders::ty::indexed_separation::{
+            IndexedSeparationEnc, IndexedSeparationTask,
+        };
+        let args = PledgeExpr::pledge_args(
+            self.local_defs[mir::RETURN_PLACE].impure_snap,
+            self.body
+                .args_iter()
+                .map(|arg| self.local_defs[arg].impure_snap),
+        );
+        let mut scalars = Vec::new();
+        for arg in self.body.args_iter() {
+            let ty::TyKind::Ref(_, referent, ty::Mutability::Mut) =
+                self.body.local_decls[arg].ty.kind()
+            else {
+                continue;
+            };
+            if !matches!(
+                referent.kind(),
+                ty::TyKind::Uint(..) | ty::TyKind::Int(..) | ty::TyKind::Bool | ty::TyKind::Char
+            ) {
+                continue;
+            }
+            let Some(node) = self
+                .wands
+                .inputs
+                .iter()
+                .copied()
+                .find(|node| node.mir_local() == arg && node.region_idx().index() == 0)
+            else {
+                continue;
+            };
+            if let Some(owner) = self
+                .wands
+                .input_owner(node, args, None, self.vcx, self.deps)
+            {
+                scalars.push((
+                    arg,
+                    RustTyDecomposition::from_ty(*referent, self.def_id),
+                    owner.address,
+                ));
+            }
+        }
+        if scalars.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut statements = Vec::new();
+        for node in self.wands.inputs.clone() {
+            let source = self.body.local_decls[node.mir_local()].ty;
+            let ty::TyKind::Ref(_, slice, ty::Mutability::Mut) = source.kind() else {
+                continue;
+            };
+            let ty::TyKind::Slice(element) = slice.kind() else {
+                continue;
+            };
+            let regions: IndexVec<_, GeneralizedLifetime<'vir>> =
+                self.vcx.tcx().extract_regions(source);
+            let Some(selected) = regions.get(node.region_idx()) else {
+                continue;
+            };
+            let element_regions: IndexVec<_, GeneralizedLifetime<'vir>> =
+                self.vcx.tcx().extract_regions(*element);
+            let Some((index, _)) = element_regions
+                .iter_enumerated()
+                .find(|(_, region)| *region == selected)
+            else {
+                continue;
+            };
+            let Some(projection) = projection_for_generalized_idx(
+                *element,
+                index,
+                RustTyDecomposition::from_ty(*element, self.def_id),
+                self.vcx.tcx(),
+            ) else {
+                continue;
+            };
+            let Some(resource) = self.wands.encode_predicates_for_function_shape_node(
+                self.vcx,
+                self.deps,
+                node,
+                None,
+                None,
+                None,
+                |i| args[i],
+            ) else {
+                continue;
+            };
+            let Some(sequence) = unique_collection_sequence(resource, "s_Slice_to_seq") else {
+                continue;
+            };
+            for &(arg, scalar, address) in &scalars {
+                if arg == node.mir_local() {
+                    continue;
+                }
+                let helper =
+                    self.deps
+                        .require_dep::<IndexedSeparationEnc>(IndexedSeparationTask {
+                            projection,
+                            scalar,
+                        })?;
+                statements.extend(helper.statements(sequence, address));
+            }
+        }
+        self.reserve_indexed_inputs = !statements.is_empty();
+        Ok(statements)
+    }
+
     pub(crate) fn prepare_owner_summaries(&mut self) -> Vec<vir::Stmt<'vir>> {
         if self.spec_blocks.loop_specs.is_empty() {
             return Vec::new();

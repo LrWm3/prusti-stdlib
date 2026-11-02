@@ -129,6 +129,7 @@ pub fn test_entrypoint<'tcx>(
     crate::encoders::ty::resource_collection::ResourceElementStateEnc::emit_outputs(&mut program);
     crate::encoders::ty::resource_collection::ResourceSequenceStateEnc::emit_outputs(&mut program);
     crate::encoders::ty::resource_collection::ResourceCollectionEnc::emit_outputs(&mut program);
+    crate::encoders::ty::indexed_separation::IndexedSeparationEnc::emit_outputs(&mut program);
     crate::encoders::ty::resource_collection::ResourceStateBoxSequenceEnc::emit_outputs(
         &mut program,
     );

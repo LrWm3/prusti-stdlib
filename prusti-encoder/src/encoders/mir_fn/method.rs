@@ -467,6 +467,7 @@ impl TaskEncoder for MethodEnc {
                     indexed_reads: Default::default(),
                     package_resource_stage: None,
                     package_optional_element: None,
+                    reserve_indexed_inputs: false,
                     from_to_vars: Default::default(),
                     loop_snapshot_frames: Vec::new(),
                     loop_restoration_frames: Default::default(),
@@ -487,6 +488,7 @@ impl TaskEncoder for MethodEnc {
                 // if we encountered an error/cycle during encoding, we don't
                 // emit a method body; encoding errors additionally surface as
                 // early errors rather than silently degrading to a stub
+                start_stmts.extend(visitor.prepare_indexed_scalar_separation()?);
                 start_stmts.extend(visitor.prepare_owner_origins());
                 start_stmts.extend(visitor.prepare_owner_summaries());
                 match visitor.visit_body(body) {

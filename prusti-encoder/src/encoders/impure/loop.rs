@@ -290,6 +290,7 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         let Some(array) = indirect.array else {
             return Ok(());
         };
+        self.flush_scalar_reclosures();
         if !fold && self.package_resource_stage.is_none() && self.has_local_collection_histories() {
             let mut old = WandOldOuter::Label(label);
             let PcgLifetimeProjectionBase::Place(place) =
@@ -449,6 +450,7 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         let Some(array) = indirect.array else {
             return Ok(());
         };
+        self.flush_scalar_reclosures();
         let mut old_outer = WandOldOuter::Label(label);
         let index = if fold {
             index

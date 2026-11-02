@@ -5043,9 +5043,26 @@ continuation interface to paired half-resource continuations and supplies
 checked concrete composition/coherence helpers. The original Rust bodies,
 client obligations and concrete final restoration contract remain; only that
 contract's restoration proof is replaced. Both full-program structural checks
-pass; proof results are pending. Test these actual generic calls and
-fractional observation/conversion requirements before considering a general
-encoder implementation. The distinction matters: [Dardinier et al.'s CAV 2022
+pass. The complete positive passes Ferrum in **4.44 seconds**; the negative
+fails only at the intended final assertion in **4.43 seconds**. Exact source
+hashes and diagnostics are audited in `audit654-655.json`. The smaller 652/653
+control also passes using the existing full-permission spelling of snapshot
+function reads, so the raw proof needs no observer-interface change.
+
+Next implement the paired protocol consistently for ordinary opaque transfer
+wands as well as owner handoffs, retained call obligations and loop summaries.
+Boundary conversions run once per logical stage. Compose both halves of the
+complete history before concrete restoration: restoring each full step
+separately can lose an overlap between the final and original owners that is
+absent from an intermediate owner. Generate checked partial-resource coherence
+helpers from known layouts, retaining complete keys and actual field paths.
+First qualify the native failing positive/negative pair, then all owner,
+replacement and generic loop controls. Detailed checked-program derivation and
+integration constraints are retained in
+`target/stdlib-matrix-20261031-1236/half-resource-integration-notes.md`.
+The general encoder is not implemented or qualified yet.
+
+The distinction matters: [Dardinier et al.'s CAV 2022
 paper](https://dardinier.me/papers/CAV22_Wands.pdf) shows that fractions of
 arbitrary magic wands cannot in general be freely recombined. No such operation
 or additional axiom is proposed here.
@@ -5056,12 +5073,14 @@ extra-next exact-false control in 270.29 seconds. The extra-next positive still
 fails an indexed permission obligation (509.80 seconds), and its nonempty
 wrong-result control fails before the intended diagnostic (361.44 seconds).
 The completed iterator group is audited at **30/32**, and the generic collection
-group at **10/10**. The prefix library still times out after 600 seconds.
+group at **10/10**. The prefix group is audited at **11/12**: all clients and
+exact negatives pass, but its library still times out after 600 seconds.
 The fresh checkout omitted the 50 owner fixtures, so its owner group did not
 start; this setup failure is retained. Retry 651 restores the exact fixture
-inventory from 632 and runs all 75 checks on the same own637 compiler in a
-fresh namespace. Do not claim full 170-check coverage until that retry and
-the remaining 643 groups complete. Small proof pairs and the owner retry run
+inventory from 632 and is audited at **73/75** on the same own637 compiler in
+a fresh namespace. Only the original generic split-owner positive and its
+negative fail their restoration value frame. Do not claim full 170-check
+coverage until the remaining 643 groups complete. Small proof pairs and the owner retry run
 between completed groups by holding only the broader runner's parent; its
 active verifier is allowed to finish, and the parent is resumed afterward.
 One verifier and disabled Ferrum branch parallelism remain required.

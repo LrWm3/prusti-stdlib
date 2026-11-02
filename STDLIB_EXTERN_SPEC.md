@@ -5468,6 +5468,33 @@ slice elements and reject false or wrong-current-value assertions. This remains
 an unqualified prototype, recorded separately from main. Recovery commits
 `2d7088fa6` and `07a562398` preserve the exact 722 and 723 compiler sources.
 
+Candidate 723's seven encodings and seven complete AST checks now pass.
+The first version of four new controls used an unsupported mutable-reference
+dereference inside a specification expression. Those failed encodings and
+sources are archived; the corrected controls read the value in ordinary Rust
+before asserting it. No verifier was run on the failed fixtures. Recovery
+`fba986054` preserves the corrected tests. Native qualification is still queued.
+
+The enum failure has a separate concrete hypothesis: scalar resource views
+handle structs and direct mutable references, but omit enum payloads. Candidate
+724 adds payload views guarded by the corresponding discriminant. A wrapper is
+opened only when its permission is held and the raw scalar permission is absent;
+the existing checked reclosure remains. This changes proof operations, not the
+required resource contract. It is based on 722 independently of the optional-owner
+prototype. Its own build, three protocol tests, five encodings and five full AST
+checks pass (source `c92aa8fd…`, driver `8106c22c…`). The native enum group includes
+a new wrong-current-value replacement control before scalar regressions.
+Recovery `dce156794` is the exact independent compiler checkpoint; `443affe15`
+adds that control. The 723 prototype remains preserved at `07a562398`; these
+candidates have not been combined or adopted into main.
+
+Candidate 715's repeated positive fails in 227.60 seconds with a missing-wand
+assertion; its postcondition-false control reaches the 600-second timeout
+(602.12 seconds including the command). Neither is a passing check. The remaining
+controls are still running. The serial queue is 722, then 723, then 724, retaining
+one verifier worker and no branch parallelism. No Silicon run is needed for
+these individual repairs; combined major-milestone qualification remains open.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user initially authorized the remaining IM and matrix repairs followed by

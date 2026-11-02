@@ -3154,9 +3154,14 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         local
     }
 
-    pub(crate) fn new_label(&mut self, base: &str) -> &'vir str {
+    fn reserve_label(&mut self, base: &str) -> &'vir str {
         let name = vir::vir_format!(self.vcx, "{base}{}", self.label_ctr);
         self.label_ctr += 1;
+        name
+    }
+
+    pub(crate) fn new_label(&mut self, base: &str) -> &'vir str {
+        let name = self.reserve_label(base);
         self.stmt(self.vcx.mk_label_stmt(name));
         name
     }
@@ -4996,7 +5001,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                             .map(|arg| self.encode_operand(&arg.node).unwrap())
                             .collect::<Vec<_>>();
 
-                        let label_pre = self.new_label("pre");
+                        let label_pre = self.reserve_label("pre");
                         let (call, main_call_offset) = func_out.call(method_in, dest, label_pre);
                         let conditional_posts =
                             self.conditional_specs_for_call(func_def_id, caller_substs, false);

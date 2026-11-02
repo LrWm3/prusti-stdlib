@@ -54,6 +54,10 @@ impl<'vir> MethodCallEncOutput<'vir> {
                     .unwrap_or_default()
             })
             .collect::<Vec<_>>();
+        // The callee's old resource observations refer to its packed input
+        // resources. Save that heap after packing, while physical argument
+        // storage still uses the caller's types needed by input captures.
+        stmts.push(vir::with_vcx(|vcx| vcx.mk_label_stmt(label_pre)));
         // Generic arguments whose resource groups are returned directly by
         // the callee need the same inverse conversion as a returned value.
         // Their owned storage has been consumed, so use its pre-call snapshot.

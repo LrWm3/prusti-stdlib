@@ -5495,6 +5495,16 @@ controls are still running. The serial queue is 722, then 723, then 724, retaini
 one verifier worker and no branch parallelism. No Silicon run is needed for
 these individual repairs; combined major-milestone qualification remains open.
 
+Candidate 715 finishes naturally before its proposed stop can take effect.
+Both stop attempts fail their active-case guard before sending any signal.
+The complete audit is **9/11**, with only the repeated positive and
+postcondition-false control failing; later groups are skipped. Candidate 722
+then passes **all 10 generic-library checks**, including the complete library
+(173.58 seconds), clients and exact negatives. Coverage and source/build
+provenance are audited. Its metadata, prefix and ownership gates remain in
+progress; this repairs the isolated generic capture regression without claiming
+combined stabilization or reaching the requested pause point.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user initially authorized the remaining IM and matrix repairs followed by

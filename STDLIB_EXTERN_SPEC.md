@@ -5235,6 +5235,26 @@ negative control 672 remains pending behind the metadata investigation.
 Neither compiler repair is adopted on main, and the mandatory stabilization
 pause remains ahead of D1–D6.
 
+The metadata reveal probe 692 also fails the original return contract
+(529.44 seconds). The added final body assertion passes; no backend defect or
+repair is established. Probes 695/696 next reveal the same checked observer
+in the return contract itself, retaining all logical postconditions and methods.
+Both full AST checks pass; verification is queued after the existing nested
+comparison 682.
+
+Prefix negative 672 reaches the 600-second backend timeout (605.38 seconds
+including cleanup), so 671/672 is **not a qualified positive/negative pair**.
+The first compiler prototype 694 builds and passes nine structural checks but
+leaves the relevant captures unchanged: its eligibility test omitted indexed
+physical resources. Candidate 697 adds that case while retaining captures for
+guarded reads and scalar/mixed storage stages. Its own build, three protocol
+unit tests, nine encodings and nine complete AST checks pass. Inspection confirms
+that the two intended final-package captures are now inlined. Frozen source is
+`b1d476cc…`, driver `3dfa15a2…`. Its Rust positives and exact negatives form a
+new focused gate on the later 688 base; they do not waive the older raw timeout.
+Further regression groups stop if this native gate fails. No main adoption or
+stabilization completion is claimed.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user initially authorized the remaining IM and matrix repairs followed by

@@ -319,7 +319,6 @@ pub(crate) struct OwnerHandoff<'vir> {
     argument: mir::Local,
     owner: OwnerIdentity<'vir>,
     group: usize,
-    restoration_group: usize,
     current: vir::ExprBool<'vir>,
     entry: vir::ExprBool<'vir>,
     bindings: Vec<(vir::LocalDeclSnap<'vir>, vir::ExprSnap<'vir>)>,
@@ -438,7 +437,7 @@ impl<'vir> OwnerHandoff<'vir> {
             origin,
             selection,
             owner: self.owner,
-            group: self.restoration_group,
+            group: self.group,
             continuation: resource_restoration_wand(visitor.vcx, current, self.entry),
             projection_path: None,
             guards,
@@ -903,40 +902,19 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
             restore_entry.extend(package_script);
             let mut package_script = restore_entry;
             for &node in &wand_data.rhs {
-                let entry_bindings = self.vcx.alloc(std::cell::RefCell::new(Vec::new()));
                 if let Some(entry) = self.wands.encode_predicates_for_function_shape_node(
                     self.vcx,
                     self.deps,
                     node,
                     None,
                     Some(vir::OldLabel::None),
-                    Some(entry_bindings),
+                    None,
                     |i| args[i],
                 ) {
-                    if let Some(mut handoff) = self.wands.owner_handoff(
-                        node,
-                        &wand_data,
-                        args,
-                        None,
-                        entry,
-                        vir::OldLabel::None,
-                        self.vcx,
-                        self.deps,
-                    ) {
-                        // Keep historical owner reads outside both packages.
-                        // The indirect encoder supplies guarded observations,
-                        // so an absent optional owner never requires its slice.
-                        let mut captured = HandoffSubstitute(FxHashMap::default());
-                        for &(decl, value) in entry_bindings.borrow().iter() {
-                            let value = value.fold_with(&mut captured).unwrap_or(value);
-                            let local = self.new_tmp(value.ty());
-                            wand_packages.push(self.vcx.mk_pure_assign_stmt(local, value));
-                            captured.0.insert(decl.name, local.as_dyn());
-                        }
-                        handoff.entry = handoff
-                            .entry
-                            .fold_with(&mut captured)
-                            .unwrap_or(handoff.entry);
+                    if let Some(handoff) = self
+                        .wands
+                        .owner_handoff(node, &wand_data, args, None, entry, self.vcx, self.deps)
+                    {
                         handoff.package(self, &mut package_script);
                     }
                 }
@@ -957,6 +935,7 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
             package_script.extend(crate::encoders::ty::indexed_coherence::restoration_calls(
                 self.vcx, wand.lhs, wand.rhs,
             ));
+            package_script.extend(self.expose_restored_scalar_inputs(wand.rhs));
 
             for EncodedPledge {
                 expiry_postcondition,
@@ -1212,22 +1191,6 @@ impl<'vir> WandEncOutput<'vir> {
         bindings: Option<&'vir SnapshotBindings<'vir>>,
         mut snap: impl FnMut(mir::Local) -> vir::ExprSnap<'vir>,
     ) -> Option<vir::ExprBool<'vir>> {
-        self.encode_predicates_at_heap_depth(
-            vcx, deps, g, call_ctx, heap_label, None, bindings, snap,
-        )
-    }
-
-    fn encode_predicates_at_heap_depth(
-        &self,
-        vcx: &'vir vir::VirCtxt<'vir>,
-        deps: &mut TaskEncoderDependencies<'vir, impl TaskEncoder>,
-        g: impl Into<FunctionShapeNode<Generalized>>,
-        call_ctx: WandCallContext<'vir>,
-        heap_label: Option<vir::OldLabel<'vir>>,
-        old_ancestors: Option<usize>,
-        bindings: Option<&'vir SnapshotBindings<'vir>>,
-        mut snap: impl FnMut(mir::Local) -> vir::ExprSnap<'vir>,
-    ) -> Option<vir::ExprBool<'vir>> {
         use vir::Reify;
         let g = g.into();
         let predicates = self.predicates_for_function_shape_node(vcx, deps, g, call_ctx)?;
@@ -1263,7 +1226,6 @@ impl<'vir> WandEncOutput<'vir> {
                         ExprInput {
                             snap: vcx.mk_local_ex(placeholder),
                             heap_label,
-                            old_ancestors,
                             bindings,
                             guard: None,
                             extent: None,
@@ -1542,8 +1504,7 @@ impl<'vir> WandEncOutput<'vir> {
             let mut scalar_views = Vec::new();
             let mut convert = |node: FunctionShapeNode<Generalized>,
                                pack,
-                               heap,
-                               old_ancestors|
+                               heap|
              -> EncodeResult<'vir, Vec<vir::Stmt<'vir>>, E> {
                 let source = if node.mir_local() == mir::RETURN_PLACE {
                     signature.output
@@ -1568,17 +1529,11 @@ impl<'vir> WandEncOutput<'vir> {
                         scalar_views
                             .extend(conversion.scalar_views_on_heap(args[node.mir_local()], label));
                     }
-                    Ok(match (heap, old_ancestors) {
-                        (Some(label), Some(depth)) => conversion.at_snapshot_with_entry_ancestors(
-                            args[node.mir_local()],
-                            pack,
-                            label,
-                            depth,
-                        ),
-                        (Some(label), None) => {
+                    Ok(match heap {
+                        Some(label) => {
                             conversion.at_snapshot_on_heap(args[node.mir_local()], pack, label)
                         }
-                        (None, _) => conversion.at_snapshot(args[node.mir_local()], pack),
+                        None => conversion.at_snapshot(args[node.mir_local()], pack),
                     })
                 } else {
                     Ok(Vec::new())
@@ -1586,23 +1541,21 @@ impl<'vir> WandEncOutput<'vir> {
             };
             let mut before = Vec::new();
             for node in &wand_data.lhs {
-                before.extend(convert(*node, true, Some(label_post), None)?);
+                before.extend(convert(*node, true, Some(label_post))?);
             }
             // A preceding stage returned these resources in the caller's
             // representation. Repack the frame on its original input heap
             // before passing it through the next generic restoration stage.
             for node in &wand_data.frames {
-                before.extend(convert((*node).into(), true, Some(label_pre), None)?);
+                before.extend(convert((*node).into(), true, Some(label_pre))?);
             }
             let mut after = Vec::new();
             for node in &wand_data.rhs {
-                let nested = self.optional_slice_handoff(*node, wand_data, vcx);
-                let heap =
-                    (nested || !self.is_handoff_node(*node, wand_data, vcx)).then_some(label_pre);
-                after.extend(convert((*node).into(), false, heap, nested.then_some(1))?);
+                let heap = (!self.is_handoff_node(*node, wand_data, vcx)).then_some(label_pre);
+                after.extend(convert((*node).into(), false, heap)?);
             }
             for node in &wand_data.frames {
-                after.extend(convert((*node).into(), false, Some(label_pre), None)?);
+                after.extend(convert((*node).into(), false, Some(label_pre))?);
             }
             // A source restored by an earlier stage may have been opened back
             // into its concrete storage predicate before this stage expires.
@@ -1698,38 +1651,9 @@ impl<'vir> WandEncOutput<'vir> {
                         args,
                         Some(call_ctx),
                         entry,
-                        vir::OldLabel::Label(label_pre),
                         vcx,
                         visitor.deps,
                     ) {
-                        let mut handoff = handoff;
-                        if self.optional_slice_handoff(node, wand_data, vcx) {
-                            let shape: FunctionShapeNode<Generalized> = node.into();
-                            let element =
-                                Self::optional_slice_element(shape.ty(self.fn_sig(vcx, None)), vcx)
-                                    .unwrap();
-                            let actual = call_ctx.normalize(element);
-                            let mut groups = Vec::new();
-                            for arg in visitor.body.args_iter() {
-                                let regions: IndexVec<_, GeneralizedLifetime<'vir>> =
-                                    vcx.tcx().extract_regions(visitor.body.local_decls[arg].ty);
-                                groups.extend(regions.iter_enumerated().filter_map(
-                                    |(idx, region)| match region {
-                                        GeneralizedLifetime::RegionsIn(opaque)
-                                            if opaque.ty(vcx.tcx()) == actual =>
-                                        {
-                                            Some(idx.index())
-                                        }
-                                        _ => None,
-                                    },
-                                ));
-                            }
-                            groups.sort();
-                            groups.dedup();
-                            if let [group] = groups.as_slice() {
-                                handoff.restoration_group = *group;
-                            }
-                        }
                         handoffs.push(handoff);
                     }
                 }
@@ -1988,55 +1912,12 @@ impl<'vir> WandEncOutput<'vir> {
         Ok(selected)
     }
 
-    fn optional_slice_element(
-        input: ty::Ty<'vir>,
-        vcx: &'vir vir::VirCtxt<'vir>,
-    ) -> Option<ty::Ty<'vir>> {
-        let ty::TyKind::Ref(_, option, ty::Mutability::Mut) = input.kind() else {
-            return None;
-        };
-        let ty::TyKind::Adt(def, args) = option.kind() else {
-            return None;
-        };
-        if !vcx
-            .tcx()
-            .is_diagnostic_item(prusti_rustc_interface::span::sym::Option, def.did())
-        {
-            return None;
-        }
-        let inner = args.type_at(0);
-        let ty::TyKind::Ref(_, slice, ty::Mutability::Mut) = inner.kind() else {
-            return None;
-        };
-        let ty::TyKind::Slice(element) = slice.kind() else {
-            return None;
-        };
-        matches!(element.kind(), ty::TyKind::Param(..)).then_some(*element)
-    }
-
-    fn optional_slice_handoff(
-        &self,
-        node: WandRhsKey,
-        wand: &WandData<'vir>,
-        vcx: &'vir vir::VirCtxt<'vir>,
-    ) -> bool {
-        let shape: FunctionShapeNode<Generalized> = node.into();
-        node.region_idx().index() == 2
-            && Self::optional_slice_element(shape.ty(self.fn_sig(vcx, None)), vcx).is_some()
-            && wand.rhs.iter().any(|other| {
-                other.mir_local() == node.mir_local() && other.region_idx().index() == 1
-            })
-    }
-
     fn is_handoff_node(
         &self,
         node: WandRhsKey,
         wand: &WandData<'vir>,
         vcx: &'vir vir::VirCtxt<'vir>,
     ) -> bool {
-        if self.optional_slice_handoff(node, wand, vcx) {
-            return true;
-        }
         let shape: FunctionShapeNode<Generalized> = node.into();
         // Observe current resources only when this stage restores the owner
         // storage itself. Storage framed from an earlier stage may have been
@@ -2061,28 +1942,15 @@ impl<'vir> WandEncOutput<'vir> {
         vcx: &'vir vir::VirCtxt<'vir>,
         deps: &mut TaskEncoderDependencies<'vir, E>,
     ) -> Option<OwnerIdentity<'vir>> {
-        self.input_owner_at(node, 0, args, call_ctx, None, vcx, deps)
-    }
-
-    fn input_owner_at<E: TaskEncoder>(
-        &self,
-        node: WandRhsKey,
-        region: usize,
-        args: PledgeArgs<'vir>,
-        call_ctx: WandCallContext<'vir>,
-        heap: Option<vir::OldLabel<'vir>>,
-        vcx: &'vir vir::VirCtxt<'vir>,
-        deps: &mut TaskEncoderDependencies<'vir, E>,
-    ) -> Option<OwnerIdentity<'vir>> {
         let storage = self.inputs.iter().find(|input| {
-            input.mir_local() == node.mir_local() && input.region_idx().index() == region
+            input.mir_local() == node.mir_local() && input.region_idx().index() == 0
         })?;
         let resource = self.encode_predicates_for_function_shape_node(
             vcx,
             deps,
             *storage,
             call_ctx,
-            heap,
+            None,
             None,
             |i| args[i],
         )?;
@@ -2112,27 +1980,20 @@ impl<'vir> WandEncOutput<'vir> {
         args: PledgeArgs<'vir>,
         call_ctx: WandCallContext<'vir>,
         entry: vir::ExprBool<'vir>,
-        entry_heap: vir::OldLabel<'vir>,
         vcx: &'vir vir::VirCtxt<'vir>,
         deps: &mut TaskEncoderDependencies<'vir, E>,
     ) -> Option<OwnerHandoff<'vir>> {
         if !self.is_handoff_node(node, wand, vcx) {
             return None;
         }
-        let nested = self.optional_slice_handoff(node, wand, vcx);
-        let owner = if nested {
-            self.input_owner_at(node, 1, args, call_ctx, Some(entry_heap), vcx, deps)?
-        } else {
-            self.input_owner(node, args, call_ctx, vcx, deps)?
-        };
+        let owner = self.input_owner(node, args, call_ctx, vcx, deps)?;
         let captures = vcx.alloc(std::cell::RefCell::new(Vec::new()));
-        let current = self.encode_predicates_at_heap_depth(
+        let current = self.encode_predicates_for_function_shape_node(
             vcx,
             deps,
             node,
             call_ctx,
-            nested.then_some(entry_heap),
-            nested.then_some(1),
+            None,
             Some(captures),
             |local| args[local],
         )?;
@@ -2161,7 +2022,6 @@ impl<'vir> WandEncOutput<'vir> {
             argument: node.mir_local(),
             owner,
             group: node.region_idx().index(),
-            restoration_group: node.region_idx().index(),
             current,
             entry,
             bindings,
@@ -2246,16 +2106,7 @@ impl<'vir> WandEncOutput<'vir> {
                 |i| pledge_args[i],
             )?;
             Some(
-                match self.owner_handoff(
-                    *g,
-                    wand_data,
-                    pledge_args,
-                    call_ctx,
-                    entry,
-                    pledge_old_label.map_or(vir::OldLabel::None, vir::OldLabel::Label),
-                    vcx,
-                    deps,
-                ) {
+                match self.owner_handoff(*g, wand_data, pledge_args, call_ctx, entry, vcx, deps) {
                     Some(handoff) => handoff.consequence(vcx),
                     None => {
                         transferred.push(entry);
@@ -2293,55 +2144,6 @@ impl<'vir> WandEncOutput<'vir> {
             return None;
         }
         let rhs = vcx.mk_conj(&rhs);
-        // An optional-slice handoff observes the restored owner's current
-        // contents, while its resource input is captured at return. Require
-        // those shallow contents to remain aligned. This is a checked expiry
-        // obligation, not an assumed frame: callers that replace the owner
-        // need a current-to-post history before using this protocol.
-        let mut owner_alignment = Vec::new();
-        for &node in &wand_data.rhs {
-            if !self.optional_slice_handoff(node, wand_data, vcx) {
-                continue;
-            }
-            let captures = vcx.alloc(std::cell::RefCell::new(Vec::new()));
-            let _ = self.encode_predicates_at_heap_depth(
-                vcx,
-                deps,
-                node,
-                call_ctx,
-                output_heap_label.map(vir::OldLabel::Label),
-                Some(1),
-                Some(captures),
-                |i| pledge_args[i],
-            );
-            let mut substitute = HandoffSubstitute(FxHashMap::default());
-            for (index, &(decl, value)) in captures.borrow().iter().enumerate() {
-                let value = value.fold_with(&mut substitute).unwrap_or(value);
-                let frozen =
-                    vcx.maybe_apply_label(value, output_heap_label.map(vir::OldLabel::Label));
-                let saved = if let Some(bindings) = output_bindings {
-                    let name = vir::vir_format!(
-                        vcx,
-                        "_owner_aligned_{}_{}_{}",
-                        node.mir_local().index(),
-                        node.region_idx().index(),
-                        index
-                    );
-                    let saved_decl = vcx.mk_local_decl(name, value.ty());
-                    bindings.borrow_mut().push((saved_decl, frozen));
-                    vcx.mk_local_ex(saved_decl)
-                } else {
-                    frozen
-                };
-                // The first observation is the ancestor slot. Freeze it
-                // outside the wand; only the descendant read requires the
-                // physical slice predicate supplied by the antecedent.
-                if index > 0 {
-                    owner_alignment.push(vcx.mk_eq_expr(value, saved));
-                }
-                substitute.0.insert(decl.name, saved.as_dyn());
-            }
-        }
         let lhs = wand_data.lhs.iter().filter_map(|g| {
             self.encode_predicates_for_function_shape_node(
                 vcx,
@@ -2355,7 +2157,6 @@ impl<'vir> WandEncOutput<'vir> {
         });
         let lhs = lhs
             .chain(frames)
-            .chain(owner_alignment)
             .chain(
                 wand_data
                     .pledges
@@ -2566,6 +2367,88 @@ fn same_resource_footprint<'vir>(
         );
     }
     Some(vcx.mk_conj(&equalities))
+}
+
+/// A package can retain two opaque resources directly when a call merely
+/// permutes their complete keys. Its original LHS assertion and the enclosing
+/// package's complete consequent remain checked. No RHS facts are assumed on
+/// this branch, and the original application is retained for unequal keys.
+/// Restrict the antecedent to full resource predicates and literal true: an
+/// expiry obligation, nested history or physical conversion keeps its apply.
+pub(crate) fn flat_resource_permutation<'vir>(
+    vcx: &'vir vir::VirCtxt<'vir>,
+    wand: vir::Wand<'vir>,
+) -> Option<vir::ExprBool<'vir>> {
+    fn collect<'vir>(
+        expr: vir::ExprBool<'vir>,
+        lhs: bool,
+        out: &mut Vec<vir::PredicateApp<'vir>>,
+    ) -> bool {
+        use vir::ExprKindData as K;
+        match expr.kind {
+            K::PredicateApp(app)
+                if app.target == "indirect_resources"
+                    && app
+                        .perm
+                        .is_none_or(|p| matches!(p.kind, K::Const(vir::ConstData::FullPerm))) =>
+            {
+                out.push(app);
+                true
+            }
+            K::BinOp(op) if op.kind == vir::BinOpKind::And => {
+                collect(op.lhs.downcast_ty(), lhs, out) && collect(op.rhs.downcast_ty(), lhs, out)
+            }
+            K::Const(vir::ConstData::Bool(true)) => true,
+            _ if !lhs => {
+                struct Pure(bool);
+                impl<'vir> Folder<'vir, (), !> for Pure {
+                    fn fold_expr(&mut self, e: vir::ExprDyn<'vir>) -> Option<vir::ExprDyn<'vir>> {
+                        if matches!(
+                            e.kind,
+                            K::PredicateApp(_)
+                                | K::PredicatePerm(_)
+                                | K::AccField(_)
+                                | K::Wand(_)
+                                | K::InhaleExhale(_)
+                        ) {
+                            self.0 = false;
+                        }
+                        e.super_fold_with(self)
+                    }
+                }
+                let mut pure = Pure(true);
+                let _ = expr.fold_with(&mut pure);
+                pure.0
+            }
+            _ => false,
+        }
+    }
+    let mut before = Vec::new();
+    let mut after = Vec::new();
+    if !collect(wand.lhs, true, &mut before)
+        || !collect(wand.rhs, false, &mut after)
+        || before.len() != 2
+        || after.len() != 2
+    {
+        return None;
+    }
+    let same = |left: vir::PredicateApp<'vir>, right: vir::PredicateApp<'vir>| {
+        if left.args.len() != right.args.len() {
+            return vcx.mk_bool::<false>();
+        }
+        vcx.mk_conj(
+            &left
+                .args
+                .iter()
+                .zip(right.args)
+                .map(|(&a, &b)| vcx.mk_eq_expr(a, b))
+                .collect::<Vec<_>>(),
+        )
+    };
+    Some(vcx.mk_disj(&[
+        vcx.mk_conj(&[same(before[0], after[0]), same(before[1], after[1])]),
+        vcx.mk_conj(&[same(before[0], after[1]), same(before[1], after[0])]),
+    ]))
 }
 
 fn direct_resource_restoration<'vir>(
@@ -3314,19 +3197,8 @@ impl<'vir> WandEncOutput<'vir> {
         // This strengthens the required expiry antecedent; it grants no
         // resources and introduces no facts. Every combined package and every
         // application must prove all dependent groups simultaneously.
-        if pledges.is_empty() {
+        if sig.output().is_unit() && pledges.is_empty() {
             for (index, input) in sig.inputs().iter().enumerate() {
-                if !sig.output().is_unit()
-                    && !(matches!(
-                        sig.output().kind(),
-                        ty::TyKind::Uint(..)
-                            | ty::TyKind::Int(..)
-                            | ty::TyKind::Bool
-                            | ty::TyKind::Char
-                    ) && Self::optional_slice_element(*input, vcx).is_some())
-                {
-                    continue;
-                }
                 let ty::TyKind::Ref(_, _, ty::Mutability::Mut) = input.kind() else {
                     continue;
                 };

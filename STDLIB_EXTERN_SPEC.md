@@ -5419,6 +5419,22 @@ nor justify weakening any current permission check. Any use of an `applying`
 observation must itself prove the required antecedent and match the retained
 wand; no such new encoder change is adopted here.
 
+Diagnostic 709 completes at **23/30 audited checks**: optional-owner 8/9,
+region 3/7, enum 7/8 and extra-next 5/6. The extra-next positive and both
+wrong-result controls pass (375.49, 151.27 and 166.93 seconds), but its false
+control fails an earlier generic permission application in 490.97 seconds.
+This is not an accepted negative or a repaired family. All selected coverage
+and source/build provenance checks pass; the seven proof failures remain open.
+
+Models 716–719 now pass **all four audited outcomes** with explicitly captured
+old/current values: the positive succeeds and the controls fail only at the
+intended false assertion, wrong current value and missing current resource.
+Sources are preserved as `known_limits/owner_handoff_entry_ancestor*.vpr`.
+This qualifies the finite proof pattern for the scoped plan above, not its
+Rust implementation. The boundary monitor has resumed the native 710 gate;
+there are no deliberately stopped controllers at this checkpoint. Candidate
+715 remains queued afterward, including its full-program 720/721 prelude.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user initially authorized the remaining IM and matrix repairs followed by

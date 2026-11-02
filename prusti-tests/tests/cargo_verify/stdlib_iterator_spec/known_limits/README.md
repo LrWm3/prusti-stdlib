@@ -698,3 +698,21 @@ and diagnostics are in `audit703-707.json` and `probe703` through `probe707`
 under `target/stdlib-matrix-20261031-1236`. Each run takes under 0.3 seconds.
 These checked finite models do not qualify the Rust encoder or unbounded
 indexed collections. Silicon sign-off remains deferred to the combined gate.
+
+## Entry ancestor and current owner (2026-11-02)
+
+`owner_handoff_entry_ancestor.vpr` saves the ancestor slot's entry identity,
+replaces the descendant owner's pointer, and clears the ancestor slot. The
+client accesses and changes the descendant's current resource, then discharges
+a continuation restoring the original resource. Heap-dependent observations
+are explicitly captured outside the returned wand. The positive and its
+`_false`, `_wrong_current` and `_missing_current` controls match all four
+expectations on Ferrum `0e048a4`, each in under 0.2 seconds. The controls reject
+only the intended false assertion, wrong current value and missing antecedent
+permission, respectively. Full AST checks also pass.
+
+Exact inputs and commands are retained in `probe716` through `probe719` and
+`audit716-719.json` under `target/stdlib-matrix-20261031-1236`. The initial
+uncaptured model 711 fails wand matching and remains failed evidence. These
+finite models do not establish Rust integration, unbounded collections, or a
+Silicon sign-off.

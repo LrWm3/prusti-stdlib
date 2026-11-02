@@ -1081,7 +1081,11 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                                         self.current_span(),
                                     ));
                                 }
+                                // Only expiry pledges are re-instantiated as
+                                // caller wands with a different old-heap label.
+                                // Ordinary postconditions retain point observers.
                                 let old_resource_point = self.spec_closure
+                                    && self.allow_before_expiry
                                     && builtin == PrustiBuiltin::SequenceResourceState;
                                 let expr = if builtin.reads_heap() && self.old_mode {
                                     self.vcx.mk_lazy_expr(

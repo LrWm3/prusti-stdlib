@@ -2,6 +2,8 @@ pub mod pure;
 pub mod inhabited;
 pub mod indirect;
 pub(crate) mod indexed;
+pub(crate) mod indexed_coherence;
+pub(crate) mod indexed_snapshot;
 pub(crate) mod resources;
 pub(crate) mod resource_conversion;
 pub(crate) mod resource_boundary;

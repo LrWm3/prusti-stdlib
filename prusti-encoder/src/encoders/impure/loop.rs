@@ -923,6 +923,9 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     }
                     _ => return None,
                 };
+                if self.owner_summary_covers_loop_edge(&coupled) {
+                    return None;
+                }
                 Some((coupled, self.edge_condition(&edge.to_owned_edge())))
             })
             .collect();
@@ -1311,7 +1314,7 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         .or_insert_with(|| (facts.clone(), Vec::new()));
                     guards.push(self.vcx.mk_conj(&condition));
                 }
-                for (id, wand, _, _) in self.encode_function_call_wands(&edge)? {
+                for (id, wand, _, _, _) in self.encode_function_call_wands(&edge)? {
                     if dropped_result
                         && let Some(resources) = self.call_result_resources.get(&(call_block, id))
                     {
@@ -1320,6 +1323,7 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                             .or_insert_with(|| (resources.clone(), Vec::new()));
                         guards.push(self.vcx.mk_conj(&condition));
                     }
+
                     let (_, guards) = retained_wands
                         .entry((call.metadata().location().block, id))
                         .or_insert_with(|| (wand, Vec::new()));
@@ -1398,6 +1402,15 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     .downcast_ty(),
             );
         }
+
+        inv.extend(self.owner_summary_invariants(loop_id, |local| {
+            let place: Place<'vir> = local.into();
+            // The complete mutable-reference resource above includes its
+            // outer referent predicate. A shallow frame alone is not enough.
+            loop_invariant_place_capabilities
+                .get(&place)
+                .is_some_and(|capability| !capability.is_write())
+        }));
 
         Ok((inv, loop_invariant_place_capabilities.into_iter().collect()))
     }

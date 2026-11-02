@@ -239,7 +239,16 @@ impl TaskEncoder for ResourceBoundaryEnc {
         let kind = match &definition.ty.specifics {
             TySpecifics::Param(_) | TySpecifics::Opaque(_) => {
                 let selected = task.selected.is_none_or(|selected| {
-                    definition.args.args().first().and_then(|arg| arg.as_type()) == Some(selected)
+                    definition
+                        .args
+                        .args()
+                        .first()
+                        .and_then(|arg| arg.as_type())
+                        .is_some_and(|group| {
+                            group == selected
+                                || definition.args.context().normalize(group)
+                                    == definition.args.context().normalize(selected)
+                        })
                 });
                 if selected && !actual.ty.specifics.is_param() {
                     BoundaryKind::Leaf(deps.require_dep::<ResourceConversionEnc>(actual)?)

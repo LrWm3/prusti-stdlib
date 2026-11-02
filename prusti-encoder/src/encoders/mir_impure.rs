@@ -174,6 +174,11 @@ where
     pub call_labels: FxHashMap<mir::BasicBlock, (&'vir str, &'vir str)>,
     /// Call-time observations, shared by expiry scripts and retained loop
     /// obligations. Conversion statements still execute only on expiry.
+    pub restored_owner_handoffs: Vec<super::impure::fn_wand::RestoredOwnerHandoff<'vir>>,
+    pub owner_summaries: Vec<super::impure::fn_wand::OwnerSummary<'vir>>,
+    /// Logical input identities propagated through whole mutable reborrows.
+    /// Zero denotes an unknown origin; no address-distinctness is assumed.
+    pub owner_origin_locals: FxHashMap<mir::Local, vir::ExprInt<'vir>>,
     pub call_wand_captures: FxHashMap<mir::BasicBlock, Vec<super::impure::fn_wand::CallWand<'vir>>>,
     /// The duplicated loop prefix and repeated body update the same call-time
     /// snapshot variables, so retained obligations have one identity at a cut.
@@ -430,6 +435,164 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         for stmt in stmts {
             self.stmt(stmt);
         }
+    }
+
+    /// A retained call obligation may be applied in several CFG branches or
+    /// proof scripts. Its application-local flags need fresh declarations at
+    /// each use, while the captured contract values must retain their identity.
+    fn freshen_call_application(
+        &mut self,
+        mut before: Vec<vir::Stmt<'vir>>,
+        after: Vec<vir::Stmt<'vir>>,
+    ) -> (Vec<vir::Stmt<'vir>>, Vec<vir::Stmt<'vir>>) {
+        struct Rename<'vir>(FxHashMap<&'vir str, vir::ExprDyn<'vir>>);
+        impl<'vir> Folder<'vir, (), !> for Rename<'vir> {
+            fn fold_expr(&mut self, expr: vir::ExprDyn<'vir>) -> Option<vir::ExprDyn<'vir>> {
+                if let vir::ExprKindData::Local(local) = expr.kind {
+                    self.0.get(local.name).copied()
+                } else {
+                    expr.super_fold_with(self)
+                }
+            }
+        }
+        let mut rename = Rename(FxHashMap::default());
+        for statement in &mut before {
+            if let vir::StmtKindData::LocalDecl(local, initializer) = statement.kind {
+                let fresh = self.new_tmp_decl(local.ty);
+                assert!(
+                    rename
+                        .0
+                        .insert(local.name, self.vcx.mk_local_ex(fresh))
+                        .is_none()
+                );
+                *statement = self.vcx.mk_local_decl_stmt(fresh, *initializer);
+            }
+        }
+        let mut rewrite = |statements: Vec<vir::Stmt<'vir>>| {
+            statements
+                .into_iter()
+                .map(|statement| statement.fold_with(&mut rename).unwrap_or(statement))
+                .collect()
+        };
+        (rewrite(before), rewrite(after))
+    }
+
+    /// Evaluate entry-heap observations before the call consumes that heap.
+    /// Only move captures whose local inputs are already available and are not
+    /// assigned between the call and capture. Post-call observations retain
+    /// their original position; all expressions and old labels are unchanged.
+    fn hoist_call_entry_captures(
+        &mut self,
+        entry: &'vir str,
+        call_position: usize,
+        captures_start: usize,
+    ) {
+        fn assigned<'vir>(statements: &[vir::Stmt<'vir>], names: &mut FxHashMap<&'vir str, usize>) {
+            for statement in statements {
+                match statement.kind {
+                    vir::StmtKindData::PureAssign(assign) => {
+                        if let vir::ExprKindData::Local(local) = assign.lhs.kind {
+                            *names.entry(local.name).or_default() += 1;
+                        }
+                    }
+                    vir::StmtKindData::MethodCall(call) => {
+                        for local in call.targets {
+                            *names.entry(local.name).or_default() += 1;
+                        }
+                    }
+                    vir::StmtKindData::LocalDecl(local, Some(_)) => {
+                        *names.entry(local.name).or_default() += 1;
+                    }
+                    vir::StmtKindData::If(_, yes, no) => {
+                        assigned(yes, names);
+                        assigned(no, names);
+                    }
+                    vir::StmtKindData::Package(_, body) => assigned(body, names),
+                    _ => {}
+                }
+            }
+        }
+        struct Available<'a, 'vir> {
+            entry: &'vir str,
+            unavailable: &'a FxHashSet<&'vir str>,
+            available: bool,
+        }
+        impl<'vir> Folder<'vir, (), !> for Available<'_, 'vir> {
+            fn fold_expr(&mut self, expr: vir::ExprDyn<'vir>) -> Option<vir::ExprDyn<'vir>> {
+                match expr.kind {
+                    vir::ExprKindData::Local(local) if self.unavailable.contains(local.name) => {
+                        self.available = false;
+                    }
+                    vir::ExprKindData::Old(old)
+                        if old.label != vir::OldLabel::Label(self.entry)
+                            && old.label != vir::OldLabel::None =>
+                    {
+                        self.available = false;
+                    }
+                    _ => {}
+                }
+                expr.super_fold_with(self)
+            }
+        }
+        let statements = self.current_stmts.as_mut().unwrap();
+        let mut writes = FxHashMap::default();
+        assigned(&statements[call_position..], &mut writes);
+        let mut unavailable: FxHashSet<_> = writes.keys().copied().collect();
+        let declared: FxHashSet<_> = statements[captures_start..]
+            .iter()
+            .filter_map(|statement| match statement.kind {
+                vir::StmtKindData::LocalDecl(local, None) => Some(local.name),
+                _ => None,
+            })
+            .collect();
+        let mut captured = Vec::new();
+        let mut retained = Vec::new();
+        let mut moved = FxHashSet::default();
+        for &statement in &statements[captures_start..] {
+            let mut move_capture = None;
+            if let vir::StmtKindData::PureAssign(assign) = statement.kind
+                && let vir::ExprKindData::Local(local) = assign.lhs.kind
+                && declared.contains(local.name)
+                && writes.get(local.name) == Some(&1)
+                && let vir::ExprKindData::Old(old) = assign.rhs.kind
+                && old.label == vir::OldLabel::Label(entry)
+            {
+                let mut check = Available {
+                    entry,
+                    unavailable: &unavailable,
+                    available: true,
+                };
+                let _ = assign.rhs.fold_with(&mut check);
+                if check.available {
+                    move_capture = Some(local.name);
+                }
+            }
+            if let Some(name) = move_capture {
+                captured.push(statement);
+                moved.insert(name);
+                unavailable.remove(name);
+            } else {
+                retained.push(statement);
+            }
+        }
+        if moved.is_empty() {
+            return;
+        }
+        let mut declarations = Vec::new();
+        retained.retain(|statement| {
+            if let vir::StmtKindData::LocalDecl(local, None) = statement.kind
+                && moved.contains(local.name)
+            {
+                declarations.push(*statement);
+                false
+            } else {
+                true
+            }
+        });
+        declarations.extend(captured);
+        statements.truncate(captures_start);
+        statements.extend(retained);
+        statements.splice(call_position..call_position, declarations);
     }
 
     fn comment(&mut self, msg: &'vir str) {
@@ -1024,12 +1187,15 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 let call = call_edge.metadata();
                 // Deduplicate obligations, not entire calls: one call can
                 // produce several wands that expire independently.
-                for (id, wand, before, after) in self.encode_function_call_wands(coupled)? {
+                for (id, wand, before, after, handoffs) in
+                    self.encode_function_call_wands(coupled)?
+                {
                     let key = (call.location().block, id, edge.conditions().clone());
                     if to_skip.contains(&key) {
                         continue;
                     }
                     to_skip.push(key);
+                    let (before, after) = self.freshen_call_application(before, after);
                     self.stmts(before);
                     if matches!(
                         wand.rhs.kind,
@@ -1056,7 +1222,36 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         vcx.mk_apply_stmt(wand)
                     });
                     self.stmt(apply);
+                    let mut restored = Vec::new();
+                    for handoff in handoffs {
+                        let guards = self.edge_condition(edge);
+                        let origin =
+                            self.call_handoff_origin(call.location().block, handoff.argument());
+                        let selection = if origin.is_none() {
+                            self.call_handoff_selection(call.location().block, handoff.argument())
+                        } else {
+                            None
+                        };
+                        let projection = self.call_handoff_projected_origin(
+                            call.location().block,
+                            handoff.argument(),
+                            handoff.group(),
+                        );
+                        let mut restored_handoff = handoff.restore(self, guards, origin, selection);
+                        if let Some((root, group)) = projection {
+                            restored_handoff.remap_projected_owner(
+                                self,
+                                root,
+                                group,
+                                call.location().block,
+                            );
+                        }
+                        restored.push(restored_handoff);
+                    }
                     self.stmts(after);
+                    for handoff in restored {
+                        self.retain_owner_handoff(handoff);
+                    }
                 }
             }
             BorrowPcgEdgeKind::Coupled(edge) if edge.loop_head().is_some() => {
@@ -1092,19 +1287,357 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
     /// Reconstruct only the obligations represented by this call edge, with
     /// their expiry pledges and call-time snapshots. The same selection is
     /// used for application and retention across a loop boundary.
+    pub(crate) fn prepare_owner_origins(&mut self) -> Vec<vir::Stmt<'vir>> {
+        let mut statements = Vec::new();
+        for (local, decl) in self.body.local_decls.iter_enumerated() {
+            if !matches!(decl.ty.kind(), ty::TyKind::Ref(_, _, ty::Mutability::Mut))
+                || self.spec_blocks.spec_arms.spec_only_locals.contains(&local)
+            {
+                continue;
+            }
+            let name = vir::vir_format!(self.vcx, "_owner_origin_{}", local.index());
+            let decl = self.vcx.mk_local_decl(name, vir::TYPE_INT);
+            let initial = if local.index() > 0 && local.index() <= self.body.arg_count {
+                self.vcx
+                    .mk_const_expr(vir::ConstData::Int(local.index() as u128))
+                    .downcast_ty::<vir::Int>()
+            } else {
+                self.vcx.mk_uint::<0>()
+            };
+            statements.push(self.vcx.mk_local_decl_stmt(decl, Some(initial)));
+            self.owner_origin_locals
+                .insert(local, self.vcx.mk_local_ex(decl));
+        }
+        statements
+    }
+
+    /// Omit identity bookkeeping only when this method never observes any of
+    /// it. Keep the entire group if a guard, snapshot, invariant or other
+    /// expression reads one identity. Removed definitions are restricted to
+    /// total integer constants and copies between these private ghost locals.
+    pub(crate) fn prune_unused_owner_origins(&mut self) {
+        use vir::Visitable;
+        let names = self
+            .owner_origin_locals
+            .values()
+            .filter_map(|expr| {
+                if let vir::ExprKindData::Local(local) = expr.kind {
+                    Some(local.name)
+                } else {
+                    None
+                }
+            })
+            .collect::<FxHashSet<_>>();
+        if names.is_empty() {
+            return;
+        }
+        fn definition<'vir>(statement: vir::Stmt<'vir>, names: &FxHashSet<&'vir str>) -> bool {
+            let total = |value: vir::ExprDyn<'vir>| match value.kind {
+                vir::ExprKindData::Const(vir::ConstData::Int(_)) => true,
+                vir::ExprKindData::Local(local) => names.contains(local.name),
+                _ => false,
+            };
+            match statement.kind {
+                vir::StmtKindData::LocalDecl(local, value) if names.contains(local.name) => {
+                    value.is_none_or(total)
+                }
+                vir::StmtKindData::PureAssign(assign) => {
+                    matches!(assign.lhs.kind, vir::ExprKindData::Local(local) if names.contains(local.name))
+                        && total(assign.rhs)
+                }
+                _ => false,
+            }
+        }
+        struct Reads<'a, 'vir> {
+            names: &'a FxHashSet<&'vir str>,
+            used: bool,
+        }
+        impl<'vir> vir::Visitor<'vir, (), !> for Reads<'_, 'vir> {
+            fn visit_expr(&mut self, e: vir::ExprDyn<'vir>) {
+                if matches!(e.kind, vir::ExprKindData::Local(local) if self.names.contains(local.name))
+                {
+                    self.used = true;
+                }
+                e.super_visit_with(self);
+            }
+        }
+        fn scan<'vir>(statements: &[vir::Stmt<'vir>], reads: &mut Reads<'_, 'vir>) {
+            for statement in statements {
+                if definition(statement, reads.names) {
+                    continue;
+                }
+                match statement.kind {
+                    vir::StmtKindData::If(condition, yes, no) => {
+                        condition.visit_with(reads);
+                        scan(yes, reads);
+                        scan(no, reads);
+                    }
+                    vir::StmtKindData::Package(wand, body) => {
+                        wand.visit_with(reads);
+                        scan(body, reads);
+                    }
+                    _ => statement.visit_with(reads),
+                }
+            }
+        }
+        let mut reads = Reads {
+            names: &names,
+            used: false,
+        };
+        for block in &self.encoded_blocks {
+            block.label.visit_with(&mut reads);
+            block.terminator.visit_with(&mut reads);
+            scan(block.stmts, &mut reads);
+        }
+        if reads.used {
+            return;
+        }
+        fn prune<'vir>(
+            vcx: &'vir vir::VirCtxt<'vir>,
+            statements: &[vir::Stmt<'vir>],
+            names: &FxHashSet<&'vir str>,
+        ) -> &'vir [vir::Stmt<'vir>] {
+            let result = statements
+                .iter()
+                .filter_map(|&statement| {
+                    if definition(statement, names) {
+                        return None;
+                    }
+                    let kind = match statement.kind {
+                        vir::StmtKindData::If(condition, yes, no) => Some(vir::StmtKindData::If(
+                            condition,
+                            prune(vcx, yes, names),
+                            prune(vcx, no, names),
+                        )),
+                        vir::StmtKindData::Package(wand, body) => {
+                            Some(vir::StmtKindData::Package(wand, prune(vcx, body, names)))
+                        }
+                        _ => None,
+                    };
+                    Some(kind.map_or(statement, |kind| {
+                        vcx.alloc(vir::StmtData {
+                            kind: vcx.alloc(kind),
+                            span: statement.span,
+                        })
+                    }))
+                })
+                .collect::<Vec<_>>();
+            vcx.alloc_slice(&result)
+        }
+        for block in &mut self.encoded_blocks {
+            *block = self.vcx.alloc(vir::CfgBlockData {
+                label: block.label,
+                stmts: prune(self.vcx, block.stmts, &names),
+                terminator: block.terminator,
+            });
+        }
+    }
+
+    fn assign_owner_origin(&mut self, destination: mir::Place<'vir>, value: &mir::Rvalue<'vir>) {
+        let Some(destination) = destination.as_local() else {
+            return;
+        };
+        let Some(&target) = self.owner_origin_locals.get(&destination) else {
+            return;
+        };
+        let source = match value {
+            mir::Rvalue::Ref(_, mir::BorrowKind::Mut { .. }, source)
+                if source.projection.len() == 1
+                    && matches!(source.projection[0], mir::ProjectionElem::Deref) =>
+            {
+                Some(source.local)
+            }
+            mir::Rvalue::Use(mir::Operand::Move(source) | mir::Operand::Copy(source), _) => {
+                source.as_local()
+            }
+            _ => None,
+        };
+        let value = source
+            .and_then(|source| self.owner_origin_locals.get(&source).copied())
+            .unwrap_or_else(|| self.vcx.mk_uint::<0>());
+        self.stmt(self.vcx.mk_pure_assign_stmt(target, value));
+    }
+
+    fn call_handoff_selection(
+        &mut self,
+        block: mir::BasicBlock,
+        argument: mir::Local,
+    ) -> Option<vir::ExprInt<'vir>> {
+        let mir::TerminatorKind::Call { args, .. } = &self.body[block].terminator().kind else {
+            return None;
+        };
+        let place = match &args.get(argument.index().checked_sub(1)?)?.node {
+            mir::Operand::Copy(place) | mir::Operand::Move(place) => place.as_local()?,
+            _ => return None,
+        };
+        let origin = *self.owner_origin_locals.get(&place)?;
+        let (label, _) = *self.call_labels.get(&block)?;
+        // Freeze the executed branch's identity at the call, before a later
+        // assignment or another loop iteration can reuse its receiver local.
+        let saved = self.new_tmp(vir::TYPE_INT);
+        self.stmt(
+            self.vcx
+                .mk_pure_assign_stmt(saved, self.vcx.mk_local_labelled_old_expr(origin, label)),
+        );
+        Some(saved)
+    }
+
+    /// A conservative selection hint for continuations. Follow only whole
+    /// reference locals with a single definition through direct reborrows or
+    /// moves. We retain the runtime address/type checks and every wand proof;
+    /// this does not add an aliasing assumption to the verification state.
+    fn call_handoff_origin(
+        &self,
+        block: mir::BasicBlock,
+        argument: mir::Local,
+    ) -> Option<mir::Local> {
+        let mir::TerminatorKind::Call { args, .. } = &self.body[block].terminator().kind else {
+            return None;
+        };
+        let operand = &args.get(argument.index().checked_sub(1)?)?.node;
+        let mut local = match operand {
+            mir::Operand::Copy(place) | mir::Operand::Move(place) => place.as_local()?,
+            _ => return None,
+        };
+        let mut seen = FxHashSet::default();
+        while seen.insert(local) {
+            let mut definitions = Vec::new();
+            for data in self.body.basic_blocks.iter() {
+                for statement in &data.statements {
+                    if let mir::StatementKind::Assign(box (destination, ref value)) = statement.kind
+                    {
+                        if destination.as_local() == Some(local) {
+                            definitions.push(value);
+                        }
+                    }
+                }
+                // A call result can redefine a reference local as well.
+                if let mir::TerminatorKind::Call { destination, .. } = &data.terminator().kind {
+                    if destination.as_local() == Some(local) {
+                        return None;
+                    }
+                }
+            }
+            if definitions.is_empty() && local.index() > 0 && local.index() <= self.body.arg_count {
+                return Some(local);
+            }
+            let [value] = definitions.as_slice() else {
+                return None;
+            };
+            local = match value {
+                mir::Rvalue::Ref(_, mir::BorrowKind::Mut { .. }, source)
+                    if source.projection.len() == 1
+                        && matches!(source.projection[0], mir::ProjectionElem::Deref) =>
+                {
+                    source.local
+                }
+                mir::Rvalue::Use(mir::Operand::Move(source) | mir::Operand::Copy(source), _) => {
+                    source.as_local()?
+                }
+                _ => return None,
+            };
+        }
+        None
+    }
+
+    /// Resolve only unique whole reborrows/moves and struct-field projections
+    /// ending in a type parameter. The caller's extracted opaque type identity
+    /// determines the group; a callee-local ordinal is never reused for a field.
+    fn call_handoff_projected_origin(
+        &self,
+        block: mir::BasicBlock,
+        argument: mir::Local,
+        group: usize,
+    ) -> Option<(mir::Local, usize)> {
+        use pcg::borrow_pcg::{GeneralizedLifetime, region_projection::ExtractRegionsCtxt};
+        use prusti_rustc_interface::index::IndexVec;
+        if group != 1 {
+            return None;
+        }
+        let mir::TerminatorKind::Call { args, .. } = &self.body[block].terminator().kind else {
+            return None;
+        };
+        let operand = &args.get(argument.index().checked_sub(1)?)?.node;
+        let actual = operand.ty(self.body, self.vcx.tcx());
+        let ty::TyKind::Ref(_, selected, ty::Mutability::Mut) = actual.kind() else {
+            return None;
+        };
+        if !matches!(selected.kind(), ty::TyKind::Param(..)) {
+            return None;
+        }
+        let mut local = match operand {
+            mir::Operand::Copy(place) | mir::Operand::Move(place) => place.as_local()?,
+            _ => return None,
+        };
+        let mut seen = FxHashSet::default();
+        let mut projected = false;
+        while seen.insert(local) {
+            let mut definitions = Vec::new();
+            for data in self.body.basic_blocks.iter() {
+                for statement in &data.statements {
+                    if let mir::StatementKind::Assign(box (destination, ref value)) = statement.kind
+                        && destination.as_local() == Some(local)
+                    {
+                        definitions.push(value);
+                    }
+                }
+                if let mir::TerminatorKind::Call { destination, .. } = &data.terminator().kind
+                    && destination.as_local() == Some(local)
+                {
+                    return None;
+                }
+            }
+            if definitions.is_empty() && local.index() > 0 && local.index() <= self.body.arg_count {
+                if !projected {
+                    return None;
+                }
+                let regions: IndexVec<_, GeneralizedLifetime<'vir>> = self
+                    .vcx
+                    .tcx()
+                    .extract_regions(self.body.local_decls[local].ty);
+                let matches = regions
+                    .iter_enumerated()
+                    .filter_map(|(index, region)| match region {
+                        GeneralizedLifetime::RegionsIn(opaque)
+                            if opaque.ty(self.vcx.tcx()) == *selected =>
+                        {
+                            Some(index.index())
+                        }
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>();
+                return match matches.as_slice() {
+                    [group] => Some((local, *group)),
+                    _ => None,
+                };
+            }
+            let [value] = definitions.as_slice() else {
+                return None;
+            };
+            local = match value {
+                mir::Rvalue::Ref(_, mir::BorrowKind::Mut { .. }, source)
+                    if !source.projection.is_empty()
+                        && matches!(source.projection[0], mir::ProjectionElem::Deref)
+                        && source.projection[1..]
+                            .iter()
+                            .all(|part| matches!(part, mir::ProjectionElem::Field(..))) =>
+                {
+                    projected |= source.projection.len() > 1;
+                    source.local
+                }
+                mir::Rvalue::Use(mir::Operand::Move(source) | mir::Operand::Copy(source), _) => {
+                    source.as_local()?
+                }
+                _ => return None,
+            };
+        }
+        None
+    }
+
     pub(crate) fn encode_function_call_wands(
         &mut self,
         edge: &PcgCoupledEdgeKind<'vir>,
-    ) -> EncodeResult<
-        'vir,
-        Vec<(
-            usize,
-            vir::Wand<'vir>,
-            Vec<vir::Stmt<'vir>>,
-            Vec<vir::Stmt<'vir>>,
-        )>,
-        E,
-    > {
+    ) -> EncodeResult<'vir, Vec<super::impure::fn_wand::CallWand<'vir>>, E> {
         let PcgCoupledEdgeKind(FunctionCallOrLoop::FunctionCall(call_edge)) = edge else {
             unreachable!("expected a function-call edge")
         };
@@ -1319,6 +1852,25 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         rhs: Vec<(N, Vec<vir::ExprBool<'vir>>)>,
         label: &'vir str,
         already_unblocked: &[BorrowPcgEdge<'vir>],
+        include: impl FnMut(&BorrowPcgEdge<'vir>) -> bool,
+    ) -> EncodeResult<'vir, Vec<vir::Stmt<'vir>>, E> {
+        self.pcs_package_script_with_consumed_wands(
+            borrows_state,
+            rhs,
+            label,
+            already_unblocked,
+            &mut Vec::new(),
+            include,
+        )
+    }
+
+    pub(crate) fn pcs_package_script_with_consumed_wands<N: Into<BlockedNode<'vir>>>(
+        &mut self,
+        borrows_state: &BorrowsState<'_, 'vir>,
+        rhs: Vec<(N, Vec<vir::ExprBool<'vir>>)>,
+        label: &'vir str,
+        already_unblocked: &[BorrowPcgEdge<'vir>],
+        consumed: &mut Vec<(mir::BasicBlock, usize, ValidityConditions)>,
         mut include: impl FnMut(&BorrowPcgEdge<'vir>) -> bool,
     ) -> EncodeResult<'vir, Vec<vir::Stmt<'vir>>, E> {
         let rhs = rhs
@@ -1370,7 +1922,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             }
         }
         let unblock = self.block(|visitor| {
-            visitor.pcs_unblock_actions(borrows_state, &mut footprint, &mut Vec::new())
+            visitor.pcs_unblock_actions(borrows_state, &mut footprint, consumed)
         })?;
         let mut script = Vec::new();
         for part in footprint.parts {
@@ -1449,6 +2001,162 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         )
     }
 
+    /// Schedule only removals already selected for this phase. Lifetime
+    /// dependencies alone do not describe the storage frames of a stratified
+    /// call: a later stage can still need storage restored by an earlier one.
+    /// Keep those frames until their last stage, and close an exposed referent
+    /// before a call obligation consumes its reference's physical projection.
+    fn restoration_order(&mut self, edges: &[&BorrowPcgEdge<'vir>]) -> Vec<usize> {
+        let ctxt = self.pcg_ctxt();
+        let original = (0..edges.len()).collect::<Vec<_>>();
+        fn key(node: BlockedNode<'_>) -> Option<(Place<'_>, usize)> {
+            let PcgNode::LifetimeProjection(projection) = node else {
+                return None;
+            };
+            let PlaceOrConst::Place(place) = projection.base() else {
+                return None;
+            };
+            Some((
+                place.as_local_place()?.place(),
+                projection.region_idx().index(),
+            ))
+        }
+        fn call_location(edge: &BorrowPcgEdge<'_>) -> Option<mir::Location> {
+            match edge.kind() {
+                BorrowPcgEdgeKind::Coupled(PcgCoupledEdgeKind(
+                    FunctionCallOrLoop::FunctionCall(call),
+                )) => Some(call.metadata().location()),
+                _ => None,
+            }
+        }
+        if !edges.iter().any(|edge| call_location(edge).is_some()) {
+            return original;
+        }
+        let inputs = edges
+            .iter()
+            .map(|edge| edge.blocked_nodes(ctxt).collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+        let outputs = edges
+            .iter()
+            .map(|edge| {
+                edge.blocked_by_nodes(ctxt)
+                    .map(Into::into)
+                    .collect::<Vec<BlockedNode<'vir>>>()
+            })
+            .collect::<Vec<_>>();
+        let mut before = vec![FxHashSet::<usize>::default(); edges.len()];
+        for i in 0..edges.len() {
+            for j in 0..edges.len() {
+                if i != j && outputs[i].iter().any(|node| inputs[j].contains(node)) {
+                    before[i].insert(j);
+                }
+            }
+        }
+        let mut call_inputs = FxHashMap::default();
+        for (i, edge) in edges.iter().enumerate() {
+            let Some(location) = call_location(edge) else {
+                continue;
+            };
+            let required = outputs[i]
+                .iter()
+                .filter_map(|node| key(*node))
+                .collect::<Vec<_>>();
+            for (j, close) in edges.iter().enumerate() {
+                let base = match close.kind() {
+                    BorrowPcgEdgeKind::Deref(deref) => Some(deref.blocked_place()),
+                    BorrowPcgEdgeKind::BorrowPcgExpansion(expansion) => match expansion.base() {
+                        PcgNode::Place(base) => Some(base),
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                if i != j
+                    && base.is_some_and(|base| {
+                        matches!(
+                            base.place().ty(ctxt).ty.kind(),
+                            ty::TyKind::Ref(_, _, ty::Mutability::Mut)
+                        ) && required.contains(&(base.place(), 0))
+                    })
+                {
+                    before[i].insert(j);
+                }
+            }
+            // Recover all stages at this call, including a physical stage
+            // removed in an earlier phase. Use shape keys only for additional
+            // ordering constraints; retain every original edge and heap label.
+            if !call_inputs.contains_key(&location) {
+                let Ok(Some(block)) = self.fpcs_analysis.get_all_for_bb(location.block) else {
+                    return original;
+                };
+                let Some(at_call) = block.statements.get(location.statement_index) else {
+                    return original;
+                };
+                let stages = at_call.states[EvalStmtPhase::PostMain].borrow_pcg().graph().edges()
+                    .filter(|other| matches!(other.kind(),
+                        BorrowPcgEdgeKind::Coupled(PcgCoupledEdgeKind(FunctionCallOrLoop::FunctionCall(call)))
+                            if call.metadata().location() == location))
+                    .map(|other| (
+                        other.blocked_nodes(ctxt).filter_map(key).collect::<Vec<_>>(),
+                        other.blocked_by_nodes(ctxt).filter_map(|node| key(node.into())).collect::<Vec<_>>(),
+                    )).collect::<Vec<_>>();
+                call_inputs.insert(location, stages);
+            }
+            for (sources, targets) in &call_inputs[&location] {
+                if targets.is_empty()
+                    || targets.len() >= required.len()
+                    || !targets.iter().all(|target| required.contains(target))
+                {
+                    continue;
+                }
+                for &(place, group) in sources {
+                    if group != 0
+                        || !matches!(
+                            place.ty(ctxt).ty.kind(),
+                            ty::TyKind::Ref(_, _, ty::Mutability::Mut)
+                        )
+                        || inputs[i]
+                            .iter()
+                            .any(|node| key(*node) == Some((place, group)))
+                    {
+                        continue;
+                    }
+                    for j in 0..edges.len() {
+                        if i == j {
+                            continue;
+                        }
+                        if outputs[j]
+                            .iter()
+                            .any(|node| key(*node) == Some((place, group)))
+                        {
+                            before[j].insert(i);
+                        }
+                        if call_location(edges[j]) == Some(location)
+                            && inputs[j]
+                                .iter()
+                                .any(|node| key(*node) == Some((place, group)))
+                        {
+                            before[i].insert(j);
+                        }
+                    }
+                }
+            }
+        }
+        let mut order = Vec::with_capacity(edges.len());
+        let mut done = vec![false; edges.len()];
+        while order.len() < edges.len() {
+            let Some(next) =
+                (0..edges.len()).find(|&i| !done[i] && before[i].iter().all(|&j| done[j]))
+            else {
+                // Conservative shape aliases can add a cycle. Keep the
+                // original checked program rather than dropping obligations.
+                return original;
+            };
+            done[next] = true;
+            order.push(next);
+        }
+        order
+    }
+
     fn pcg_actions(
         &mut self,
         pcg: &Pcg<'_, 'vir>,
@@ -1458,7 +2166,48 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         // A PCG phase may remove several projections of the same call. They
         // share a Viper wand even when emitted as separate actions.
         let mut to_skip = Vec::new();
-        for action in actions.iter() {
+        let mut ordered = actions.iter().collect::<Vec<_>>();
+        fn removable(action: &PcgAction<'_>) -> bool {
+            match action {
+                PcgAction::Borrow(action) => matches!(
+                    action.kind(),
+                    BorrowPcgActionKind::RemoveEdge(_)
+                        | BorrowPcgActionKind::Restore(_)
+                        | BorrowPcgActionKind::LabelPlace(_)
+                        | BorrowPcgActionKind::LabelLifetimeProjection(_)
+                ),
+                PcgAction::Owned(action) => {
+                    matches!(action.kind(), RepackOp::RegainLoanedCapability(_))
+                }
+            }
+        }
+        let mut start = 0;
+        while start < ordered.len() {
+            if !removable(ordered[start]) {
+                start += 1;
+                continue;
+            }
+            let end = (start..ordered.len())
+                .find(|&i| !removable(ordered[i]))
+                .unwrap_or(ordered.len());
+            let slots = (start..end)
+                .filter_map(|i| match ordered[i] {
+                    PcgAction::Borrow(action) => match action.kind() {
+                        BorrowPcgActionKind::RemoveEdge(edge) => Some((i, edge)),
+                        _ => None,
+                    },
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            let order =
+                self.restoration_order(&slots.iter().map(|(_, edge)| *edge).collect::<Vec<_>>());
+            let old = slots.iter().map(|(i, _)| ordered[*i]).collect::<Vec<_>>();
+            for ((slot, _), selected) in slots.iter().zip(order) {
+                ordered[*slot] = old[selected];
+            }
+            start = end;
+        }
+        for action in ordered {
             match action {
                 PcgAction::Borrow(action) => {
                     self.borrow_action(pcg, action, edge_to_loop, &mut to_skip)?
@@ -1665,6 +2414,16 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
     }
 
     fn finish_terminator(&mut self, location: mir::Location) -> EncodeResult<'vir, (), E> {
+        if let mir::TerminatorKind::Call { destination, .. } =
+            &self.body[location.block].terminator().kind
+            && let Some(local) = destination.as_local()
+            && let Some(&origin) = self.owner_origin_locals.get(&local)
+        {
+            self.stmt(
+                self.vcx
+                    .mk_pure_assign_stmt(origin, self.vcx.mk_uint::<0>()),
+            );
+        }
         comment!(self, "PCG (T) {}", EvalStmtPhase::PostMain);
         self.pcg_phase_actions(location, EvalStmtPhase::PostMain)?;
         let label = self.block_end_label(location.block, self.current_block_pres.as_ref().unwrap());
@@ -2236,10 +2995,18 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         Ok(result)
     }
 
-    pub(crate) fn new_tmp<T: CompType>(&mut self, ty: vir::Type<'vir, T>) -> vir::Expr<'vir, T> {
+    pub(crate) fn new_tmp_decl<T: CompType>(
+        &mut self,
+        ty: vir::Type<'vir, T>,
+    ) -> vir::LocalDecl<'vir, T> {
         let name = vir::vir_format!(self.vcx, "_tmp{}", self.tmp_ctr);
         let local = vir::vir_local_decl! { self.vcx; [name] : [ty] };
         self.tmp_ctr += 1;
+        local
+    }
+
+    pub(crate) fn new_tmp<T: CompType>(&mut self, ty: vir::Type<'vir, T>) -> vir::Expr<'vir, T> {
+        let local = self.new_tmp_decl(ty);
         self.stmt(self.vcx.mk_local_decl_stmt(local, None));
         self.vcx.mk_local_ex(local)
     }
@@ -3785,6 +4552,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
 
             match &statement.kind {
                 mir::StatementKind::Assign(box (dest, rvalue)) => {
+                    self.assign_owner_origin(*dest, rvalue);
                     // What are we assigning to?
                     let proj_enc = self
                         .encode_place(Place::from(*dest))?
@@ -4118,7 +4886,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                             .collect::<Vec<_>>();
 
                         let label_pre = self.new_label("pre");
-                        let call = func_out.call(method_in, dest, label_pre);
+                        let (call, main_call_offset) = func_out.call(method_in, dest, label_pre);
                         let conditional_posts =
                             self.conditional_specs_for_call(func_def_id, caller_substs, false);
                         let conditional_args = if conditional_posts.is_empty() {
@@ -4147,6 +4915,8 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                                 span.into(),
                             )])
                         });
+                        let main_call_position =
+                            self.current_stmts.as_ref().unwrap().len() + main_call_offset;
                         self.stmts(call);
                         let label_post = self.new_label("post");
                         self.call_labels
@@ -4240,10 +5010,16 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                                         .map(|arg| self.encode_operand_snap_immediate(&arg.node)),
                                 )
                                 .collect::<EncodeResult<'vir, Vec<_>, E>>()?;
+                            let captures_start = self.current_stmts.as_ref().unwrap().len();
                             let captured = wands.selected_call_wands(
                                 &wand_args, label_pre, label_post, call_ctx, &extra, None, true,
                                 self,
                             )?;
+                            self.hoist_call_entry_captures(
+                                label_pre,
+                                main_call_position,
+                                captures_start,
+                            );
                             self.call_wand_captures.insert(location.block, captured);
                         }
                     }

@@ -40,6 +40,7 @@ pub(crate) type CallWand<'vir> = (
     vir::Wand<'vir>,
     Vec<vir::Stmt<'vir>>,
     Vec<vir::Stmt<'vir>>,
+    Vec<OwnerHandoff<'vir>>,
 );
 
 /// Observations made together at one call share their captured value. In
@@ -238,6 +239,170 @@ impl<'vir> CallSnapshots<'vir> {
     }
 }
 
+/// A restored mutable owner exposes its current nested resources while retaining
+/// the checked obligation to restore the entry resources at the owner's expiry.
+#[derive(Clone, Copy)]
+struct OwnerIdentity<'vir> {
+    address: vir::ExprRef<'vir>,
+    ty: vir::ExprTyVal<'vir>,
+}
+
+#[derive(Clone)]
+pub(crate) struct OwnerHandoff<'vir> {
+    argument: mir::Local,
+    owner: OwnerIdentity<'vir>,
+    group: usize,
+    current: vir::ExprBool<'vir>,
+    entry: vir::ExprBool<'vir>,
+    bindings: Vec<(vir::LocalDeclSnap<'vir>, vir::ExprSnap<'vir>)>,
+}
+
+#[derive(Clone)]
+pub(crate) struct RestoredOwnerHandoff<'vir> {
+    origin: Option<mir::Local>,
+    selection: Option<vir::ExprInt<'vir>>,
+    owner: OwnerIdentity<'vir>,
+    group: usize,
+    continuation: vir::Wand<'vir>,
+    guards: Vec<vir::ExprBool<'vir>>,
+}
+
+impl<'vir> RestoredOwnerHandoff<'vir> {
+    /// A field's opaque group is restored as part of the enclosing input group.
+    /// Keep the actual continuation unchanged; only its selection identity is
+    /// the original whole owner, captured before the call. Viper still checks
+    /// that the selected package provides the field's current resources.
+    pub(crate) fn remap_projected_owner<E: TaskEncoder>(
+        &mut self,
+        visitor: &mut ImpureEncVisitor<'vir, '_, E>,
+        root: mir::Local,
+        group: usize,
+        block: mir::BasicBlock,
+    ) {
+        let Some(node) = visitor
+            .wands
+            .inputs
+            .iter()
+            .copied()
+            .find(|node| node.mir_local() == root && node.region_idx().index() == group)
+        else {
+            return;
+        };
+        let Some(&(pre, _)) = visitor.call_labels.get(&block) else {
+            return;
+        };
+        let args = PledgeExpr::pledge_args(
+            visitor.local_defs[mir::RETURN_PLACE].impure_snap,
+            visitor.body.args_iter().map(|arg| {
+                visitor
+                    .vcx
+                    .mk_local_labelled_old_expr(visitor.local_defs[arg].impure_snap, pre)
+            }),
+        );
+        let Some(owner) = visitor
+            .wands
+            .input_owner(node, args, None, visitor.vcx, visitor.deps)
+        else {
+            return;
+        };
+        self.origin = Some(root);
+        self.selection = None;
+        self.group = group;
+        self.owner = owner;
+    }
+}
+
+struct HandoffSubstitute<'vir>(FxHashMap<&'vir str, vir::ExprDyn<'vir>>);
+impl<'vir> Folder<'vir, (), !> for HandoffSubstitute<'vir> {
+    fn fold_expr(&mut self, expr: vir::ExprDyn<'vir>) -> Option<vir::ExprDyn<'vir>> {
+        if let vir::ExprKindData::Local(local) = expr.kind {
+            self.0.get(local.name).copied()
+        } else {
+            expr.super_fold_with(self)
+        }
+    }
+}
+
+impl<'vir> OwnerHandoff<'vir> {
+    pub(crate) fn argument(&self) -> mir::Local {
+        self.argument
+    }
+
+    pub(crate) fn group(&self) -> usize {
+        self.group
+    }
+
+    pub(crate) fn restore<E: TaskEncoder>(
+        &self,
+        visitor: &mut ImpureEncVisitor<'vir, '_, E>,
+        guards: Vec<vir::ExprBool<'vir>>,
+        origin: Option<mir::Local>,
+        selection: Option<vir::ExprInt<'vir>>,
+    ) -> RestoredOwnerHandoff<'vir> {
+        let mut substitute = HandoffSubstitute(FxHashMap::default());
+        for &(decl, value) in &self.bindings {
+            let value = value.fold_with(&mut substitute).unwrap_or(value);
+            let saved = visitor.new_tmp(value.ty());
+            visitor.stmt(visitor.vcx.mk_pure_assign_stmt(saved, value));
+            substitute.0.insert(decl.name, saved.as_dyn());
+        }
+        let current = self
+            .current
+            .fold_with(&mut substitute)
+            .unwrap_or(self.current);
+        RestoredOwnerHandoff {
+            origin,
+            selection,
+            owner: self.owner,
+            group: self.group,
+            continuation: resource_restoration_wand(visitor.vcx, current, self.entry),
+            guards,
+        }
+    }
+
+    fn consequence(&self, vcx: &'vir vir::VirCtxt<'vir>) -> vir::ExprBool<'vir> {
+        let continuation = resource_restoration_wand(vcx, self.current, self.entry);
+        let mut result = vcx.mk_conj(&[self.current, vcx.mk_wand_expr(continuation)]);
+        for &(decl, value) in self.bindings.iter().rev() {
+            result = vcx.mk_let_expr(decl, value, result);
+        }
+        result
+    }
+
+    fn package<E: TaskEncoder>(
+        &self,
+        visitor: &mut ImpureEncVisitor<'vir, '_, E>,
+        script: &mut Vec<vir::Stmt<'vir>>,
+    ) {
+        let mut substitute = HandoffSubstitute(FxHashMap::default());
+        for &(decl, value) in &self.bindings {
+            let value = value.fold_with(&mut substitute).unwrap_or(value);
+            let name = vir::vir_format!(visitor.vcx, "_handoff_tmp{}", visitor.tmp_ctr);
+            visitor.tmp_ctr += 1;
+            let captured_decl = visitor.vcx.mk_local_decl(name, value.ty());
+            let local = visitor.vcx.mk_local_ex(captured_decl);
+            script.push(visitor.vcx.mk_local_decl_stmt(captured_decl, None));
+            script.push(visitor.vcx.mk_pure_assign_stmt(local, value));
+            substitute.0.insert(decl.name, local.as_dyn());
+        }
+        let current = self
+            .current
+            .fold_with(&mut substitute)
+            .unwrap_or(self.current);
+        let vcx = visitor.vcx;
+        let reservation = vcx.mk_wand(vcx.mk_bool::<true>(), current);
+        script.push(vcx.mk_package_stmt(reservation, &[]));
+        let restore = visitor.restore_owner_handoffs(self.owner, self.group, Some(self.argument));
+        script.push(vcx.mk_package_stmt(
+            resource_restoration_wand(vcx, current, self.entry),
+            vcx.alloc_slice(&direct_resource_restoration(
+                vcx, current, self.entry, restore,
+            )),
+        ));
+        script.push(vcx.mk_apply_stmt(reservation));
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ResourceStage {
     Storage,
@@ -253,6 +418,57 @@ pub enum WandEncError {
 }
 
 impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
+    fn restore_owner_handoffs(
+        &self,
+        owner: OwnerIdentity<'vir>,
+        group: usize,
+        origin: Option<mir::Local>,
+    ) -> Vec<vir::Stmt<'vir>> {
+        let mut restored = self
+            .restored_owner_handoffs
+            .iter()
+            .rev()
+            .filter(|handoff| handoff.group == group)
+            .filter(|handoff| match (origin, handoff.origin) {
+                (Some(left), Some(right)) => left == right,
+                _ => true,
+            })
+            .map(|handoff| {
+                let mut guards = handoff.guards.clone();
+                if let (Some(selected), Some(origin)) = (handoff.selection, origin) {
+                    let expected = self
+                        .vcx
+                        .mk_const_expr(vir::ConstData::Int(origin.index() as u128))
+                        .downcast_ty::<vir::Int>();
+                    let unknown = self.vcx.mk_eq_expr(selected, self.vcx.mk_uint::<0>());
+                    let matches = self.vcx.mk_eq_expr(selected, expected);
+                    guards.push(self.vcx.mk_disj(&[unknown, matches]));
+                }
+                guards.push(self.vcx.mk_eq_expr(owner.address, handoff.owner.address));
+                guards.push(self.vcx.mk_eq_expr(owner.ty, handoff.owner.ty));
+                self.vcx.mk_if_stmt(
+                    self.vcx.mk_conj(&guards),
+                    self.vcx
+                        .alloc_slice(&[self.vcx.mk_apply_stmt(handoff.continuation)]),
+                    &[],
+                )
+            })
+            .collect::<Vec<_>>();
+        restored.extend(
+            self.owner_summaries
+                .iter()
+                .filter(|summary| Some(summary.origin) == origin && summary.group == group)
+                .map(|summary| {
+                    self.vcx.mk_apply_stmt(resource_restoration_wand(
+                        self.vcx,
+                        summary.current,
+                        summary.entry,
+                    ))
+                }),
+        );
+        restored
+    }
+
     /// Map a signature input to the body graph's original resource root.
     pub(crate) fn input_resource_root(
         &self,
@@ -314,12 +530,19 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
         let args = PledgeExpr::pledge_args(result, args);
 
         let wands = self.wands.viper_wands();
-        // Immediate opaque resources must survive packaging.
+        // Indexed physical reservations protect parent observations shared by
+        // dependent stages. Independent restoration has no such parent frame;
+        // keep its existing antecedent proof without another quantified wand.
+        let dependent_stages = wands
+            .iter()
+            .any(|wand| !wand.frames.is_empty() || wand.bundled_owner);
+        // Immediate opaque and dependent indexed resources must survive packaging.
         // Hide them in a checked temporary wand so a restoration script can
         // only consume the matching permissions from its own antecedent.
-        // Their resource keys are frozen at the package's entry heap. Keep
-        // concrete storage on its existing path; reserving it introduces
-        // unnecessary quantified wand proofs for ordinary reference borrows.
+        // Their resource keys are frozen at the package's entry heap. Indexed
+        // parent predicates also supply the shallow sequence snapshots bound
+        // outside nested restoration wands. Preserve their actual heap state
+        // while constructing those wands from their own antecedents.
         let retained_bindings = self.vcx.alloc(std::cell::RefCell::new(Vec::new()));
         let retained = if wands.is_empty() {
             Vec::new()
@@ -327,18 +550,16 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
             self.wands
                 .output_resource_nodes(self.vcx)
                 .into_iter()
-                .filter(|node| {
+                .filter_map(|node| {
                     let regions: IndexVec<_, GeneralizedLifetime<'vir>> = self
                         .vcx
                         .tcx()
                         .extract_regions(node.ty(self.wands.fn_sig(self.vcx, None)));
-                    matches!(
+                    let opaque = matches!(
                         regions.get(node.region_idx()),
                         Some(GeneralizedLifetime::RegionsIn(_))
-                    )
-                })
-                .filter_map(|node| {
-                    self.wands.encode_predicates_for_function_shape_node(
+                    );
+                    let expression = self.wands.encode_predicates_for_function_shape_node(
                         self.vcx,
                         self.deps,
                         node,
@@ -346,7 +567,24 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
                         Some(vir::OldLabel::Label(label)),
                         Some(retained_bindings),
                         |i| args[i],
-                    )
+                    )?;
+                    struct HasIndexed(bool);
+                    impl<'vir> Folder<'vir, (), !> for HasIndexed {
+                        fn fold_expr(
+                            &mut self,
+                            e: vir::ExprDyn<'vir>,
+                        ) -> Option<vir::ExprDyn<'vir>> {
+                            if let vir::ExprKindData::PredicateApp(app) = e.kind
+                                && app.target.starts_with("indexed_")
+                            {
+                                self.0 = true;
+                            }
+                            e.super_fold_with(self)
+                        }
+                    }
+                    let mut indexed = HasIndexed(false);
+                    let _ = expression.fold_with(&mut indexed);
+                    (opaque || (dependent_stages && indexed.0)).then_some(expression)
                 })
                 .collect::<Vec<_>>()
         };
@@ -354,10 +592,21 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
             self.vcx
                 .mk_wand(self.vcx.mk_bool::<true>(), self.vcx.mk_conj(&retained))
         });
-        // Reservations are wands too: their free observations must retain
-        // enum guards when evaluated outside quantified resource assertions.
+        // Use the same saved resource keys when packaging and applying the
+        // reservation. Re-evaluating a heap-dependent observer after other
+        // packages can otherwise give Silicon different wand arguments.
         let retained = retained.map(|wand| {
-            let mut substitute = SnapshotSubstitute(FxHashMap::default());
+            struct Substitute<'vir>(FxHashMap<&'vir str, vir::ExprDyn<'vir>>);
+            impl<'vir> Folder<'vir, (), !> for Substitute<'vir> {
+                fn fold_expr(&mut self, e: vir::ExprDyn<'vir>) -> Option<vir::ExprDyn<'vir>> {
+                    if let vir::ExprKindData::Local(local) = e.kind {
+                        self.0.get(local.name).copied()
+                    } else {
+                        e.super_fold_with(self)
+                    }
+                }
+            }
+            let mut substitute = Substitute(FxHashMap::default());
             for &(decl, value) in retained_bindings.borrow().iter() {
                 let value = value.fold_with(&mut substitute).unwrap_or(value);
                 let local = self.new_tmp(value.ty());
@@ -369,7 +618,13 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
         if let Some(retained) = retained {
             wand_packages.push(self.vcx.mk_package_stmt(retained, &[]));
         }
+        // A callee may have one restoration obligation covering several
+        // instantiated groups. Output packages consume that linear obligation
+        // once; subsequent packages must use resources supplied by their own
+        // checked antecedents, not replay the same callee wand.
+        let mut consumed_call_wands = Vec::new();
         for wand_data in wands {
+            let outer_handoffs = self.restored_owner_handoffs.len();
             let ctxt = self.pcg_ctxt();
             let opaque_action = |edge: &BorrowPcgEdge<'vir>| match edge.kind() {
                 BorrowPcgEdgeKind::BorrowPcgExpansion(expansion) => {
@@ -424,11 +679,22 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
             ) else {
                 continue;
             };
-            // Viper evaluates free heap observations when it creates the
-            // wand, outside the variant guards inside that wand. Capture the
-            // same guarded reads as the method contract before packaging,
-            // leaving only pure values inside quantified resource keys.
-            let mut substitute = SnapshotSubstitute(FxHashMap::default());
+            // Match the contract's free post-call snapshots with explicit
+            // values outside the package. In particular, a captured sequence
+            // must stay outside its element quantifier on both sides of the
+            // method boundary; leaving its heap read inside an indexed term
+            // can give Viper a different wand shape.
+            struct Substitute<'vir>(FxHashMap<&'vir str, vir::ExprDyn<'vir>>);
+            impl<'vir> Folder<'vir, (), !> for Substitute<'vir> {
+                fn fold_expr(&mut self, e: vir::ExprDyn<'vir>) -> Option<vir::ExprDyn<'vir>> {
+                    if let vir::ExprKindData::Local(local) = e.kind {
+                        self.0.get(local.name).copied()
+                    } else {
+                        e.super_fold_with(self)
+                    }
+                }
+            }
+            let mut substitute = Substitute(FxHashMap::default());
             for &(decl, value) in bindings.borrow().iter() {
                 let value = value.fold_with(&mut substitute).unwrap_or(value);
                 let local = self.new_tmp(value.ty());
@@ -457,15 +723,78 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
                 .wands
                 .resource_stage(&wand_data, None, self.vcx, self.deps);
             let previous_stage = std::mem::replace(&mut self.package_resource_stage, stage);
-            let package_script = self.pcs_package_script_filtered(
+            let package_script = self.pcs_package_script_with_consumed_wands(
                 final_borrow_state,
                 rhs,
                 label,
                 &prior_edges,
+                &mut consumed_call_wands,
                 |edge| restores_opaque || !opaque_action(edge),
             );
             self.package_resource_stage = previous_stage;
             let mut package_script = package_script?;
+
+            let mut owner_restorations = Vec::new();
+            for &node in &wand_data.rhs {
+                if node.region_idx().index() != 0
+                    && !self.wands.is_handoff_node(node, &wand_data, self.vcx)
+                {
+                    if let Some(owner) = self
+                        .wands
+                        .input_owner(node, args, None, self.vcx, self.deps)
+                    {
+                        let history = self.restore_owner_handoffs(
+                            owner,
+                            node.region_idx().index(),
+                            Some(node.mir_local()),
+                        );
+                        let mut observe = |label| {
+                            self.wands.encode_predicates_for_function_shape_node(
+                                self.vcx,
+                                self.deps,
+                                node,
+                                None,
+                                Some(label),
+                                None,
+                                |i| args[i],
+                            )
+                        };
+                        let current = observe(vir::OldLabel::Label(label))
+                            .unwrap_or_else(|| self.vcx.mk_bool::<true>());
+                        let entry = observe(vir::OldLabel::None)
+                            .unwrap_or_else(|| self.vcx.mk_bool::<true>());
+                        owner_restorations.push((current, entry, history));
+                    }
+                }
+            }
+            let mut restore_entry = ordered_owner_restoration(self.vcx, owner_restorations);
+            restore_entry.extend(package_script);
+            let mut package_script = restore_entry;
+            for &node in &wand_data.rhs {
+                if let Some(entry) = self.wands.encode_predicates_for_function_shape_node(
+                    self.vcx,
+                    self.deps,
+                    node,
+                    None,
+                    Some(vir::OldLabel::None),
+                    None,
+                    |i| args[i],
+                ) {
+                    if let Some(handoff) = self
+                        .wands
+                        .owner_handoff(node, &wand_data, args, None, entry, self.vcx, self.deps)
+                    {
+                        handoff.package(self, &mut package_script);
+                    }
+                }
+            }
+
+            package_script =
+                direct_resource_restoration(self.vcx, wand.lhs, wand.rhs, package_script);
+
+            package_script.extend(crate::encoders::ty::indexed_coherence::restoration_calls(
+                self.vcx, wand.lhs, wand.rhs,
+            ));
 
             for EncodedPledge {
                 expiry_postcondition,
@@ -495,6 +824,7 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
                 self.vcx
                     .mk_package_stmt(wand, self.vcx.alloc_slice(&package_script)),
             );
+            self.restored_owner_handoffs.truncate(outer_handoffs);
         }
         if let Some(retained) = retained {
             wand_packages.push(self.vcx.mk_apply_stmt(retained));
@@ -577,12 +907,70 @@ impl<'vir> WandEncOutput<'vir> {
             } else {
                 vec![(node.ty(self.fn_sig(vcx, None)), node.region_idx().index())]
             };
+            // Aggregate outputs can contain several independently returned
+            // references. Their outer storage permissions are still a storage
+            // stage even though the aggregate itself is not a reference. Only
+            // classify a wholly direct physical footprint this way: a heap
+            // read in a predicate argument or an indexed/opaque predicate keeps
+            // the group in the nested stage.
+            let aggregate_storage = if matches!(
+                node.ty(self.fn_sig(vcx, None)).kind(),
+                ty::TyKind::Tuple(_) | ty::TyKind::Adt(..)
+            ) {
+                use vir::Reify;
+                struct DirectStorage {
+                    physical: bool,
+                    nested: bool,
+                }
+                impl<'vir> Folder<'vir, (), !> for DirectStorage {
+                    fn fold_expr(&mut self, e: vir::ExprDyn<'vir>) -> Option<vir::ExprDyn<'vir>> {
+                        match e.kind {
+                            vir::ExprKindData::PredicateApp(app) if app.target == "p_Param" => {
+                                self.physical = true;
+                            }
+                            vir::ExprKindData::PredicateApp(_)
+                            | vir::ExprKindData::Field(..)
+                            | vir::ExprKindData::Unfolding(_) => self.nested = true,
+                            vir::ExprKindData::FuncApp(app)
+                                if app.target.starts_with("p_")
+                                    || app.target.starts_with("indexed_")
+                                    || app.target.starts_with("indirect_") =>
+                            {
+                                self.nested = true
+                            }
+                            _ => {}
+                        }
+                        e.super_fold_with(self)
+                    }
+                }
+                let decomposition = RustTyDecomposition::from_ty(
+                    node.ty(self.fn_sig(vcx, None)),
+                    self.g_params(vcx, None),
+                );
+                let domain = deps
+                    .require_dep::<crate::encoders::TyUsePureEnc>(decomposition)
+                    .ok()?;
+                let snapshot =
+                    vcx.mk_local_ex(vcx.mk_local_decl("_stage_argument", domain.snapshot));
+                let mut footprint = DirectStorage {
+                    physical: false,
+                    nested: false,
+                };
+                for predicate in &predicates {
+                    let expression = predicate.reify(vcx, ExprInput::current(snapshot));
+                    let _ = expression.fold_with(&mut footprint);
+                }
+                footprint.physical && !footprint.nested
+            } else {
+                false
+            };
             for (ty, index) in projections {
-                let storage =
-                    index == 0 && matches!(ty.kind(), ty::TyKind::Ref(_, _, ty::Mutability::Mut));
+                let storage = aggregate_storage
+                    || index == 0
+                        && matches!(ty.kind(), ty::TyKind::Ref(_, _, ty::Mutability::Mut));
                 // One deduplicated lifetime can cover both storage and inner
                 // references. Such a group must retain its complete script.
-                if storage && predicates.len() > 1 {
+                if storage && !aggregate_storage && predicates.len() > 1 {
                     return None;
                 }
                 let current = if storage {
@@ -703,6 +1091,7 @@ impl<'vir> WandEncOutput<'vir> {
                             metadata: None,
                             binder_depth: 0,
                             indexed: None,
+                            indexed_snapshots: &[],
                             resource_path: &[],
                         },
                     )
@@ -882,7 +1271,7 @@ impl<'vir> WandEncOutput<'vir> {
                 visitor,
             )?
             .into_iter()
-            .map(|(_, wand, _, _)| wand)
+            .map(|(_, wand, _, _, _)| wand)
             .collect())
     }
 
@@ -994,29 +1383,136 @@ impl<'vir> WandEncOutput<'vir> {
                                 actual: source.decompose_normalize(call_ctx),
                                 selected: Some(opaque.ty(visitor.vcx.tcx())),
                             })?;
-                    Ok(conversion.at_snapshot_on_heap(args[node.mir_local()], pack, heap))
+                    Ok(match heap {
+                        Some(label) => {
+                            conversion.at_snapshot_on_heap(args[node.mir_local()], pack, label)
+                        }
+                        None => conversion.at_snapshot(args[node.mir_local()], pack),
+                    })
                 } else {
                     Ok(Vec::new())
                 }
             };
             let mut before = Vec::new();
             for node in &wand_data.lhs {
-                before.extend(convert(*node, true, label_post)?);
+                before.extend(convert(*node, true, Some(label_post))?);
             }
             // A preceding stage returned these resources in the caller's
             // representation. Repack the frame on its original input heap
             // before passing it through the next generic restoration stage.
             for node in &wand_data.frames {
-                before.extend(convert((*node).into(), true, label_pre)?);
+                before.extend(convert((*node).into(), true, Some(label_pre))?);
             }
             let mut after = Vec::new();
             for node in &wand_data.rhs {
-                after.extend(convert((*node).into(), false, label_pre)?);
+                let heap = (!self.is_handoff_node(*node, wand_data, vcx)).then_some(label_pre);
+                after.extend(convert((*node).into(), false, heap)?);
             }
             for node in &wand_data.frames {
-                after.extend(convert((*node).into(), false, label_pre)?);
+                after.extend(convert((*node).into(), false, Some(label_pre))?);
             }
-            wands.push((id, wand, before, after));
+            // A source restored by an earlier stage may have been opened back
+            // into its concrete storage predicate before this stage expires.
+            // Its frame is expressed in the callee's generic representation.
+            // Convert the held physical predicate for this application and
+            // restore the representation expected by the surrounding graph.
+            let mut storage_before = Vec::new();
+            let mut storage_after = Vec::new();
+            for &frame in &wand_data.frames {
+                if frame.region_idx().index() != 0 {
+                    continue;
+                }
+                let source = signature.inputs[frame.mir_local().index() - 1];
+                let actual = source.decompose_normalize(call_ctx);
+                let crate::encoders::ty::TySpecifics::MutRef(data) = actual.ty.specifics else {
+                    continue;
+                };
+                // The reference constructor has a generic referent even when
+                // this call instantiates it with concrete owner storage.
+                let referent = data.referent.decompose_normalize(actual.args);
+                if referent.ty.specifics.is_param() {
+                    continue;
+                }
+                let Some(owner) = self.input_owner(frame, args, Some(call_ctx), vcx, visitor.deps)
+                else {
+                    continue;
+                };
+                let physical = visitor
+                    .deps
+                    .require_dep::<crate::encoders::TyUseImpureEnc>(referent)?;
+                let caster = visitor
+                    .deps
+                    .require_dep::<GArgsCastEnc<crate::encoders::Impure>>(Some(
+                        crate::encoders::ty::RustTyNormalized {
+                            param: RustTyDecomposition::param(),
+                            concrete: referent,
+                        },
+                    ))?;
+                let concrete =
+                    vcx.mk_predicate_perm_expr(physical.ref_to_pred_app(owner.address, None));
+                let held = vcx
+                    .mk_bin_op_expr(vir::BinOpKind::CmpLt, vcx.mk_no_perm(), concrete)
+                    .downcast_ty();
+                // Applications inside a package may assign only script-local
+                // variables. Declare this representation flag with the
+                // application, rather than with the call's retained captures.
+                let flag = visitor.new_tmp_decl(vir::TYPE_BOOL);
+                let was_concrete = vcx.mk_local_ex(flag);
+                storage_before.push(vcx.mk_local_decl_stmt(flag, None));
+                storage_before.push(vcx.mk_pure_assign_stmt(was_concrete, held));
+                storage_before.push(
+                    vcx.mk_if_stmt(
+                        was_concrete,
+                        vcx.alloc_slice(
+                            &caster
+                                .cast_to_callee_ctx(owner.address)
+                                .into_iter()
+                                .collect::<Vec<_>>(),
+                        ),
+                        &[],
+                    ),
+                );
+                storage_after.push(
+                    vcx.mk_if_stmt(
+                        was_concrete,
+                        vcx.alloc_slice(
+                            &caster
+                                .cast_to_caller_ctx(owner.address)
+                                .into_iter()
+                                .collect::<Vec<_>>(),
+                        ),
+                        &[],
+                    ),
+                );
+            }
+            storage_before.extend(before);
+            before = storage_before;
+            after.extend(storage_after);
+            let mut handoffs = Vec::new();
+            for &node in &wand_data.rhs {
+                if let Some(entry) = self.encode_predicates_for_function_shape_node(
+                    vcx,
+                    visitor.deps,
+                    node,
+                    Some(call_ctx),
+                    Some(vir::OldLabel::Label(label_pre)),
+                    None,
+                    |i| args[i],
+                ) {
+                    if let Some(handoff) = self.owner_handoff(
+                        node,
+                        wand_data,
+                        args,
+                        Some(call_ctx),
+                        entry,
+                        vcx,
+                        visitor.deps,
+                    ) {
+                        handoffs.push(handoff);
+                    }
+                }
+            }
+            wands.push((id, wand, before, after, handoffs));
         }
         if materialize {
             let def_id = self.function_data.def_id();
@@ -1202,10 +1698,25 @@ impl<'vir> WandEncOutput<'vir> {
             if !sources.iter().any(|node| inputs.contains(node)) {
                 continue;
             }
-            let targets = wand
-                .flow_lhs
-                .as_ref()
-                .unwrap_or(&wand.lhs)
+            // Stratification replaces earlier output dependencies with the
+            // corresponding input resources as frames. The current edge must
+            // cover the remaining targets; the wand still consumes and returns
+            // every frame, so applying it checks that earlier restoration ran.
+            // Keep mapping validation for those frames without requiring their
+            // already discharged output nodes on this later PCG edge.
+            let target_nodes = if wand.frames.is_empty() {
+                wand.flow_lhs.as_ref().unwrap_or(&wand.lhs)
+            } else {
+                let frames = wand
+                    .frames
+                    .iter()
+                    .copied()
+                    .map(Into::into)
+                    .collect::<Vec<_>>();
+                let _ = mapped(&frames)?;
+                &wand.lhs
+            };
+            let targets = target_nodes
                 .iter()
                 .copied()
                 .filter(|node| {
@@ -1216,6 +1727,21 @@ impl<'vir> WandEncOutput<'vir> {
                 })
                 .collect::<Vec<_>>();
             let targets = mapped(&targets)?;
+            if wand.bundled_owner {
+                // The original PCG still names the individual lifetime edges.
+                // One such request consumes the complete checked obligation;
+                // per-call/id/guard tracking prevents replay for another edge.
+                // Reject any projection outside the combined owner interface.
+                if !inputs.iter().all(|node| sources.contains(node))
+                    || !outputs.iter().all(|node| targets.contains(node))
+                {
+                    return Err(
+                        "whole-owner request exceeds its joint restoration interface".into(),
+                    );
+                }
+                selected.push(id);
+                continue;
+            }
             if !sources.iter().all(|node| inputs.contains(node))
                 || !targets.iter().all(|node| outputs.contains(node))
             {
@@ -1240,6 +1766,122 @@ impl<'vir> WandEncOutput<'vir> {
         Ok(selected)
     }
 
+    fn is_handoff_node(
+        &self,
+        node: WandRhsKey,
+        wand: &WandData<'vir>,
+        vcx: &'vir vir::VirCtxt<'vir>,
+    ) -> bool {
+        let shape: FunctionShapeNode<Generalized> = node.into();
+        // Observe current resources only when this stage restores the owner
+        // storage itself. Storage framed from an earlier stage may have been
+        // changed by the caller in the meantime. That physical frame alone
+        // does not supply the referents of the new value; return the entry
+        // resources in that case instead of promising an unsupported handoff.
+        node.region_idx().index() != 0
+            && matches!(
+                shape.ty(self.fn_sig(vcx, None)).kind(),
+                ty::TyKind::Ref(_, _, ty::Mutability::Mut)
+            )
+            && wand.rhs.iter().any(|other| {
+                other.mir_local() == node.mir_local() && other.region_idx().index() == 0
+            })
+    }
+
+    fn input_owner<E: TaskEncoder>(
+        &self,
+        node: WandRhsKey,
+        args: PledgeArgs<'vir>,
+        call_ctx: WandCallContext<'vir>,
+        vcx: &'vir vir::VirCtxt<'vir>,
+        deps: &mut TaskEncoderDependencies<'vir, E>,
+    ) -> Option<OwnerIdentity<'vir>> {
+        let storage = self.inputs.iter().find(|input| {
+            input.mir_local() == node.mir_local() && input.region_idx().index() == 0
+        })?;
+        let resource = self.encode_predicates_for_function_shape_node(
+            vcx,
+            deps,
+            *storage,
+            call_ctx,
+            None,
+            None,
+            |i| args[i],
+        )?;
+        struct Owner<'vir>(Option<OwnerIdentity<'vir>>);
+        impl<'vir> Folder<'vir, (), !> for Owner<'vir> {
+            fn fold_expr(&mut self, expr: vir::ExprDyn<'vir>) -> Option<vir::ExprDyn<'vir>> {
+                if let vir::ExprKindData::PredicateApp(app) = expr.kind {
+                    if app.target == "p_Param" && self.0.is_none() {
+                        self.0 = Some(OwnerIdentity {
+                            address: app.args[0].downcast_ty(),
+                            ty: app.args[1].downcast_ty(),
+                        });
+                    }
+                }
+                expr.super_fold_with(self)
+            }
+        }
+        let mut owner = Owner(None);
+        let _ = resource.fold_with(&mut owner);
+        owner.0
+    }
+
+    fn owner_handoff<E: TaskEncoder>(
+        &self,
+        node: WandRhsKey,
+        wand: &WandData<'vir>,
+        args: PledgeArgs<'vir>,
+        call_ctx: WandCallContext<'vir>,
+        entry: vir::ExprBool<'vir>,
+        vcx: &'vir vir::VirCtxt<'vir>,
+        deps: &mut TaskEncoderDependencies<'vir, E>,
+    ) -> Option<OwnerHandoff<'vir>> {
+        if !self.is_handoff_node(node, wand, vcx) {
+            return None;
+        }
+        let owner = self.input_owner(node, args, call_ctx, vcx, deps)?;
+        let captures = vcx.alloc(std::cell::RefCell::new(Vec::new()));
+        let current = self.encode_predicates_for_function_shape_node(
+            vcx,
+            deps,
+            node,
+            call_ctx,
+            None,
+            Some(captures),
+            |local| args[local],
+        )?;
+        // These observations are bound inside the outer wand's consequent,
+        // after the owner storage is restored. Keep their names separate from
+        // entry/post-call observations bound outside the wand.
+        let mut substitute = HandoffSubstitute(FxHashMap::default());
+        let mut bindings = Vec::new();
+        for (index, &(decl, value)) in captures.borrow().iter().enumerate() {
+            let value = value.fold_with(&mut substitute).unwrap_or(value);
+            let name = vir::vir_format!(
+                vcx,
+                "_owner_current_{}_{}_{}",
+                node.mir_local().index(),
+                node.region_idx().index(),
+                index
+            );
+            let saved = vcx.mk_local_decl(name, value.ty());
+            bindings.push((saved, value));
+            substitute
+                .0
+                .insert(decl.name, vcx.mk_local_ex(saved).as_dyn());
+        }
+        let current = current.fold_with(&mut substitute).unwrap_or(current);
+        Some(OwnerHandoff {
+            argument: node.mir_local(),
+            owner,
+            group: node.region_idx().index(),
+            current,
+            entry,
+            bindings,
+        })
+    }
+
     fn mk_wand<E: TaskEncoder>(
         &self,
         wand_data: &WandData<'vir>,
@@ -1252,7 +1894,7 @@ impl<'vir> WandEncOutput<'vir> {
         vcx: &'vir vir::VirCtxt<'vir>,
         deps: &mut TaskEncoderDependencies<'vir, E>,
     ) -> Option<vir::Wand<'vir>> {
-        debug_assert!(!wand_data.lhs.is_empty());
+        debug_assert!(!wand_data.lhs.is_empty() || !wand_data.frames.is_empty());
         let generics = self.generics_subst(call_ctx, vcx, deps);
         let spec_args = if let (Some(call_args), false) = (call_ctx, wand_data.pledges.is_empty()) {
             let signature = RustSignature::new(self.function_data.def_id());
@@ -1306,8 +1948,9 @@ impl<'vir> WandEncOutput<'vir> {
             .iter()
             .map(|frame| physical_frame(vcx, *frame))
             .collect::<Vec<_>>();
+        let mut transferred = Vec::new();
         let rhs = wand_data.rhs.iter().filter_map(|g| {
-            self.encode_predicates_for_function_shape_node(
+            let entry = self.encode_predicates_for_function_shape_node(
                 vcx,
                 deps,
                 *g,
@@ -1315,10 +1958,24 @@ impl<'vir> WandEncOutput<'vir> {
                 Some(pledge_old_label.map_or(vir::OldLabel::None, vir::OldLabel::Label)),
                 output_bindings,
                 |i| pledge_args[i],
+            )?;
+            Some(
+                match self.owner_handoff(*g, wand_data, pledge_args, call_ctx, entry, vcx, deps) {
+                    Some(handoff) => handoff.consequence(vcx),
+                    None => {
+                        transferred.push(entry);
+                        entry
+                    }
+                },
             )
         });
-        let rhs = rhs
-            .chain(frames.iter().copied())
+        // Establish physical frames before current-owner observations read
+        // them. The conjunction retains exactly the same resources, but its
+        // order must also satisfy Viper's self-framing check.
+        let rhs = frames
+            .iter()
+            .copied()
+            .chain(rhs)
             .chain(frame_values)
             .chain(
                 wand_data
@@ -1362,6 +2019,15 @@ impl<'vir> WandEncOutput<'vir> {
             )
             .collect::<Vec<_>>();
         let lhs = vcx.mk_conj(&lhs);
+        let transfer_values = transfer_frames(vcx, lhs, vcx.mk_conj(&transferred));
+        let rhs = if matches!(
+            transfer_values.kind,
+            vir::ExprKindData::Const(vir::ConstData::Bool(true))
+        ) {
+            rhs
+        } else {
+            vcx.mk_conj(&[rhs, transfer_values])
+        };
         Some(vcx.mk_wand(lhs, rhs))
     }
 
@@ -1396,6 +2062,399 @@ impl<'vir> WandEncOutput<'vir> {
     }
 }
 
+/// When an expiry transfers a resource already supplied by its antecedent,
+/// preserve its observed state. The guard compares the complete resource key;
+/// each observation is framed by permissions on its own side of the wand.
+/// This also handles permutations justified by functional postconditions.
+/// Packages in untrusted callees must prove these equalities.
+/// Returning an owner's entry resources must preserve the values of complete
+/// resource identities supplied by the continuation's antecedent. Apply the
+/// same checked frame rule to handoffs and composed loop summaries as to the
+/// outer function wands; otherwise applying a handoff discards those facts.
+/// If both sides name the same complete flat resource footprint, the
+/// antecedent itself proves restoration. Replaying a chain of opaque wands
+/// would unnecessarily forget its current observations. This is a proof
+/// branch only: the original consequent, including every value fact, remains
+/// checked. More complex/quantified layouts keep their original proof script.
+fn same_resource_footprint<'vir>(
+    vcx: &'vir vir::VirCtxt<'vir>,
+    current: vir::ExprBool<'vir>,
+    entry: vir::ExprBool<'vir>,
+) -> Option<vir::ExprBool<'vir>> {
+    fn leaves<'vir>(expr: vir::ExprBool<'vir>, out: &mut Vec<vir::ExprBool<'vir>>) -> bool {
+        match expr.kind {
+            vir::ExprKindData::PredicateApp(app)
+                if matches!(app.target, "p_Param" | "indirect_resources") =>
+            {
+                out.push(expr);
+                true
+            }
+            vir::ExprKindData::BinOp(op) if op.kind == vir::BinOpKind::And => {
+                leaves(op.lhs.downcast_ty(), out) && leaves(op.rhs.downcast_ty(), out)
+            }
+            _ => {
+                struct Pure(bool);
+                impl<'vir> Folder<'vir, (), !> for Pure {
+                    fn fold_expr(
+                        &mut self,
+                        expr: vir::ExprDyn<'vir>,
+                    ) -> Option<vir::ExprDyn<'vir>> {
+                        if matches!(
+                            expr.kind,
+                            vir::ExprKindData::PredicateApp(_)
+                                | vir::ExprKindData::PredicatePerm(_)
+                                | vir::ExprKindData::AccField(_)
+                                | vir::ExprKindData::Wand(_)
+                                | vir::ExprKindData::InhaleExhale(_)
+                        ) {
+                            self.0 = false;
+                        }
+                        expr.super_fold_with(self)
+                    }
+                }
+                let mut pure = Pure(true);
+                let _ = expr.fold_with(&mut pure);
+                pure.0
+            }
+        }
+    }
+    let mut before = Vec::new();
+    let mut after = Vec::new();
+    if !leaves(current, &mut before)
+        || !leaves(entry, &mut after)
+        || before.is_empty()
+        || before.len() != after.len()
+    {
+        return None;
+    }
+    let mut equalities = Vec::new();
+    for (before, after) in before.into_iter().zip(after) {
+        let vir::ExprKindData::PredicateApp(before) = before.kind else {
+            unreachable!()
+        };
+        let vir::ExprKindData::PredicateApp(after) = after.kind else {
+            unreachable!()
+        };
+        if before.target != after.target || before.args.len() != after.args.len() {
+            return None;
+        }
+        equalities.extend(
+            before
+                .args
+                .iter()
+                .zip(after.args)
+                .map(|(&a, &b)| vcx.mk_eq_expr(a, b)),
+        );
+    }
+    Some(vcx.mk_conj(&equalities))
+}
+
+fn direct_resource_restoration<'vir>(
+    vcx: &'vir vir::VirCtxt<'vir>,
+    current: vir::ExprBool<'vir>,
+    entry: vir::ExprBool<'vir>,
+    script: Vec<vir::Stmt<'vir>>,
+) -> Vec<vir::Stmt<'vir>> {
+    match same_resource_footprint(vcx, current, entry) {
+        Some(same) => vec![vcx.mk_if_stmt(same, &[], vcx.alloc_slice(&script))],
+        None => script,
+    }
+}
+
+/// Keep an equal-key current resource framed until the other owner's entry
+/// resource has been restored. Applying that other history first gives two
+/// permissions to the same resource; its existing observation then remains
+/// framed when the next history consumes one permission. Complete permutations
+/// already satisfy the resource obligation without applying either history.
+/// Every branch still proves the original enclosing wand, including all frames.
+fn ordered_owner_restoration<'vir>(
+    vcx: &'vir vir::VirCtxt<'vir>,
+    owners: Vec<(
+        vir::ExprBool<'vir>,
+        vir::ExprBool<'vir>,
+        Vec<vir::Stmt<'vir>>,
+    )>,
+) -> Vec<vir::Stmt<'vir>> {
+    if owners.len() == 2 {
+        let mut equalities = Vec::new();
+        for before in &owners {
+            for after in &owners {
+                if let Some(same) = same_resource_footprint(vcx, before.0, after.1) {
+                    equalities.push(same);
+                }
+            }
+        }
+        if equalities.len() == 4 {
+            fn branches<'vir>(
+                vcx: &'vir vir::VirCtxt<'vir>,
+                equalities: &[vir::ExprBool<'vir>],
+                owners: &[(
+                    vir::ExprBool<'vir>,
+                    vir::ExprBool<'vir>,
+                    Vec<vir::Stmt<'vir>>,
+                )],
+                choices: &mut Vec<bool>,
+            ) -> Vec<vir::Stmt<'vir>> {
+                if choices.len() == 4 {
+                    if (choices[0] && choices[3]) || (choices[1] && choices[2]) {
+                        return Vec::new();
+                    }
+                    let order = if choices[1] && !choices[2] {
+                        [1, 0]
+                    } else {
+                        [0, 1]
+                    };
+                    let mut script = Vec::new();
+                    for owner in order {
+                        if !choices[owner * 3] {
+                            script.extend_from_slice(&owners[owner].2);
+                        }
+                    }
+                    return script;
+                }
+                let condition = equalities[choices.len()];
+                choices.push(true);
+                let yes = branches(vcx, equalities, owners, choices);
+                *choices.last_mut().unwrap() = false;
+                let no = branches(vcx, equalities, owners, choices);
+                choices.pop();
+                vec![vcx.mk_if_stmt(condition, vcx.alloc_slice(&yes), vcx.alloc_slice(&no))]
+            }
+            return branches(vcx, &equalities, &owners, &mut Vec::new());
+        }
+    }
+    owners
+        .into_iter()
+        .flat_map(|(current, entry, script)| {
+            direct_resource_restoration(vcx, current, entry, script)
+        })
+        .collect()
+}
+
+fn resource_restoration_wand<'vir>(
+    vcx: &'vir vir::VirCtxt<'vir>,
+    current: vir::ExprBool<'vir>,
+    entry: vir::ExprBool<'vir>,
+) -> vir::Wand<'vir> {
+    let values = transfer_frames(vcx, current, entry);
+    let rhs = if matches!(
+        values.kind,
+        vir::ExprKindData::Const(vir::ConstData::Bool(true))
+    ) {
+        entry
+    } else {
+        vcx.mk_conj(&[entry, values])
+    };
+    vcx.mk_wand(current, rhs)
+}
+
+fn transfer_frames<'vir>(
+    vcx: &'vir vir::VirCtxt<'vir>,
+    lhs: vir::ExprBool<'vir>,
+    rhs: vir::ExprBool<'vir>,
+) -> vir::ExprBool<'vir> {
+    fn stable_key<'vir>(expr: vir::ExprDyn<'vir>) -> bool {
+        struct Check(bool);
+        impl<'vir> Folder<'vir, (), !> for Check {
+            fn fold_expr(&mut self, expr: vir::ExprDyn<'vir>) -> Option<vir::ExprDyn<'vir>> {
+                match expr.kind {
+                    vir::ExprKindData::Old(old) if old.label != vir::OldLabel::Lhs => {
+                        // A named/entry heap observation is already fixed at
+                        // wand creation, independently of the eventual LHS.
+                        return Some(expr);
+                    }
+                    vir::ExprKindData::Old(_)
+                    | vir::ExprKindData::Field(..)
+                    | vir::ExprKindData::PredicateApp(_)
+                    | vir::ExprKindData::PredicatePerm(_)
+                    | vir::ExprKindData::Unfolding(_)
+                    | vir::ExprKindData::AccField(_)
+                    | vir::ExprKindData::Wand(_)
+                    | vir::ExprKindData::InhaleExhale(_) => self.0 = false,
+                    // VIR represents generated snapshot/type constructors and
+                    // pure snapshot operations as FuncApp as well. Their s_
+                    // namespace (and generic snapshot injections) has no heap
+                    // precondition. Generated associated-type projections are
+                    // also domain functions over generic arguments (TraitEnc),
+                    // including Pointee::Metadata. Other functions stay excluded.
+                    vir::ExprKindData::FuncApp(app)
+                        if !app.target.starts_with("s_")
+                            && !app.target.starts_with("make_generic_s_")
+                            && !(app.result_ty == vir::TYPE_TYVAL.as_dyn()
+                                && app.target.contains("_assoc_type_")) =>
+                    {
+                        self.0 = false
+                    }
+                    _ => {}
+                }
+                expr.super_fold_with(self)
+            }
+        }
+        let mut check = Check(true);
+        let _ = expr.fold_with(&mut check);
+        check.0
+    }
+    struct Leaf<'vir> {
+        permission: vir::ExprBool<'vir>,
+        guard: vir::ExprBool<'vir>,
+        variables: &'vir [vir::LocalDeclDyn<'vir>],
+        triggers: &'vir [vir::Trigger<'vir>],
+    }
+    fn leaves<'vir>(
+        vcx: &'vir vir::VirCtxt<'vir>,
+        expr: vir::ExprBool<'vir>,
+        guard: vir::ExprBool<'vir>,
+        variables: &'vir [vir::LocalDeclDyn<'vir>],
+        triggers: &'vir [vir::Trigger<'vir>],
+        out: &mut Vec<Leaf<'vir>>,
+    ) {
+        match expr.kind {
+            vir::ExprKindData::PredicateApp(app)
+                if matches!(
+                    app.target,
+                    "p_Param"
+                        | "indirect_resources"
+                        | "indexed_p_Param"
+                        | "indexed_indirect_resources"
+                ) =>
+            {
+                out.push(Leaf {
+                    permission: expr,
+                    guard,
+                    variables,
+                    triggers,
+                })
+            }
+            vir::ExprKindData::BinOp(op) if op.kind == vir::BinOpKind::And => {
+                leaves(vcx, op.lhs.downcast_ty(), guard, variables, triggers, out);
+                leaves(vcx, op.rhs.downcast_ty(), guard, variables, triggers, out);
+            }
+            vir::ExprKindData::BinOp(op)
+                if op.kind == vir::BinOpKind::Implies && stable_key(op.lhs) =>
+            {
+                let guard = vcx.mk_conj(&[guard, op.lhs.downcast_ty()]);
+                leaves(vcx, op.rhs.downcast_ty(), guard, variables, triggers, out);
+            }
+            vir::ExprKindData::Forall(quantified) if variables.is_empty() => {
+                leaves(
+                    vcx,
+                    quantified.body,
+                    guard,
+                    quantified.qvars,
+                    quantified.triggers,
+                    out,
+                );
+            }
+            // Keep a single quantified scope. Nested binders, let expressions
+            // and conditional branches need separate correspondence rules.
+            _ => {}
+        }
+    }
+    let mut inputs = Vec::new();
+    let mut outputs = Vec::new();
+    leaves(vcx, lhs, vcx.mk_bool::<true>(), &[], &[], &mut inputs);
+    leaves(vcx, rhs, vcx.mk_bool::<true>(), &[], &[], &mut outputs);
+    let mut facts = Vec::new();
+    for output in outputs {
+        let vir::ExprKindData::PredicateApp(after) = output.permission.kind else {
+            unreachable!()
+        };
+        for input in &inputs {
+            if !output.variables.is_empty()
+                && !input.variables.is_empty()
+                && (output.variables.len() != input.variables.len()
+                    || output
+                        .variables
+                        .iter()
+                        .zip(input.variables)
+                        .any(|(a, b)| a.ty != b.ty))
+            {
+                continue;
+            }
+            // Compare the two resource families at the same bound indices,
+            // alpha-renaming the antecedent into the consequent's scope. Both
+            // range guards remain, and complete resource keys must still match.
+            let mut rename = SnapshotSubstitute(
+                input
+                    .variables
+                    .iter()
+                    .zip(output.variables)
+                    .map(|(before, after)| (before.name, vcx.mk_local_ex(after)))
+                    .collect(),
+            );
+            let before_permission = input
+                .permission
+                .fold_with(&mut rename)
+                .unwrap_or(input.permission);
+            let before_guard = input.guard.fold_with(&mut rename).unwrap_or(input.guard);
+            let vir::ExprKindData::PredicateApp(before) = before_permission.kind else {
+                unreachable!()
+            };
+            let (after_kind, after_args) = if let Some(kind) = after.target.strip_prefix("indexed_")
+            {
+                (kind, &after.args[2..])
+            } else {
+                (after.target, after.args)
+            };
+            let (before_kind, before_args) =
+                if let Some(kind) = before.target.strip_prefix("indexed_") {
+                    (kind, &before.args[2..])
+                } else {
+                    (before.target, before.args)
+                };
+            if after_kind != before_kind || after_args.len() != before_args.len() {
+                continue;
+            }
+            // An indexed wrapper partitions ownership of its underlying
+            // resource. A scalar/collection transfer can retag that wrapper;
+            // compare its full underlying identity while retaining the range
+            // guards. For two indexed families retain the index/path keys too.
+            let (after_args, before_args) = if after.target == before.target {
+                (after.args, before.args)
+            } else {
+                (after_args, before_args)
+            };
+            if !after_args
+                .iter()
+                .chain(before_args)
+                .all(|arg| stable_key(*arg))
+            {
+                continue;
+            }
+            let keys = after_args
+                .iter()
+                .zip(before_args)
+                .map(|(&a, &b)| vcx.mk_eq_expr(a, b))
+                .collect::<Vec<_>>();
+            let guard = vcx.mk_conj(&[output.guard, before_guard, vcx.mk_conj(&keys)]);
+            let vir::ExprKindData::BinOp(after_frame) = physical_frame(vcx, output.permission).kind
+            else {
+                unreachable!()
+            };
+            let vir::ExprKindData::BinOp(before_frame) =
+                physical_frame(vcx, before_permission).kind
+            else {
+                unreachable!()
+            };
+            let preserved = vcx.mk_eq_expr(after_frame.lhs, before_frame.rhs);
+            let fact = vcx
+                .mk_bin_op_expr(vir::BinOpKind::Implies, guard, preserved)
+                .downcast_ty();
+            let (variables, triggers) = if output.variables.is_empty() {
+                (input.variables, input.triggers)
+            } else {
+                (output.variables, output.triggers)
+            };
+            facts.push(if variables.is_empty() {
+                fact
+            } else {
+                vcx.mk_forall_expr(variables, triggers, fact)
+            });
+        }
+    }
+    vcx.mk_conj(&facts)
+}
+
 /// A frame preserves its heap state as well as permission. Mutable-reference
 /// leaves use `p_Param`; opaque groups expose a recursive resource state.
 fn physical_frame<'vir>(
@@ -1403,6 +2462,33 @@ fn physical_frame<'vir>(
     resources: vir::ExprBool<'vir>,
 ) -> vir::ExprBool<'vir> {
     match resources.kind {
+        vir::ExprKindData::PredicateApp(app)
+            if app.target == "indexed_p_Param" || app.target == "indexed_indirect_resources" =>
+        {
+            // The index and path distinguish logical ownership even when
+            // reference addresses coincide. Read through the same wrapper on
+            // both heaps; observing a frame must not open or consume it.
+            let state = if app.target == "indexed_p_Param" {
+                assert_eq!(app.args.len(), 4);
+                vir::FunctionIdn::<(vir::Ref, vir::TyVal), vir::PSnap>::new(
+                    vir::ViperIdent::new("p_Param_snap"),
+                    (vir::TYPE_REF, vir::TYPE_TYVAL),
+                    vir::TYPE_PSNAP,
+                )
+                .call()(app.args[2].downcast_ty(), app.args[3].downcast_ty())
+                .as_dyn()
+            } else {
+                assert_eq!(app.args.len(), 5);
+                crate::encoders::ty::resources::state_function("indirect_resource_state").call()(
+                    app.args[2].downcast_ty(),
+                    app.args[3].downcast_ty(),
+                    app.args[4].downcast_ty(),
+                )
+                .as_dyn()
+            };
+            let state = vcx.mk_unfolding_expr(app, state);
+            vcx.mk_eq_expr(state, vcx.mk_old_lhs_expr(state))
+        }
         vir::ExprKindData::PredicateApp(app) if app.target == "indirect_resources" => {
             let state = crate::encoders::ty::resources::state_function("indirect_resource_state")
                 .call()(
@@ -1435,6 +2521,21 @@ fn physical_frame<'vir>(
             let guard = op.lhs.downcast_ty::<vir::Bool>();
             vir::expr! { (guard) ==> (frame) }
         }
+        vir::ExprKindData::Forall(quantified) => vcx.mk_forall_expr(
+            quantified.qvars,
+            quantified.triggers,
+            physical_frame(vcx, quantified.body),
+        ),
+        vir::ExprKindData::Ternary(branch) => vcx.mk_ternary_expr(
+            branch.cond,
+            physical_frame(vcx, branch.then.downcast_ty()),
+            physical_frame(vcx, branch.else_.downcast_ty()),
+        ),
+        vir::ExprKindData::Let(binding) => vcx.mk_let_expr(
+            vcx.mk_local_decl(binding.name, binding.val.ty()),
+            binding.val,
+            physical_frame(vcx, binding.expr.downcast_ty()),
+        ),
         _ => vcx.mk_bool::<true>(),
     }
 }
@@ -1465,14 +2566,16 @@ pub struct WandData<'vir> {
     /// Lifetime projections on the right-hand side of the wand. Guaranteed to be
     /// non-empty.
     rhs: Vec<WandRhsKey>,
-    /// Lifetime projections on the left-hand side of the wand. Guaranteed to be
-    /// non-empty.
+    /// Lifetime projections on the left-hand side. Non-empty unless earlier
+    /// stages supply the complete checked antecedent through `frames`.
     lhs: Vec<WandLhsKey>,
     pledges: EncodedPledges<'vir>,
     /// Permissions restored by an earlier wand, consumed and returned unchanged.
     frames: Vec<WandRhsKey>,
     /// Original shape targets retained for checking PCG call-edge coverage.
     flow_lhs: Option<Vec<WandLhsKey>>,
+    /// Joint input-owner restoration: every antecedent group is checked.
+    bundled_owner: bool,
 }
 
 impl<'vir> WandData<'vir> {
@@ -1485,6 +2588,7 @@ impl<'vir> WandData<'vir> {
             pledges,
             frames: Vec::new(),
             flow_lhs: None,
+            bundled_owner: false,
         }
     }
 }
@@ -1699,6 +2803,47 @@ impl<'vir> WandEncOutput<'vir> {
                     groups.push((targets, vec![source]));
                 }
             }
+            // An opaque restored input is not a replacement for the resources
+            // of its outputs: after instantiation it may even be empty (e.g.
+            // the usize index of IndexMut). Factoring a later restoration
+            // through that input loses the output's state. Keep overlapping
+            // nested-resource groups together. Physical owner storage can
+            // still be restored earlier, and disjoint groups remain separate.
+            let has_storage = |sources: &[WandRhsKey]| {
+                sources.iter().any(|source| {
+                    let node: FunctionShapeNode<Generalized> = (*source).into();
+                    // A nested reference (for example the slice inside
+                    // Option<&mut [T]>) has physical storage too. Classify
+                    // the resource group itself, not just the outer argument.
+                    let regions: IndexVec<_, GeneralizedLifetime<'vir>> =
+                        vcx.tcx().extract_regions(node.ty(sig));
+                    !matches!(
+                        regions.get(source.region_idx()),
+                        Some(GeneralizedLifetime::RegionsIn(_))
+                    )
+                })
+            };
+            loop {
+                let pair = (0..groups.len()).find_map(|i| {
+                    (i + 1..groups.len()).find_map(|j| {
+                        (!has_storage(&groups[i].1)
+                            && !has_storage(&groups[j].1)
+                            && groups[i]
+                                .0
+                                .iter()
+                                .any(|target| groups[j].0.contains(target)))
+                        .then_some((i, j))
+                    })
+                });
+                let Some((i, j)) = pair else { break };
+                let (targets, sources) = groups.remove(j);
+                groups[i].0.extend(targets);
+                groups[i].1.extend(sources);
+                groups[i].0.sort();
+                groups[i].0.dedup();
+                groups[i].1.sort();
+                groups[i].1.dedup();
+            }
             groups.sort_by_key(|(targets, _)| targets.len());
             let mut previous: Vec<(Vec<WandLhsKey>, Vec<WandRhsKey>)> = Vec::new();
             for (original, sources) in groups {
@@ -1729,16 +2874,79 @@ impl<'vir> WandEncOutput<'vir> {
                         frames.extend(earlier_sources.iter().copied());
                     }
                 }
-                if targets.is_empty() {
+                if targets.is_empty() && frames.is_empty() {
                     return Err(WandEncError::Unsupported(
                         "empty dependent resource restoration".into(),
                     ));
                 }
                 previous.push((original.clone(), sources.clone()));
-                let mut wand = WandData::new(targets, sources, Vec::new());
+                // Earlier stages may supply the complete checked antecedent.
+                let mut wand = WandData::new(original.clone(), sources, Vec::new());
+                wand.lhs = targets;
                 wand.frames = frames;
                 wand.flow_lhs = Some(original);
                 stratified.push(wand);
+            }
+        }
+        // A void function has no escaped output loan. Retain one joint restoration
+        // obligation for each multi-group owner: an opaque generic callee can
+        // return an indivisible continuation over the instantiated product.
+        // That continuation cannot be factored into separate group wands.
+        // This strengthens the required expiry antecedent; it grants no
+        // resources and introduces no facts. Every combined package and every
+        // application must prove all dependent groups simultaneously.
+        if sig.output().is_unit() && pledges.is_empty() {
+            for (index, input) in sig.inputs().iter().enumerate() {
+                let ty::TyKind::Ref(_, _, ty::Mutability::Mut) = input.kind() else {
+                    continue;
+                };
+                let local = mir::Local::from_usize(index + 1);
+                let selected =
+                    stratified
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(id, wand)| {
+                            let only_owner =
+                                wand.rhs.iter().all(|node| {
+                                    node.mir_local() == local && node.region_idx().index() > 0
+                                }) && wand.flow_lhs.as_ref().unwrap_or(&wand.lhs).iter().all(
+                                    |node| {
+                                        node.mir_local() == local && node.region_idx().index() > 0
+                                    },
+                                ) && wand.frames.iter().all(|node| {
+                                    node.mir_local() == local && node.region_idx().index() > 0
+                                });
+                            only_owner.then_some(id)
+                        })
+                        .collect::<Vec<_>>();
+                if selected.len() < 2 {
+                    continue;
+                }
+                let mut lhs = Vec::new();
+                let mut rhs = Vec::new();
+                for &id in &selected {
+                    let wand = &stratified[id];
+                    lhs.extend_from_slice(wand.flow_lhs.as_ref().unwrap_or(&wand.lhs));
+                    rhs.extend_from_slice(&wand.rhs);
+                }
+                lhs.sort();
+                lhs.dedup();
+                rhs.sort();
+                rhs.dedup();
+                // No parent frame may be dropped unless it is part of this
+                // joint input/output resource set.
+                if selected
+                    .iter()
+                    .any(|&id| stratified[id].frames.iter().any(|node| !rhs.contains(node)))
+                {
+                    continue;
+                }
+                let mut bundled = WandData::new(lhs, rhs, Vec::new());
+                bundled.bundled_owner = true;
+                for &id in selected.iter().rev() {
+                    stratified.remove(id);
+                }
+                stratified.insert(selected[0], bundled);
             }
         }
         let mut wands = stratified;
@@ -1929,5 +3137,351 @@ impl<'vir> WandEncOutput<'vir> {
 
     pub fn outputs(&self) -> impl Iterator<Item = FunctionShapeOutput<Generalized>> + '_ {
         self.outputs.iter().copied()
+    }
+}
+
+/// One checked continuation per stable generic input owner. Its snapshot
+/// locals change only after composing an actual borrow-expiry continuation.
+#[derive(Clone)]
+pub(crate) struct OwnerSummary<'vir> {
+    origin: mir::Local,
+    group: usize,
+    current: vir::ExprBool<'vir>,
+    entry: vir::ExprBool<'vir>,
+    bindings: Vec<(vir::LocalDeclSnap<'vir>, vir::ExprSnap<'vir>)>,
+}
+
+impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
+    pub(crate) fn prepare_owner_summaries(&mut self) -> Vec<vir::Stmt<'vir>> {
+        if self.spec_blocks.loop_specs.is_empty() {
+            return Vec::new();
+        }
+        let vcx = self.vcx;
+        let args = PledgeExpr::pledge_args(
+            self.local_defs[mir::RETURN_PLACE].impure_snap,
+            self.body
+                .args_iter()
+                .map(|arg| vcx.mk_old_expr(self.local_defs[arg].impure_snap)),
+        );
+        let inputs = self.wands.inputs.clone();
+        let mut start = Vec::new();
+        for node in inputs {
+            if node.region_idx().index() == 0 {
+                continue;
+            }
+            let shape: FunctionShapeNode<Generalized> = node.into();
+            // Summarize each declared input group separately. Explicit prefix
+            // restoration keeps its existing concrete-resource obligations;
+            // projecting a callee group onto several actual input groups is
+            // still handled by the boundary mapping, not an ordinal guess.
+            let ty::TyKind::Ref(_, inner, ty::Mutability::Mut) =
+                shape.ty(self.wands.fn_sig(vcx, None)).kind()
+            else {
+                continue;
+            };
+            if !matches!(inner.kind(), ty::TyKind::Param(..) | ty::TyKind::Alias(..))
+                && self
+                    .spec_blocks
+                    .loop_specs
+                    .values()
+                    .any(|spec| !spec.restorations.is_empty())
+            {
+                continue;
+            }
+            let Some(entry) = self.wands.encode_predicates_for_function_shape_node(
+                vcx,
+                self.deps,
+                node,
+                None,
+                Some(vir::OldLabel::None),
+                None,
+                |i| args[i],
+            ) else {
+                continue;
+            };
+            let captures = vcx.alloc(std::cell::RefCell::new(Vec::new()));
+            let Some(current) = self.wands.encode_predicates_for_function_shape_node(
+                vcx,
+                self.deps,
+                node,
+                None,
+                None,
+                Some(captures),
+                |i| args[i],
+            ) else {
+                continue;
+            };
+            let mut substitute = HandoffSubstitute(FxHashMap::default());
+            let mut bindings = Vec::new();
+            for (index, &(decl, value)) in captures.borrow().iter().enumerate() {
+                let value = value.fold_with(&mut substitute).unwrap_or(value);
+                let name = vir::vir_format!(
+                    vcx,
+                    "_owner_summary_{}_{}_{}",
+                    node.mir_local().index(),
+                    node.region_idx().index(),
+                    index
+                );
+                let saved = vcx.mk_local_decl(name, value.ty());
+                start.push(vcx.mk_local_decl_stmt(saved, None));
+                start.push(vcx.mk_pure_assign_stmt(vcx.mk_local_ex(saved), value));
+                bindings.push((saved, value));
+                substitute
+                    .0
+                    .insert(decl.name, vcx.mk_local_ex(saved).as_dyn());
+            }
+            let current = current.fold_with(&mut substitute).unwrap_or(current);
+            let reservation = vcx.mk_wand(vcx.mk_bool::<true>(), current);
+            start.push(vcx.mk_package_stmt(reservation, &[]));
+            start.push(vcx.mk_package_stmt(resource_restoration_wand(vcx, current, entry), &[]));
+            start.push(vcx.mk_apply_stmt(reservation));
+            self.owner_summaries.push(OwnerSummary {
+                origin: node.mir_local(),
+                group: node.region_idx().index(),
+                current,
+                entry,
+                bindings,
+            });
+        }
+        start
+    }
+
+    pub(crate) fn owner_summary_invariants(
+        &mut self,
+        loop_id: pcg::r#loop::LoopId,
+        readable: impl Fn(mir::Local) -> bool,
+    ) -> Vec<vir::ExprBool<'vir>> {
+        let mut result = Vec::new();
+        let mut snapshots = Vec::new();
+        for summary in self.owner_summaries.clone() {
+            result.push(self.vcx.mk_wand_expr(resource_restoration_wand(
+                self.vcx,
+                summary.current,
+                summary.entry,
+            )));
+            if readable(summary.origin) {
+                result.extend(summary.bindings.iter().map(|&(saved, value)| {
+                    self.vcx.mk_eq_expr(self.vcx.mk_local_ex(saved), value)
+                }));
+            } else {
+                // A whole alias may carry the input owner's resources through
+                // the loop. Its logical input identity is ordinary ghost data,
+                // independent of the permission heap. Reads are guarded by that
+                // selection and backed by the alias's complete loop resource.
+                let owner_ty = self.body.local_decls[summary.origin].ty;
+                let ty::TyKind::Ref(_, owner_inner, ty::Mutability::Mut) = owner_ty.kind() else {
+                    continue;
+                };
+                let expected = self
+                    .vcx
+                    .mk_const_expr(vir::ConstData::Int(summary.origin.index() as u128))
+                    .downcast_ty::<vir::Int>();
+                let mut aliases = self
+                    .owner_origin_locals
+                    .iter()
+                    .filter_map(|(&local, &origin)| {
+                        if !readable(local) {
+                            return None;
+                        }
+                        let ty::TyKind::Ref(_, inner, ty::Mutability::Mut) =
+                            self.body.local_decls[local].ty.kind()
+                        else {
+                            return None;
+                        };
+                        (inner == owner_inner)
+                            .then_some((local, self.vcx.mk_eq_expr(origin, expected)))
+                    })
+                    .collect::<Vec<_>>();
+                aliases.sort_by_key(|(local, _)| local.index());
+                if aliases.is_empty() {
+                    continue;
+                }
+                let selected = self.vcx.mk_disj(
+                    &aliases
+                        .into_iter()
+                        .map(|(_, guard)| guard)
+                        .collect::<Vec<_>>(),
+                );
+                let inactive = self.vcx.mk_eq_expr(selected, self.vcx.mk_bool::<false>());
+                for &(saved, value) in &summary.bindings {
+                    let current = self.vcx.mk_local_ex(saved);
+                    let entry = self.new_tmp(current.ty());
+                    snapshots.push((entry, current));
+                    let observed = self.vcx.mk_eq_expr(current, value);
+                    let unchanged = self.vcx.mk_eq_expr(current, entry);
+                    result.push(vir::expr! { (selected) ==> (observed) });
+                    // The unselected owner is framed outside the loop. Its
+                    // summary variable still needs a pure equality because the
+                    // other branch syntactically assigns that same variable.
+                    result.push(vir::expr! { (inactive) ==> (unchanged) });
+                }
+            }
+        }
+        if !snapshots.is_empty() {
+            self.loop_snapshot_frames
+                .push(crate::encoders::mir_impure::LoopSnapshotFrame {
+                    loop_id,
+                    head: self.current_block_label.unwrap(),
+                    snapshots,
+                });
+        }
+        result
+    }
+
+    pub(crate) fn retain_owner_handoff(&mut self, restored: RestoredOwnerHandoff<'vir>) {
+        // A package proof may use a summary but must not assign its enclosing
+        // method's locals. Keep its new continuation local to that proof.
+        let summary = if self.package_resource_stage.is_none() {
+            self.owner_summaries
+                .iter()
+                .find(|summary| {
+                    Some(summary.origin) == restored.origin && summary.group == restored.group
+                })
+                .cloned()
+        } else {
+            None
+        };
+        let Some(summary) = summary else {
+            if self.package_resource_stage.is_none()
+                && restored.origin.is_none()
+                && let Some(selected) = restored.selection
+            {
+                let candidates = self
+                    .owner_summaries
+                    .iter()
+                    .filter(|summary| summary.group == restored.group)
+                    .cloned()
+                    .collect::<Vec<_>>();
+                if !candidates.is_empty() {
+                    for summary in candidates {
+                        let expected = self
+                            .vcx
+                            .mk_const_expr(vir::ConstData::Int(summary.origin.index() as u128))
+                            .downcast_ty::<vir::Int>();
+                        let guard = self.vcx.mk_eq_expr(selected, expected);
+                        let script = self
+                            .block(|visitor| {
+                                visitor.compose_owner_handoff(&restored, &summary);
+                                Ok::<_, std::convert::Infallible>(())
+                            })
+                            .unwrap();
+                        self.stmt(
+                            self.vcx
+                                .mk_if_stmt(guard, self.vcx.alloc_slice(&script), &[]),
+                        );
+                    }
+                    // An unknown origin cannot update a summary. Its existing
+                    // checked snapshot and continuation invariants must still
+                    // hold; no history with a future loop heap is assumed.
+                    return;
+                }
+            }
+            self.restored_owner_handoffs.push(restored);
+            return;
+        };
+        self.compose_owner_handoff(&restored, &summary);
+    }
+
+    fn compose_owner_handoff(
+        &mut self,
+        restored: &RestoredOwnerHandoff<'vir>,
+        summary: &OwnerSummary<'vir>,
+    ) {
+        let mut substitute = HandoffSubstitute(FxHashMap::default());
+        let mut assignments = Vec::new();
+        for &(saved, value) in &summary.bindings {
+            let value = value.fold_with(&mut substitute).unwrap_or(value);
+            let observed = self.new_tmp(value.ty());
+            self.stmt(self.vcx.mk_pure_assign_stmt(observed, value));
+            substitute.0.insert(saved.name, observed.as_dyn());
+            assignments.push(
+                self.vcx
+                    .mk_pure_assign_stmt(self.vcx.mk_local_ex(saved), observed),
+            );
+        }
+        let current = summary
+            .current
+            .fold_with(&mut substitute)
+            .unwrap_or(summary.current);
+        let vcx = self.vcx;
+        let reservation = vcx.mk_wand(vcx.mk_bool::<true>(), current);
+        self.stmt(vcx.mk_package_stmt(reservation, &[]));
+        let compose = [
+            vcx.mk_apply_stmt(restored.continuation),
+            vcx.mk_apply_stmt(resource_restoration_wand(
+                vcx,
+                summary.current,
+                summary.entry,
+            )),
+        ];
+        self.stmt(vcx.mk_package_stmt(
+            resource_restoration_wand(vcx, current, summary.entry),
+            vcx.alloc_slice(&direct_resource_restoration(
+                vcx,
+                current,
+                summary.entry,
+                compose.to_vec(),
+            )),
+        ));
+        self.stmt(vcx.mk_apply_stmt(reservation));
+        for assignment in assignments {
+            self.stmt(assignment);
+        }
+    }
+}
+
+impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
+    /// The checked owner summary replaces the PCG's internal history wand
+    /// for the same whole opaque input group. Keeping both would require
+    /// duplicating its linear continuation and naming a future loop heap.
+    /// This does not cover storage, projected owners, returned references,
+    /// unsupported projected groups or a user-requested prefix-restoration formula.
+    pub(crate) fn owner_summary_covers_loop_edge(
+        &self,
+        edge: &pcg::coupling::PcgCoupledEdgeKind<'vir>,
+    ) -> bool {
+        use pcg::{
+            borrow_pcg::region_projection::PlaceOrConst,
+            pcg::PcgNode,
+            utils::{HasPlace, maybe_remote::MaybeRemotePlace},
+        };
+        let Some(head) = edge.loop_head() else {
+            return false;
+        };
+        if self
+            .spec_blocks
+            .loop_specs
+            .values()
+            .any(|spec| spec.original_head_block == head && !spec.restorations.is_empty())
+        {
+            return false;
+        }
+        let covers = |projection: pcg::borrow_pcg::region_projection::LifetimeProjection<'vir>| {
+            let PlaceOrConst::Place(place) = projection.base() else {
+                return false;
+            };
+            let local = match place {
+                MaybeRemotePlace::Local(place) if place.place().projection.is_empty() => {
+                    place.place().local
+                }
+                MaybeRemotePlace::Remote(place) => place.assigned_local(),
+                _ => return false,
+            };
+            self.owner_summaries.iter().any(|summary| {
+                summary.origin == local && summary.group == projection.region_idx().index()
+            })
+        };
+        let inputs = edge.inputs(self.pcg_ctxt());
+        let outputs = edge.outputs();
+        !inputs.is_empty()
+            && !outputs.is_empty()
+            && inputs.iter().all(|node| match **node {
+                PcgNode::LifetimeProjection(projection) => covers(projection),
+                _ => false,
+            })
+            && outputs.iter().all(|node| match **node {
+                PcgNode::LifetimeProjection(projection) => covers(projection.into()),
+                _ => false,
+            })
     }
 }

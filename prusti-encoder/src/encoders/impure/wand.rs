@@ -32,6 +32,9 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         edge_to_loop: bool,
         footprint: Option<&mut Footprint<'_, 'vir>>,
     ) -> EncodeResult<'vir, (), E> {
+        if self.owner_summary_covers_loop_edge(edge) {
+            return Ok(());
+        }
         // TODO: there is something in the pcs which emits spurious? opaque edge creation, skip these
         if package && !edge_to_loop {
             return Ok(());

@@ -121,12 +121,15 @@ pub fn test_entrypoint<'tcx>(
     program.header("predicates");
     crate::encoders::TyUseImpureEnc::emit_outputs(&mut program);
     crate::encoders::ty::indexed::IndexedPredicateEnc::emit_outputs(&mut program);
+    crate::encoders::ty::indexed_snapshot::IndexedSnapshotEnc::emit_outputs(&mut program);
     crate::encoders::ty::resources::ResourceGroupEnc::emit_outputs(&mut program);
     crate::encoders::ty::resources::ResourceSequenceEnc::emit_outputs(&mut program);
     crate::encoders::ty::resource_collection::ResourceElementStateEnc::emit_outputs(&mut program);
     crate::encoders::ty::resource_collection::ResourceSequenceStateEnc::emit_outputs(&mut program);
     crate::encoders::ty::resource_collection::ResourceCollectionEnc::emit_outputs(&mut program);
-    crate::encoders::ty::resource_collection::ResourceStateBoxSequenceEnc::emit_outputs(&mut program);
+    crate::encoders::ty::resource_collection::ResourceStateBoxSequenceEnc::emit_outputs(
+        &mut program,
+    );
     crate::encoders::ty::resource_array::ResourceArrayEnc::emit_outputs(&mut program);
     crate::encoders::ty::array_typing::ArrayTypingEnc::emit_outputs(&mut program);
 

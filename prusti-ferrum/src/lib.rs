@@ -55,10 +55,10 @@ pub fn convert_type<T: CompType>(ty: &vir::Type<'_, T>) -> Result<Type, Conversi
         vir::TypeKind::Domain(name, _) => {
             return Err(ConversionError::DomainTypeRequiresDeclarations(
                 (*name).into(),
-            ))
+            ));
         }
         vir::TypeKind::Unsupported(t) => {
-            return Err(ConversionError::UnsupportedType(t.name.into()))
+            return Err(ConversionError::UnsupportedType(t.name.into()));
         }
         vir::TypeKind::Err => return Err(ConversionError::UnsupportedType("error type".into())),
     })
@@ -85,6 +85,24 @@ pub fn native_frontend_with_warning_sink(
 }
 
 impl<'vir> TypeContext<'vir> {
+    /// Use the explicit form of Silver's full-permission shorthand. Wand
+    /// structure traversal visits only stored predicate permission arguments;
+    /// printing and parsing an implicit permission makes that argument explicit.
+    /// Keep native and parsed programs in the same canonical representation.
+    fn explicit_permission(
+        &self,
+        permission: Option<vir::ExprPerm<'vir>>,
+    ) -> Result<Option<ferrum_silver::ast::expression::Exp>, ConversionError> {
+        use ferrum_silver::ast::{
+            ast::Metadata,
+            expression::{Exp, ExpKind},
+        };
+        Ok(Some(match permission {
+            Some(permission) => self.expression(&permission)?,
+            None => Exp::new(ExpKind::FullPerm, Metadata::default()),
+        }))
+    }
+
     pub fn new(program: vir::Program<'vir>) -> Self {
         Self {
             domains: program
@@ -164,7 +182,7 @@ impl<'vir> TypeContext<'vir> {
                         _ => {
                             return Err(ConversionError::DomainTypeRequiresDeclarations(
                                 (*name).into(),
-                            ))
+                            ));
                         }
                     };
                 if parameters.len() != args.len() {
@@ -207,10 +225,10 @@ impl<'vir> TypeContext<'vir> {
                 }
             }
             vir::TypeKind::Unsupported(t) => {
-                return Err(ConversionError::UnsupportedType(t.name.into()))
+                return Err(ConversionError::UnsupportedType(t.name.into()));
             }
             vir::TypeKind::Err => {
-                return Err(ConversionError::UnsupportedType("error type".into()))
+                return Err(ConversionError::UnsupportedType("error type".into()));
             }
         })
     }
@@ -278,10 +296,7 @@ impl<'vir> TypeContext<'vir> {
                     field,
                     meta.clone(),
                 );
-                ExpKind::FieldAccessPredicate(
-                    access,
-                    acc.perm.map(|p| self.expression(&p)).transpose()?,
-                )
+                ExpKind::FieldAccessPredicate(access, self.explicit_permission(acc.perm)?)
             }
             vir::ExprKindData::PredicateApp(pred) => {
                 let args = pred
@@ -297,7 +312,7 @@ impl<'vir> TypeContext<'vir> {
                 ExpKind::PredicateAccessPredicate(
                     ferrum_silver::ast::statement::PredicateAccessPredicate::new(
                         location,
-                        pred.perm.map(|p| self.expression(&p)).transpose()?,
+                        self.explicit_permission(pred.perm)?,
                         meta.clone(),
                     ),
                 )
@@ -337,7 +352,7 @@ impl<'vir> TypeContext<'vir> {
                 );
                 let access = ferrum_silver::ast::statement::PredicateAccessPredicate::new(
                     location,
-                    pred.perm.map(|p| self.expression(&p)).transpose()?,
+                    self.explicit_permission(pred.perm)?,
                     m.clone(),
                 );
                 ExpKind::Unfolding(
@@ -1139,6 +1154,46 @@ mod tests {
     }
 
     #[test]
+    fn implicit_and_explicit_full_permissions_share_wand_arguments() {
+        use vir::CastType;
+        std::thread::spawn(|| {
+            vir::init_vcx(vir::VirCtxt::new_without_tcx());
+            vir::with_vcx(|vcx| {
+                let predicate = vcx.mk_predicate_unchecked("p", &[], None);
+                let program =
+                    vcx.mk_program(&[], &[], &[], vcx.alloc_slice(&[predicate]), &[], &[]);
+                let context = TypeContext::new(program);
+                let full = vcx.mk_const_expr(vir::ConstData::FullPerm).downcast_ty();
+                let access = |perm| {
+                    vcx.mk_predicate_app_expr(vcx.alloc(vir::PredicateAppGenData {
+                        target: "p",
+                        args: &[],
+                        perm,
+                    }))
+                };
+                let wand = |perm| {
+                    context
+                        .expression(&vcx.mk_wand_expr(vcx.mk_wand(access(perm), access(perm))))
+                        .unwrap()
+                };
+                let implicit = wand(None);
+                let explicit = wand(Some(full));
+                let program = program_to_silver(program).unwrap();
+                assert_eq!(
+                    implicit.magic_wand_structure(&program, false).unwrap(),
+                    explicit.magic_wand_structure(&program, false).unwrap()
+                );
+                assert_eq!(
+                    implicit.magic_wand_subexpressions(&program).unwrap(),
+                    explicit.magic_wand_subexpressions(&program).unwrap()
+                );
+            });
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[test]
     #[ignore = "requires real Z3; set FERRUM_TEST_Z3"]
     fn vir_wand_package_and_apply_reach_native_verifier() {
         let z3 = std::env::var_os("FERRUM_TEST_Z3").expect("set FERRUM_TEST_Z3");
@@ -1341,7 +1396,7 @@ mod tests {
     #[test]
     fn duplicate_method_requires_silver_transitive_check() {
         use ferrum_silver::ast::{
-            pretty::pretty_printer::{pretty_node, PrintError},
+            pretty::pretty_printer::{PrintError, pretty_node},
             utility::{consistency::check_transitively, nodes::Node},
         };
         let method = Method::new(MethodData {
@@ -1472,11 +1527,13 @@ mod tests {
         );
         std::fs::remove_file(path).unwrap();
         assert!(result.is_err());
-        assert!(warnings
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|s| s.contains("failing-startup-warning")));
+        assert!(
+            warnings
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|s| s.contains("failing-startup-warning"))
+        );
     }
 
     #[test]
@@ -1620,7 +1677,7 @@ impl<'vir> TypeContext<'vir> {
                 );
                 let predicate = ferrum_silver::ast::statement::PredicateAccessPredicate::new(
                     access,
-                    pred.perm.map(|p| self.expression(&p)).transpose()?,
+                    self.explicit_permission(pred.perm)?,
                     m,
                 );
                 let kind = if matches!(statement.kind, vir::StmtKindData::Fold(_)) {
@@ -1678,7 +1735,7 @@ impl<'vir> TypeContext<'vir> {
                         return Err(ConversionError::UnsupportedStatement(format!(
                             "{:?}",
                             statement.kind
-                        )))
+                        )));
                     }
                 }
             }
@@ -1739,7 +1796,7 @@ impl<'vir> TypeContext<'vir> {
                 return Err(ConversionError::UnsupportedStatement(format!(
                     "{:?}",
                     statement.kind
-                )))
+                )));
             }
         })
     }

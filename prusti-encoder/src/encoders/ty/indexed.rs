@@ -157,6 +157,13 @@ impl TaskEncoder for IndexedPredicateEnc {
             ));
         });
         for predicate in Self::all_outputs_local_no_errors(program) {
+            if predicate.name == "indexed_indirect_resources" {
+                vir::with_vcx(|vcx| {
+                    for method in super::indexed_coherence::methods(vcx) {
+                        program.add_method(method);
+                    }
+                });
+            }
             program.add_predicate(predicate);
         }
     }

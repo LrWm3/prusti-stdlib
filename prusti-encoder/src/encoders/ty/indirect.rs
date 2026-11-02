@@ -8,7 +8,7 @@ use prusti_rustc_interface::{
 };
 use std::cell::RefCell;
 use task_encoder::{EncodeFullResult, TaskEncoder, TaskEncoderDependencies};
-use vir::{CastType, Reify};
+use vir::{CastType, Foldable, Folder, Reify};
 
 use crate::encoders::{TyUseImpureEnc, ty::RustTyDecomposition};
 
@@ -66,6 +66,8 @@ pub(crate) struct ExprInput<'vir> {
     pub binder_depth: usize,
     pub resource_path: &'vir [usize],
     pub indexed: Option<(&'vir IndexedResources<'vir>, vir::ExprInt<'vir>, bool)>,
+    /// Whole shallow-snapshot sequences captured before entering an index binder.
+    pub indexed_snapshots: &'vir [(&'vir [usize], vir::ExprSeq<'vir>)],
 }
 
 impl<'vir> ExprInput<'vir> {
@@ -79,6 +81,7 @@ impl<'vir> ExprInput<'vir> {
             metadata: None,
             binder_depth: 0,
             indexed: None,
+            indexed_snapshots: &[],
             resource_path: &[],
         }
     }
@@ -112,6 +115,35 @@ fn projection_region<'tcx>(
 ) -> PcgRegion<'tcx> {
     let regions = PrustiPcgCtxt.extract_regions(proj.base());
     regions[proj.region_idx()]
+}
+
+/// Normalizing a field can rename an opaque associated type without revealing
+/// its contents (e.g. Index::Output becomes SliceIndex::Output). Preserve that
+/// resource group when descending into the normalized field. A normalization
+/// to a concrete type is deliberately not treated as one opaque projection.
+fn projection_for_region<'tcx>(
+    ty: RustTyDecomposition<'tcx>,
+    region: PcgRegion<'tcx>,
+) -> Option<LifetimeProjection<'tcx, RustTyDecomposition<'tcx>, Region>> {
+    LifetimeProjection::new(ty, region, None, PrustiPcgCtxt).or_else(|| {
+        let PcgRegion::RegionsIn(opaque) = region else {
+            return None;
+        };
+        let alias = vir::with_vcx(|vcx| opaque.ty(vcx.tcx()));
+        if !matches!(alias.kind(), ty::TyKind::Alias(..)) {
+            return None;
+        }
+        let normalized = ty.args.context().normalize(alias);
+        if normalized == alias || !matches!(normalized.kind(), ty::TyKind::Alias(..)) {
+            return None;
+        }
+        LifetimeProjection::new(
+            ty,
+            PcgRegion::RegionsIn(normalized.try_into().ok()?),
+            None,
+            PrustiPcgCtxt,
+        )
+    })
 }
 
 impl TaskEncoder for IndirectPredicatesEnc {
@@ -153,9 +185,7 @@ impl TaskEncoder for IndirectPredicatesEnc {
                         struct_data.fields.into_iter().enumerate()
                     {
                         let field_ty = field_ty.decompose_normalize(ty.args);
-                        if let Some(new_projection) =
-                            LifetimeProjection::new(field_ty, task_region, None, PrustiPcgCtxt)
-                        {
+                        if let Some(new_projection) = projection_for_region(field_ty, task_region) {
                             let field_indirect =
                                 deps.require_dep::<IndirectPredicatesEnc>(new_projection)?;
                             for inner_expr in field_indirect.predicate_applications {
@@ -194,9 +224,7 @@ impl TaskEncoder for IndirectPredicatesEnc {
                 }
                 TySpecifics::ArrayLike(data) => {
                     let element_ty = data.0.decompose_normalize(ty.args);
-                    if let Some(proj) =
-                        LifetimeProjection::new(element_ty, task_region, None, PrustiPcgCtxt)
-                    {
+                    if let Some(proj) = projection_for_region(element_ty, task_region) {
                         let element = deps.require_dep::<IndirectPredicatesEnc>(proj)?;
                         if !element.predicate_applications.is_empty() {
                             let element_pure = deps.require_dep::<TyUsePureEnc>(element_ty)?;
@@ -209,6 +237,29 @@ impl TaskEncoder for IndirectPredicatesEnc {
                                 .map(|expr| expr.reify(vcx, ExprInput::current(snap)))
                                 .collect::<Vec<_>>();
                             let indexed = IndexedResources::new(deps, vcx.mk_conj(&exprs))?;
+                            // A free index cannot be saved in an ordinary wand local.
+                            // Capture each direct reference-chain level as a sequence
+                            // instead, requiring exactly its ancestor's physical resources.
+                            let mut snapshot_observers = Vec::new();
+                            let mut reference_ty = element_ty;
+                            let mut path = Vec::new();
+                            while let TySpecifics::MutRef(data) = &reference_ty.ty.specifics {
+                                let referent_ty =
+                                    data.referent.decompose_normalize(reference_ty.args);
+                                if projection_for_region(referent_ty, task_region).is_none() {
+                                    break;
+                                }
+                                let observer = deps
+                                    .require_dep::<super::indexed_snapshot::IndexedSnapshotEnc>(
+                                        super::indexed_snapshot::IndexedSnapshotTask {
+                                            reference: reference_ty,
+                                            path: path.clone(),
+                                        },
+                                    )?;
+                                snapshot_observers.push((vcx.alloc_slice(&path), observer));
+                                path.push(0);
+                                reference_ty = referent_ty;
+                            }
                             let array = self_ty_enc.expect_array();
                             let usize_ty =
                                 deps.require_dep::<TyUsePureEnc>(RustTyDecomposition::from_ty(
@@ -238,6 +289,24 @@ impl TaskEncoder for IndirectPredicatesEnc {
                                     let index = vcx.mk_local_ex(index_decl);
                                     let elements = array.to_seq(input.snap.downcast_ty(), extent);
                                     let snap = array.sequence_index(elements, index);
+                                    let mut captured = Vec::new();
+                                    if input.bindings.is_some() || input.heap_label.is_some() {
+                                        let mut previous = elements;
+                                        for (path, observer) in &snapshot_observers {
+                                            let observed = observer.observe(previous);
+                                            let observed = vcx.maybe_apply_label(observed, input.heap_label);
+                                            let observed = if let Some(guard) = input.guard.filter(|_| input.bindings.is_some()) {
+                                                vcx.mk_ternary_expr(guard, observed, vcx.mk_seq_literal_expr(&[], vir::TYPE_PSNAP))
+                                            } else { observed };
+                                            previous = if let Some(bindings) = input.bindings {
+                                                let name = vir::vir_format!(vcx, "_wand_snapshot_{}", bindings.borrow().len());
+                                                let decl = vcx.mk_local_decl(name, observed.ty());
+                                                bindings.borrow_mut().push((decl.upcast_ty(), observed.upcast_ty()));
+                                                vcx.mk_local_ex(decl)
+                                            } else { observed };
+                                            captured.push((*path, previous));
+                                        }
+                                    }
                                     let exprs = element.predicate_applications.iter().map(|expr| expr.reify(vcx, ExprInput {
                                         snap,
                                         // Index-dependent heap reads remain under this binder.
@@ -246,15 +315,37 @@ impl TaskEncoder for IndirectPredicatesEnc {
             metadata: None,
                                         binder_depth: input.binder_depth + 1,
                                         indexed: Some((vcx.alloc(indexed.clone()), index, false)),
+                                        indexed_snapshots: vcx.alloc_slice(&captured),
                                         resource_path: &[],
                                         ..input
                                     })).collect::<Vec<_>>();
                                     let resources = vcx.mk_conj(&exprs);
+                                    // A wand's shape abstracts free expressions from its
+                                    // body, but not from triggers alone. Trigger on a
+                                    // captured sequence that actually occurs in the body;
+                                    // the original array snapshot may occur only in its
+                                    // length equality and would retain a local name.
+                                    struct Contains<'vir>(vir::ExprDyn<'vir>, bool);
+                                    impl<'vir> Folder<'vir, (), !> for Contains<'vir> {
+                                        fn fold_expr(&mut self, expr: vir::ExprDyn<'vir>) -> Option<vir::ExprDyn<'vir>> {
+                                            if std::ptr::eq(expr, self.0) {
+                                                self.1 = true;
+                                                None
+                                            } else {
+                                                expr.super_fold_with(self)
+                                            }
+                                        }
+                                    }
+                                    let trigger_elements = captured.iter().rev().find_map(|(_, sequence)| {
+                                        let mut contains = Contains(sequence.upcast_ty(), false);
+                                        let _ = resources.fold_with(&mut contains);
+                                        contains.1.then_some(*sequence)
+                                    }).unwrap_or(elements);
                                     let zero = vcx.mk_uint::<0>();
                                     let bounds = vir::expr! { (([zero]) <= (index)) && ((index) < (extent)) };
                                     let resources = quantify_resources(vcx,
                                         vcx.alloc_slice(&[index_decl.as_dyn()]),
-                                        vcx.alloc_slice(&[vcx.mk_trigger(&[vcx.mk_seq_index_expr(elements, index)])]),
+                                        vcx.alloc_slice(&[vcx.mk_trigger(&[vcx.mk_seq_index_expr(trigger_elements, index)])]),
                                         bounds, resources,
                                     );
                                     // Establish a ground canonical sequence even before
@@ -298,9 +389,7 @@ impl TaskEncoder for IndirectPredicatesEnc {
                     let slice_metadata = matches!(referent_ty.ty.specifics, TySpecifics::ArrayLike(ref array) if array.slice)
                         .then(|| deps.require_dep::<TyUsePureEnc>(RustTyDecomposition::from_ty(vcx.tcx().types.usize, ty.args.context())))
                         .transpose()?;
-                    if let Some(new_projection) =
-                        LifetimeProjection::new(referent_ty, task_region, None, PrustiPcgCtxt)
-                    {
+                    if let Some(new_projection) = projection_for_region(referent_ty, task_region) {
                         let inner_indirect =
                             deps.require_dep::<IndirectPredicatesEnc>(new_projection)?;
                         let concrete_inner = deps.require_dep::<TyUseImpureEnc>(referent_ty)?;
@@ -343,8 +432,17 @@ impl TaskEncoder for IndirectPredicatesEnc {
                                         } else {
                                             inner_snap
                                         };
-                                    let inner_snap =
-                                        vcx.maybe_apply_label(inner_snap, input.heap_label);
+                                    let inner_snap = if let Some((_, index, _)) = input.indexed
+                                        && let Some((_, captured)) = input
+                                            .indexed_snapshots
+                                            .iter()
+                                            .find(|(path, _)| *path == input.resource_path)
+                                    {
+                                        vcx.mk_seq_index_expr(*captured, index)
+                                            .downcast_ty::<vir::Snap>()
+                                    } else {
+                                        vcx.maybe_apply_label(inner_snap, input.heap_label)
+                                    };
                                     // A captured observation is hoisted outside its enum
                                     // branch, so its heap read needs the variant guard.
                                     // Inline observations already occur under that branch.
@@ -551,5 +649,5 @@ pub fn projection_for_generalized_idx<'tcx>(
         GeneralizedLifetime::Region(r) => *r,
         GeneralizedLifetime::RegionsIn(ty) => PcgRegion::RegionsIn(*ty),
     };
-    LifetimeProjection::new(decomp, region, None, PrustiPcgCtxt)
+    projection_for_region(decomp, region)
 }

@@ -42,7 +42,7 @@ impl<'vir> MethodCallEncOutput<'vir> {
         mut args: Vec<vir::ExprRef<'vir>>,
         ret: vir::ExprRef<'vir>,
         label_pre: &'vir str,
-    ) -> Vec<vir::Stmt<'vir>> {
+    ) -> (Vec<vir::Stmt<'vir>>, usize) {
         assert_eq!(self.inputs.len(), args.len());
         let mut stmts = args
             .iter()
@@ -84,6 +84,7 @@ impl<'vir> MethodCallEncOutput<'vir> {
         args.insert(0, ret);
         let call = (self.method.method_ref)(&args, self.ty_args.get_ty(), self.ty_args.get_const())
             .alloc();
+        let call_position = stmts.len();
         stmts.push(call);
         stmts.extend(restored);
 
@@ -94,7 +95,7 @@ impl<'vir> MethodCallEncOutput<'vir> {
         for conversion in &self.output_resources {
             stmts.extend(conversion.at_storage(ret, false));
         }
-        stmts
+        (stmts, call_position)
     }
 }
 
@@ -454,6 +455,10 @@ impl TaskEncoder for MethodEnc {
                     call_result_snapshots: Default::default(),
                     historical_loop_snapshots: Default::default(),
                     method_snapshot_decls: Vec::new(),
+                    restored_owner_handoffs: Vec::new(),
+                    owner_summaries: Vec::new(),
+                    owner_origin_locals: Default::default(),
+
                     wandless_calls: Default::default(),
                     indexed_reads: Default::default(),
                     package_resource_stage: None,
@@ -476,6 +481,8 @@ impl TaskEncoder for MethodEnc {
                 // if we encountered an error/cycle during encoding, we don't
                 // emit a method body; encoding errors additionally surface as
                 // early errors rather than silently degrading to a stub
+                start_stmts.extend(visitor.prepare_owner_origins());
+                start_stmts.extend(visitor.prepare_owner_summaries());
                 match visitor.visit_body(body) {
                     Ok(()) => {
                         start_stmts.extend(
@@ -493,6 +500,7 @@ impl TaskEncoder for MethodEnc {
                         );
                         visitor.capture_loop_snapshot_frames();
                         visitor.capture_historical_loop_snapshots();
+                        visitor.prune_unused_owner_origins();
 
                         visitor.encoded_blocks.push(vcx.mk_cfg_block(
                             vcx.alloc(vir::CfgBlockLabelData::End),

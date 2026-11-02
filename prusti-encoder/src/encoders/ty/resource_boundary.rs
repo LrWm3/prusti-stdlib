@@ -149,12 +149,34 @@ impl<'vir> ResourceBoundary<'vir> {
         })
     }
 
+    pub fn at_snapshot_with_entry_ancestors(
+        &self,
+        snapshot: vir::ExprSnap<'vir>,
+        pack: bool,
+        label: &'vir str,
+        depth: usize,
+    ) -> Vec<vir::Stmt<'vir>> {
+        assert!(depth > 0);
+        self.snapshot_depth(snapshot, self.unit, pack, Some(label), Some(depth))
+    }
+
     fn snapshot(
         &self,
         snapshot: vir::ExprSnap<'vir>,
         metadata: vir::ExprPSnap<'vir>,
         pack: bool,
         label: Option<&'vir str>,
+    ) -> Vec<vir::Stmt<'vir>> {
+        self.snapshot_depth(snapshot, metadata, pack, label, None)
+    }
+
+    fn snapshot_depth(
+        &self,
+        snapshot: vir::ExprSnap<'vir>,
+        metadata: vir::ExprPSnap<'vir>,
+        pack: bool,
+        label: Option<&'vir str>,
+        old_ancestors: Option<usize>,
     ) -> Vec<vir::Stmt<'vir>> {
         vir::with_vcx(|vcx| {
             let fields = |fields: &Fields<'vir>| {
@@ -166,7 +188,13 @@ impl<'vir> ResourceBoundary<'vir> {
                             .as_ref()
                             .filter(|slice| slice.index == *index)
                             .map_or(self.unit, |slice| slice.metadata(snapshot));
-                        nested.snapshot(field.read(snapshot.downcast_ty()), metadata, pack, label)
+                        nested.snapshot_depth(
+                            field.read(snapshot.downcast_ty()),
+                            metadata,
+                            pack,
+                            label,
+                            old_ancestors,
+                        )
                     })
                     .collect::<Vec<_>>()
             };
@@ -187,7 +215,13 @@ impl<'vir> ResourceBoundary<'vir> {
                         let stored =
                             vcx.mk_local_labelled_old_expr(physical.ref_to_snap(address), label);
                         let value = reference.cast_to_caller_ctx(stored.downcast_ty());
-                        return nested.snapshot(value, metadata, pack, Some(label));
+                        return nested.snapshot_depth(
+                            value,
+                            metadata,
+                            pack,
+                            (old_ancestors != Some(1)).then_some(label),
+                            old_ancestors.map(|n| n.saturating_sub(1)),
+                        );
                     }
                     let mut statements = cast
                         .cast_to_caller_ctx(address)

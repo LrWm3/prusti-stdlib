@@ -459,7 +459,16 @@ impl TaskEncoder for ResourceCollectionEnc {
                 // Passing the same heap-dependent observer as an argument and
                 // a precondition made callers prove equality across the
                 // permission transfer itself, especially inside wand packages.
-                let initial = vcx.mk_old_expr(sequence_state(source, i));
+                // Unpacking changes the observer's permission representation.
+                // Reveal its checked pre-state definition in the return frame
+                // so the postcondition can relate the old group map to the
+                // restored raw sequence. Revealing only a body assertion does
+                // not retain that relation in the postcondition's evaluation.
+                let initial = vcx.mk_old_expr(if packing {
+                    sequence_state(source, i)
+                } else {
+                    revealed_sequence_state(source, i)
+                });
                 let mut posts = vec![
                     typed(i),
                     resources(target, i),

@@ -74,10 +74,13 @@ source/build provenance (`audit577.json`). Results are 30/32 owned-iterator chec
 owner-handoff checks, 10/10 generic cross-crate checks, 11/12 prefix checks,
 9/11 nested-reference checks, 3/7 whole-region checks, 7/8 enum checks and
 7/7 metadata checks, with all 8 further prefix checks passing. No negative was
-unexpectedly accepted. Missing value frames in generic trait calls and owner
-continuations are being repaired in candidates 600 and 601; their structural
-checks pass, but native qualification is still queued. These partial results
-do not supersede the last complete matrix or establish stabilization.
+unexpectedly accepted. Candidate 601 subsequently passes 23/23 small checks,
+32/75 owner checks and 12/14 iterator checks. A checked direct-restoration proof
+branch in 611 improves ownership to 59/75 while retaining 23/23 small checks.
+The 16 remaining owner failures involve multiple owners, projected fields or
+split groups. The iterator's extra-next false control fails too early, and its
+nonempty false-result control times out. Neither candidate is adopted. These
+partial results do not supersede the last complete matrix or establish stabilization.
 
 ### Historical repair evidence (2026-11-01, probes 408–449)
 
@@ -4761,6 +4764,69 @@ one in [Viper's predicate model](https://viper.ethz.ch/tutorial/predicates.html)
 Wrapper ownership alone must not be treated as a distinctness axiom; the
 coherence helpers must prove their equalities and preserve an inhabited
 false-assertion control.
+
+### Checked restoration and capture experiments (600–614)
+
+The metadata-key candidate 600 completes at **23/23 small checks**, **7/13 owner
+controls**, and **6/6 iterator-library/prefix checks**. Combined 601 completes
+at **67/112**: 23/23 small, 32/75 owner and 12/14 iterator checks. Its iterator
+library and all selected positives pass, including extra-next in 384.77 seconds.
+The extra-next false assertion instead encounters an earlier permission error;
+the nonempty false-result control reaches the 600-second backend timeout.
+Coverage, exact diagnostics and source/build provenance are audited. No negative
+is unexpectedly accepted, and those two failures remain open.
+
+Owner continuation frames alone are not enough to compose the final value facts.
+Full-program diagnostic 610 keeps the original contracts and assertions, but
+returns the antecedent resource directly when its complete key already matches
+the required entry resource. The original restoration history runs otherwise.
+The positive verifies in 1.01 seconds; an added false assertion is the sole
+failure in its 0.76-second negative control. Compiler candidate 611 applies this
+checked branch to flat resource footprints, owner continuations and loop summary
+composition. It passes **59/75 owner checks and 23/23 small checks**, an improvement
+of 27 owner checks over 601. Eight positives and their eight negative controls
+still fail for multiple owners, projected fields or split groups. Diagnostic 614
+case-splits complete cross-owner keys and considers a permutation of the whole
+footprint; its proof is queued. No key-distinctness assumption or frame removal
+is used, and 611 is not adopted.
+
+The full nested-call capture diagnostic 596 verifies in 408.46 seconds with
+checked explicit entry/post capture results. Compiler candidate 609 implements
+returned capture witnesses for concrete signatures containing nested sequence
+observations. Generic type/const and trait interfaces retain their previous
+protocol. Its own build and six complete encoding/structural checks pass;
+the native nested positive and exact-negative gate is running. The raw diagnostic
+does not establish native qualification on the newer combined implementation.
+
+The pairwise indexed-resource coherence lemma 597 and finite-sequence lemma 603
+both verify, including inhabited duplicate-value controls rejected only at their
+false assertions. Full-program diagnostic 608 adds the checked sequence lemma
+to the original generic `first_element` encoding. The generic definition and
+selected-value proof verify; the only remaining failure is the client's
+unchanged-second-element assertion, whose original contract does not promise
+that frame. All original obligations remain. This result supports implementing
+the coherence proof in the encoder, not accepting that unsupported client claim.
+The stronger specification drafts in 602 remain unqualified at **2/6** checks:
+old-state observer permissions and caller restoration still fail, and the weak
+contract's negative reaches an earlier value assertion. Preserve these failures
+while correcting the contracts and implementing the checked correspondence.
+
+The isolated enum observation repair 606 completes at **15/17**. Existing metadata
+and enum controls pass 12/12, and the new generic false-postcondition control
+fails exactly as expected. The new positive and false-value control still have
+package observation permission errors. Removing the invalid trigger is therefore
+insufficient for these programs; the repair remains unadopted. The next repair
+must preserve guarded observations when Viper lifts wand arguments outside a
+conditional branch.
+
+Exact extra-next replay 612 retains the full failed program and adds solver
+reason/prover logging. Diagnostic 613 compares the existing separate-method-solver
+option on the full positive/negative pair, with unchanged limits, one worker and
+branch parallelism off. Neither changes the development default or substitutes
+for native qualification. All evidence remains under
+`target/stdlib-matrix-20261031-1236`, including audits 600, 601, 602, 606, 608, 610
+and 611. Finish the remaining repairs and combined qualification, then observe
+the mandatory pause before D1–D6 and automation work.
 
 ## Follow-on scope authorized on 2026-11-01
 

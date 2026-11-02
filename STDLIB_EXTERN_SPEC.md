@@ -28,7 +28,7 @@ External implementations remain trusted. The verification target is client code
 that calls standard-library operations, rather than the allocator, raw-pointer
 implementation, or unsafe internals of the standard library.
 
-## Current qualification checkpoint (2026-11-01)
+## Current qualification checkpoint (2026-11-02)
 
 **Current stopping point (latest user instruction).** Finish restoration and
 stabilize the existing generic collection and ownership proofs, including the
@@ -85,6 +85,10 @@ Candidate 628 now passes **71/75 owner checks**, retaining the original value
 frames. Only the generic split-group and same-type projected-field pairs remain
 in that gate; its small-control checks also pass 23/23. This candidate is still
 unadopted, and the other combined failures listed above remain open.
+Successor 680 now passes **80/80 ownership checks**, including the new
+zero-iteration boundary controls, using separately verified composition
+helpers. Its focused gate passes 12/12. Associated-output and combined
+collection qualification remain in progress; this is not full stabilization.
 
 ### Historical repair evidence (2026-11-01, probes 408–449)
 
@@ -5128,6 +5132,24 @@ fail to find the accumulated summary. Own compiler 666 builds and passes
 seven encoding/structural checks, but its native qualification was skipped
 because that prerequisite failed. It is not adopted. Diagnostic 673 checks
 summary availability across the pre-loop composition and post-loop call.
+
+The separately verified composition helper in complete-program pair 678/679
+passes the positive and rejects only the final false assertion. Native candidate
+680 implements that derivation for whole opaque resource groups. It passes
+seven encodings/structural checks, **12/12 focused checks** and **80/80 full
+ownership checks**, all audited for coverage and provenance. The helper accepts
+immutable snapshot, type and metadata keys for each stage; its body proves the
+new paired continuation and all original equal-key value frames. Other resource
+shapes retain their checked proof path. The own-branch source hash is
+`a1254b3d…`, driver hash `ce988621…`, with unchanged candidate PCG `791e4cae`.
+No Ferrum change or additional axiom is involved.
+
+Recovery commit `f4a938990` preserves all 53 ownership fixtures; `d7cb048e5`
+contains the helper implementation, byte-matched to frozen build 680. Neither
+is adopted on main yet. The associated-output gate is running on that same
+build. The projected/dynamic replacement pair separately passes its four
+checks on frozen compiler 637; its completed runner awaits the serial
+interleave's release before the final audit record is written.
 
 Further serial Ferrum work covers projected/dynamic indexed replacement,
 whole-state suffix captures, guarded optional resource frames, and the

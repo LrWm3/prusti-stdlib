@@ -5319,6 +5319,23 @@ remain unchanged. Build and three protocol unit tests pass; generated-program
 checks and the native regression gate remain pending. No main adoption or
 stabilization completion is claimed.
 
+Metadata ordering probes 698/699 both finish with their expected outcomes:
+the complete positive passes in 323.74 seconds, and the sole-false control
+fails only at line 2954 in 361.17 seconds. Source hashes and exact diagnostics
+are audited. Candidate 710 removes the unqualified old-observer reveal and
+orders aggregate conversion return obligations as permissions, whole-state
+frame, typing and pointwise frame. It applies this order to packing and
+unpacking, retaining every logical obligation. Its own build, three protocol
+unit tests, seven encodings and seven full AST checks pass (source
+`aba93ba8…`, driver `721d4020…`). Native metadata, generic/prefix libraries and
+ownership checks remain pending; raw success is not native qualification.
+The single-worker queue first runs candidate 708's indexed-frame gate and
+diagnostic 709 over the existing optional-owner, region, enum and extra-next
+families on exact compiler 702. These independent diagnostics retain all known
+failures and cannot establish combined qualification. Ferrum's remote main is
+unchanged at `a2eec9a` when checked at 09:46 UTC; there is no newer runtime pin
+to adopt at this point.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user initially authorized the remaining IM and matrix repairs followed by

@@ -5103,29 +5103,39 @@ paper](https://dardinier.me/papers/CAV22_Wands.pdf) shows that fractions of
 arbitrary magic wands cannot in general be freely recombined. No such operation
 or additional axiom is proposed here.
 
-Run 643 remains active. Its iterator library passes in 213.00 seconds, prefix
-positive in 64.25 seconds, reference-write positive in 82.19 seconds, and the
-extra-next exact-false control in 270.29 seconds. The extra-next positive still
-fails an indexed permission obligation (509.80 seconds), and its nonempty
-wrong-result control fails before the intended diagnostic (361.44 seconds).
-The completed iterator group is audited at **30/32**, and the generic collection
-group at **10/10**. The prefix group is audited at **11/12**: all clients and
-exact negatives pass, but its library still times out after 600 seconds.
-The nested group is now audited at **9/11**: the repeated caller still fails,
-and its false-postcondition control times out; the other controls pass.
-Whole-region restoration remains **3/7**, with the same indexed permission
-failure in both positives and extra diagnostics in both negatives. Enum checks
-remain **7/8**, with the replacement positive still open. These results do not
-qualify the combined revision.
-The fresh checkout omitted the 50 owner fixtures, so its owner group did not
-start; this setup failure is retained. Retry 651 restores the exact fixture
-inventory from 632 and is audited at **73/75** on the same own637 compiler in
-a fresh namespace. Only the original generic split-owner positive and its
-negative fail their restoration value frame. Do not claim full 170-check
-coverage until the remaining 643 groups complete. Small proof pairs and the owner retry run
-between completed groups by holding only the broader runner's parent; its
-active verifier is allowed to finish, and the parent is resumed afterward.
-One verifier and disabled Ferrum branch parallelism remain required.
+Run 643 and its owner retry 651 are complete and audited at **157/170**
+checks on the exact frozen own637 compiler. Coverage and source/build
+provenance are complete: owned iterator 30/32, owner handoff 73/75, generic
+collections 10/10, prefix library/clients 11/12, nested references 9/11,
+whole-region restoration 3/7, enum 7/8, metadata 7/7 and further prefix
+controls 7/8. No negative was unexpectedly accepted. The original owner
+setup failure (omitted fixtures) remains recorded; retry 651 supplies the
+complete 75-check inventory in a fresh namespace.
+
+The extra-next positive and nonempty wrong-result control still fail indexed
+permissions. The prefix library and early-return prefix positive time out.
+The nested repeated caller fails, and its false-postcondition control times
+out. Whole-region positives and negatives retain indexed permission errors;
+the enum replacement positive and generic split-owner pair remain failures
+on this compiler. Candidate 660 repairs the split pair but has the separate
+loop regression described above; results from the two compilers are not
+combined into an acceptance claim.
+
+The new zero-iteration controls in 663 are audited at **4/6**: the nonzero
+positive passes, but both zero-iteration proof cases fail before the intended
+assertion. The complete checked identity-shortcut programs 664/665 still
+fail to find the accumulated summary. Own compiler 666 builds and passes
+seven encoding/structural checks, but its native qualification was skipped
+because that prerequisite failed. It is not adopted. Diagnostic 673 checks
+summary availability across the pre-loop composition and post-loop call.
+
+Further serial Ferrum work covers projected/dynamic indexed replacement,
+whole-state suffix captures, guarded optional resource frames, and the
+remaining prefix capture regression. Each diagnostic retains the original
+contracts; a raw Viper proof or encoding success is not native qualification.
+One verifier and disabled Ferrum branch parallelism remain required. Finish
+these existing restoration/collection repairs and the combined qualification,
+then pause before D1–D6 and automation scheduling.
 
 ## Follow-on scope authorized on 2026-11-01
 

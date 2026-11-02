@@ -65,9 +65,9 @@ different compilers are never added together.
 |---|---|---|
 | Whole matrix | Last complete matrix 339: 1,755/1,842; 87 failures, none waived | Rebuild final source and complete both backends with exact coverage |
 | Ownership, enum, local history, associated output | 793 audited 124/124; historical 722 audited 129/129 on its own compiler | Preserve as separate reference gates; rerun affected families after each repair |
-| Heavy prefix | 794: 7/8; early positive whole-program timeout at 600s | Selected first family; one frame-narrowing hypothesis below |
+| Heavy prefix | H1 native positive hits the 600s limit twice; exact negative passes in 309.70s | Full-program CLI replays pass: 722 in 260.94s, H1 in 272.04s; trace the native invocation with fixed dependency inputs before another encoder change |
 | Region iterator | 794: 3/7; missing tail indexed resources in both positives and wrong early errors in both negatives | 809's checked tail-snapshot equality succeeds, but the original resource assertion still fails; model review before a repair |
-| Nested calls | 794: 9/11; repeated positive missing wand, postcondition control times out | Finish active full replay 810 and inspect its solver trace; previous failed hypotheses require model review |
+| Nested calls | 794: 9/11; repeated positive missing wand, postcondition control times out | Full replay 810 times out at 600s with solver logging; previous failed hypotheses require model review |
 | Extra `next` | 794: 3/6; positive timeout and two wrong diagnostics | Retain all six controls; check as an affected regression of prefix framing |
 | Prefix/suffix expansion | 794 skipped 17 client proofs after the heavy failure | Skipped remains unresolved; historical 722 passes do not qualify this baseline |
 | Array contract selection | 800: 3/6; positive and two exact negatives fail, out-of-bounds control passes | Separate prerequisite investigation for existing `mut_option_owner_*` RangeFull clients; no array changes in the baseline |
@@ -127,7 +127,27 @@ hit the whole-program limit; this does not identify which internal query was
 expensive. Historical 722 passes in 208.35s under matching settings. After removing
 comments and generated crate identifiers only, 806's complete positive Viper
 program matches 722's exactly; the 793-to-806 difference is retained for review.
-This supports H1 but is not native qualification of the repaired integration.
+This motivated H1 but did not qualify it. The isolated rebuilt H1 positive now
+times out at 600s (615.08s command elapsed); the 720s outer watchdog did not fire.
+Its native dump still matches 722 under the stated normalization. H1 is not
+accepted. Its exact negative passes in 309.70s versus 722's 304.84s. The focused
+gate is 3/4 with complete coverage and matching source/binary provenance.
+
+Both unchanged complete programs pass a controlled replay through the pinned
+Ferrum CLI with identical limits: 722 in 260.94s and H1 in 272.04s. These are
+diagnostic results, not Rust acceptance. A controlled native repeat with the same
+frozen H1 compiler, source and settings also hits the 600s whole-program limit
+(614.86s command elapsed). Its dump has the same obligations under the stated
+normalization, but different raw bytes. Both native runs have complete coverage
+and matching source/binary provenance; neither is accepted.
+
+The next diagnostic replays the saved full Rust compiler invocation and dependency
+metadata, keeping crate identities fixed and adding only solver logging and
+unknown-result reporting. It retains the 600/30,000/100 limits. Locate the first
+expensive query and its restoration/value/frame obligation; compare proof
+structure through the CLI if needed. Logging results remain diagnostic. Preserve
+the discrepancy before any successor encoder patch or integration. The detailed
+plan, exact inputs and results live under `reconciliation-20261102/`.
 
 Build H1 from the frozen baseline in its own worktree, check the complete generated
 programs, then run the native positive and exact negative. If they pass, run all

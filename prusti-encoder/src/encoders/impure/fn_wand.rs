@@ -3126,6 +3126,30 @@ fn transfer_frames<'vir>(
             } else {
                 (after_args, before_args)
             };
+            // Different fixed indexed paths cannot identify the same resource.
+            // Omit their vacuous frame implications before quantification; this
+            // preserves all permissions and every applicable transfer guarantee.
+            if after.target == before.target && after.target.starts_with("indexed_") {
+                if let (
+                    vir::ExprKindData::CollectionLiteral(after_path),
+                    vir::ExprKindData::CollectionLiteral(before_path),
+                ) = (after.args[1].kind, before.args[1].kind)
+                    && matches!(after_path.ty.kind(), vir::TypeKind::Seq(_))
+                    && matches!(before_path.ty.kind(), vir::TypeKind::Seq(_))
+                    && (after_path.values.len() != before_path.values.len()
+                        || after_path
+                            .values
+                            .iter()
+                            .zip(before_path.values)
+                            .any(|(a, b)| {
+                                matches!((a.kind, b.kind),
+                                (vir::ExprKindData::Const(vir::ConstData::Int(a)),
+                                 vir::ExprKindData::Const(vir::ConstData::Int(b))) if a != b)
+                            }))
+                {
+                    continue;
+                }
+            }
             if !after_args
                 .iter()
                 .chain(before_args)

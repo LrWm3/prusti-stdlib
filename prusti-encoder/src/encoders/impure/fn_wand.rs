@@ -850,6 +850,15 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
                 }
             }
 
+            if let Some(composed) = crate::paired_resources::compose_flat_restoration(
+                self.vcx,
+                wand,
+                &package_script,
+                &mut self.tmp_ctr,
+            ) {
+                package_script = composed;
+            }
+
             package_script =
                 direct_resource_restoration(self.vcx, wand.lhs, wand.rhs, package_script);
 

@@ -254,3 +254,179 @@ pub(crate) fn lower<'vir>(program: vir::Program<'vir>) -> vir::Program<'vir> {
         })
     })
 }
+
+/// Compose a linear opaque history before restoring a concrete flat footprint.
+/// The old and new physical resources can overlap even if an intermediate
+/// owner's footprint does not. Keeping a current half during the first apply,
+/// and an entry half during the second, frames the overlapping observations.
+///
+/// Use the boundary's existing checked folds/unfolds as concrete views. More
+/// complex conditional histories, method conversions and non-flat footprints
+/// retain their existing proof. This replaces a proof script only: the complete
+/// original wand consequent, including every value frame and pledge, is checked.
+pub(crate) fn compose_flat_restoration<'vir>(
+    vcx: &'vir vir::VirCtxt<'vir>,
+    wand: vir::Wand<'vir>,
+    original: &[vir::Stmt<'vir>],
+    fresh: &mut usize,
+) -> Option<Vec<vir::Stmt<'vir>>> {
+    use vir::{ExprKindData as K, StmtKindData as S};
+    fn physical<'vir>(expr: vir::ExprBool<'vir>, out: &mut Vec<vir::PredicateApp<'vir>>) -> bool {
+        match expr.kind {
+            K::PredicateApp(app) if app.target == "p_Param" && full(app) => {
+                out.push(app);
+                true
+            }
+            K::BinOp(op) if op.kind == vir::BinOpKind::And => {
+                physical(op.lhs.downcast_ty(), out) && physical(op.rhs.downcast_ty(), out)
+            }
+            _ => {
+                struct Pure(bool);
+                impl<'vir> Folder<'vir, (), !> for Pure {
+                    fn fold_expr(&mut self, e: vir::ExprDyn<'vir>) -> Option<vir::ExprDyn<'vir>> {
+                        if matches!(
+                            e.kind,
+                            K::PredicateApp(_)
+                                | K::AccField(_)
+                                | K::PredicatePerm(_)
+                                | K::Wand(_)
+                                | K::InhaleExhale(_)
+                        ) {
+                            self.0 = false;
+                        }
+                        e.super_fold_with(self)
+                    }
+                }
+                let mut pure = Pure(true);
+                let _ = expr.fold_with(&mut pure);
+                pure.0
+            }
+        }
+    }
+    fn empty(stmts: &[vir::Stmt<'_>]) -> bool {
+        stmts.iter().all(|stmt| match stmt.kind {
+            S::Comment(_) => true,
+            S::If(_, yes, no) => empty(yes) && empty(no),
+            _ => false,
+        })
+    }
+    let mut current = Vec::new();
+    let mut entry = Vec::new();
+    if !physical(wand.lhs, &mut current)
+        || !physical(wand.rhs, &mut entry)
+        || current.len() < 2
+        || entry.is_empty()
+    {
+        return None;
+    }
+    let mut script = Vec::new();
+    for &stmt in original {
+        match stmt.kind {
+            S::If(_, yes, no) if empty(yes) && empty(no) => (),
+            S::Fold(_) | S::Unfold(_) | S::Assert(_) | S::Comment(_) => script.push(stmt),
+            S::Apply(step) if paired(step) && leaf(step.lhs)?.target == "indirect_resources" => {
+                script.push(stmt)
+            }
+            _ => return None,
+        }
+    }
+    let steps = script
+        .iter()
+        .enumerate()
+        .filter_map(|(i, stmt)| {
+            if let S::Apply(wand) = stmt.kind {
+                Some((i, *wand))
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+    if steps.len() < 2 {
+        return None;
+    }
+    let &(first, first_wand) = steps.first()?;
+    let &(last, last_wand) = steps.last()?;
+    let prefix = &script[..first];
+    let suffix = &script[last + 1..];
+    if !prefix
+        .iter()
+        .any(|s| matches!(s.kind, S::Fold(p) if p.target == "indirect_resources"))
+        || !suffix
+            .iter()
+            .any(|s| matches!(s.kind, S::Unfold(p) if p.target == "indirect_resources"))
+    {
+        return None;
+    }
+    let reverse_views = |stmts: &[vir::Stmt<'vir>]| {
+        stmts
+            .iter()
+            .rev()
+            .filter_map(|stmt| match stmt.kind {
+                S::Fold(app) => Some(vcx.mk_unfold_stmt(app)),
+                S::Unfold(app) => Some(vcx.mk_fold_stmt(app)),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    let observe = |app: vir::PredicateApp<'vir>| {
+        vir::FunctionIdn::<(vir::Ref, vir::TyVal), vir::PSnap>::new(
+            vir::ViperIdent::new("p_Param_snap"),
+            (vir::TYPE_REF, vir::TYPE_TYVAL),
+            vir::TYPE_PSNAP,
+        )
+        .call()(app.args[0].downcast_ty(), app.args[1].downcast_ty())
+    };
+    let mut result = Vec::new();
+    let saved = current
+        .iter()
+        .map(|&app| {
+            let name = vir::vir_format!(vcx, "_paired_current_{}", *fresh);
+            *fresh += 1;
+            let decl = vcx.mk_local_decl(name, vir::TYPE_PSNAP);
+            result.push(vcx.mk_local_decl_stmt(decl, Some(observe(app))));
+            vcx.mk_local_ex(decl)
+        })
+        .collect::<Vec<_>>();
+    result.extend_from_slice(prefix);
+    let composed = vcx.mk_wand(
+        vcx.mk_predicate_app_expr(leaf(first_wand.lhs)?),
+        vcx.mk_predicate_app_expr(leaf(last_wand.rhs)?),
+    );
+    let history = steps
+        .iter()
+        .map(|(_, step)| vcx.mk_apply_stmt(step))
+        .collect::<Vec<_>>();
+    // The common lowering pass produces two separately proved half packages.
+    result.push(vcx.mk_package_stmt(composed, vcx.alloc_slice(&history)));
+    // Explicit half applications leave space for concrete overlap coherence.
+    let mut half = Lower { vcx, half: true };
+    let partial = half.wand(composed, true);
+    result.push(vcx.mk_apply_stmt(partial));
+    let open_current = reverse_views(prefix);
+    result.extend_from_slice(half.statements(&open_current));
+    result.extend_from_slice(half.statements(suffix));
+    for (&before, &value) in current.iter().zip(&saved) {
+        for &after in &entry {
+            let key = vcx.mk_conj(
+                &before
+                    .args
+                    .iter()
+                    .zip(after.args)
+                    .map(|(&a, &b)| vcx.mk_eq_expr(a, b))
+                    .collect::<Vec<_>>(),
+            );
+            let equal = vcx.mk_eq_expr(observe(after), value);
+            result.push(
+                vcx.mk_assert_stmt(
+                    vcx.mk_bin_op_expr(vir::BinOpKind::Implies, key, equal)
+                        .downcast_ty(),
+                ),
+            );
+        }
+    }
+    result.extend_from_slice(half.statements(&reverse_views(suffix)));
+    result.extend_from_slice(half.statements(&reverse_views(&open_current)));
+    result.push(vcx.mk_apply_stmt(partial));
+    result.extend_from_slice(suffix);
+    Some(result)
+}

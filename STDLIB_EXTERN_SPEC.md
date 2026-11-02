@@ -69,8 +69,11 @@ for a later resumption, after the mandatory pause above.
 
 The isolated historical-reference address repair is adopted in `606494f2d`.
 The newer combined candidate remains unaccepted: its wider gate 577, using
-frozen build 591, has audited results of 30/32 owned-iterator checks, 27/75
-owner-handoff checks, and 10/10 generic cross-crate checks. No negative was
+frozen build 591, finished at **112/170 checks** with complete coverage and
+source/build provenance (`audit577.json`). Results are 30/32 owned-iterator checks, 27/75
+owner-handoff checks, 10/10 generic cross-crate checks, 11/12 prefix checks,
+9/11 nested-reference checks, 3/7 whole-region checks, 7/8 enum checks and
+7/7 metadata checks, with all 8 further prefix checks passing. No negative was
 unexpectedly accepted. Missing value frames in generic trait calls and owner
 continuations are being repaired in candidates 600 and 601; their structural
 checks pass, but native qualification is still queued. These partial results
@@ -4706,6 +4709,58 @@ Probe 597 checks a standalone resource-state coherence lemma for two indexed
 wrappers of the same underlying resource, including an inhabited false-assertion
 control. Both pass structural checking only so far. Their results cannot be
 substituted for native Rust regression qualification.
+
+### Wider regression audit and guarded observations (577, 601–607)
+
+All nine groups of 577 have been audited against their exact selected
+fixtures, source hashes and frozen binaries: **112/170 pass**, with no
+unexpectedly accepted negatives. The generic, metadata and further prefix groups
+pass. The prefix library reaches its 600-second backend limit; all its clients
+and exact negative controls pass. The repeated nested-call positive and its
+false-postcondition control fail a restoration value equality after 583.78 and
+598.37 seconds, respectively. These are completed proof failures, not timeouts.
+Both whole-region positives and negatives fail earlier indexed-permission
+assertions. Enum replacement also fails permission restoration; the other enum
+controls pass. None of these failures establishes stabilization.
+
+Candidate 601 combines the pure associated-type key repair with consistent
+value frames on owner continuations and loop summaries. Its six encodings and
+six structural checks pass. Native checks cover the small untrusted ownership
+gate, all 75 owner-handoff checks and the affected iterator library/clients.
+The candidate remains unaccepted while those checks are queued.
+
+Further structural inspection in 604 finds invalid quantifier triggers in the
+whole-region encoding: a sequence lookup contains a redundant conditional
+read under an enclosing enum branch. Candidate 605 keeps the conditional only
+when an observation is hoisted outside that branch. Its nine encodings and
+nine structural checks pass, including both whole-region variants. The same
+small repair was rebuilt independently on main with PCG `9dfaf88` in 606;
+six encodings and six structural checks pass, and its metadata/enum proof
+controls are queued. Neither candidate is adopted. Structural success does
+not resolve the whole-region permission failure.
+
+The smaller generic optional-slice regressions in 607 reproduce this syntax
+failure independently: all three variants encode but have invalid triggers on
+baseline 595, and all three pass structural checking on isolated 606. They
+cover a generic length method with non-Copy elements and Some/None/empty
+clients, with exact false-value and false-postcondition controls. Their native
+gate is included in 606's 17 selected checks; proof results remain pending.
+
+The earlier `first_element` test also lacks an explicit contract for its
+unchanged-second-element assertion. Fixtures 602 retain that assertion in a
+stronger positive with checked selected-resource and untouched-index expiry
+pledges. Exact false-value and false-postcondition controls accompany it; a
+separate negative retains the original weaker contract and must reject the
+untouched-value assertion. All four encode and pass structural checks on 601;
+native results remain pending. The old failing fixture is retained as evidence.
+Diagnostic 603 extends the pending pairwise coherence lemma to finite
+sequences, with state frames and an inhabited duplicate-value false control.
+Its two structural checks pass, but it is held pending the result of 597.
+The duplicate-value controls matter because predicate permission can exceed
+one in [Viper's predicate model](https://viper.ethz.ch/tutorial/predicates.html).
+Wrapper ownership alone must not be treated as a distinctness axiom; the
+coherence helpers must prove their equalities and preserve an inhabited
+false-assertion control.
 
 ## Follow-on scope authorized on 2026-11-01
 

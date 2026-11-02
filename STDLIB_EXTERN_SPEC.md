@@ -5574,7 +5574,7 @@ in 738 advances through the physical permission obligations to the final
 cross-indexed/raw value frame. Extending snapshot inlining in 741 does not solve
 that frame. These are preserved recovery checkpoints, not accepted repairs.
 Candidate 747 instead tests checked observer reveals at enum/reference resource
-packing and unpacking on the 738 base; its native gate remains pending.
+packing and unpacking on the 738 base; its completed native gate is also 8/9.
 
 The exact optional replay 739 corrects an earlier shorthand diagnosis: the first
 failure is missing **physical slice ownership**, at lines 2208–2253, because the
@@ -5609,9 +5609,11 @@ retaining both discriminants, quantifier ranges and complete resource keys.
 Its own build, three protocol tests, seven encodings and seven AST checks pass.
 The existing optional gate now passes **9/9 audited checks**, including the
 direct positive (19.17 seconds), generic wrapper (4.42 seconds) and all four
-exact negatives. Clearing/rotation controls and the full owner-history gate
-remain in progress. Exact recovery `6c66c7425` is pushed; main has not adopted
-this encoder candidate and combined qualification remains open.
+exact negatives. The additional clearing/rotation gate subsequently finishes
+at **3/7 audited checks**: all four native controls fail; its two runtime
+checks and Rust preflight pass. The full owner-history gate is skipped.
+Exact recovery `6c66c7425` is pushed; main has not adopted this encoder
+candidate and combined qualification remains open.
 
 The enum candidates 747 and 750 both remain **8/9 audited**. Observer reveals
 and a direct two-resource-permutation proof branch do not establish the final
@@ -5620,7 +5622,40 @@ its chosen expansion key is initialized only for an earlier selected variant.
 Diagnostic 753 instead uses the actual argument index and checks the current
 variant/address guard before observing that wrapper. It retains the entire
 original program, final quantified frame and a checked scalar equality; it is
-queued after 751 as localization evidence. No enum repair is accepted yet.
+complete: its guarded scalar equality fails (33.19 seconds). Diagnostic 760
+also fails the equality inside an actual final indexed wrapper, before
+unfolding it. This narrows the search to earlier restoration steps; it does
+not establish a backend defect. No enum repair is accepted yet.
+
+Candidate 758 imports the original optional slice's guarded physical permission
+with a checked assertion before observing its current snapshot. Full-program
+diagnostic 755 shows this removes the missing snapshot permission. The own
+compiler build, three protocol tests, seven encodings and seven AST checks
+pass; native results are **9/9 existing optional checks and 3/7 new controls**,
+with complete audited coverage. The original new controls still fail. Exact
+recovery `433772796` is pushed; no encoder adoption is claimed.
+
+Diagnostic 756 separates the caller's length failure: the optional `Some`
+variant is known before the call, but its slice length is not. The test uses
+array `IndexMut<RangeFull>`, which currently has no functional contract. The
+pinned Rust implementation delegates array indexing to slices, but its generic
+bound permits custom slice `IndexMut` implementations as well. Candidate 764
+therefore attempts a conditional standard-`SliceIndex` contract, retaining the
+exact target bounds and associated output. It builds and passes seven encoding
+and AST checks, but inspection finds that existing conditional-call support
+intentionally excludes external trait-implementation methods and refinements
+with preconditions. The functional contract is not selected. Intermediate
+759/761–763 builds were rejected before any proof run; no validator was bypassed.
+Recovery `0a17900c8` preserves the unqualified contract experiment separately.
+
+Additional direct-coercion controls (766, on the exact 758 compiler) isolate
+optional owner restoration from this newly exposed array API gap. They retain
+the count, cleared-slot and current-value assertions. The original RangeFull
+fixtures and their failures remain intact; these extra controls cannot replace
+them in a combined qualification claim. The array-specific positive, wrong
+length, bounds and custom-index controls are also being checked. Completion of
+restoration, existing generic collection/ownership stabilization and combined
+qualification remains required before the user-requested pause.
 
 ## Follow-on scope authorized on 2026-11-01
 

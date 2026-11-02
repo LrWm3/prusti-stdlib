@@ -756,3 +756,18 @@ replacement between wand creation and application; that requires the checked
 caller-history protocol above. A native optional-slice prototype is still
 unqualified. The finite model establishes neither general collection support
 nor a Silicon sign-off.
+
+
+## Equal indexed keys (2026-11-02)
+
+`indexed_same_key_alias.vpr` checks that two syntactically different index/path
+expressions denote the same owned predicate when their complete keys are equal.
+Unfolding that predicate preserves the value observed at the package antecedent.
+The `_false` control instead asks for an incremented value and fails only its
+assertion at line 22. Both full AST checks and Ferrum outcomes match; each proof
+run takes under 0.2 seconds. Source hashes and exact errors are recorded in
+`target/stdlib-matrix-20261031-1236/audit770-771.json`.
+
+This distinguishes equal-key aliases from different indexed wrappers whose
+physical addresses may coincide. It does not qualify the unresolved native enum
+replacement proof, recursive collection shapes, or a Silicon sign-off.

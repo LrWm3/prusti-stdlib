@@ -5688,10 +5688,10 @@ does not reliably identify an owner whose contents have changed.
 Candidate 788 instead matches the physical owner address, which array-to-slice
 unsizing preserves, and applies that owner's histories newest first. It retains
 the runtime consumed flag and all checked pack/apply/unpack operations. Its own
-build, three unit tests, six encodings and six full AST checks pass. The local
-history 7, optional coercion 7 and existing optional 9 native groups are audited
-passes; the owner 80 regression group is running. Recovery commits preserve the
-encoder and four new repeated/independent fixtures separately from main.
+build, three unit tests, six encodings and six full AST checks pass. All 103 native
+checks are audited passes: local history 7, optional coercion 7, existing optional
+9 and owner histories 80. Recovery `577b418c0` preserves the encoder and
+`912cac5b3` adds the four repeated/independent fixtures separately from main.
 
 Enum diagnostics 772 and 774 remain unqualified. Checked physical coherence
 helpers remove the previous final value failure, but reserving the immediately
@@ -5708,14 +5708,37 @@ types or zero-sized values. Diagnostics 789–791 test a smaller repair consisti
 only of this checked initial separation and reservation of immediately returned
 resources, including the original false and wrong-current controls.
 
-If that smaller gate passes, encode the lemma from the existing indexed lifetime
-projection so its enum guards and full index/path keys match the native resource
-representation. Select concrete scalar referents with actual field permissions;
-do not infer non-aliasing from an abstract predicate or a missing lifetime group.
-Emit the checked call at method entry and retain current indexed resources around
-the final package. Recheck enum, first-element, replacement, zero-sized and
-generic ownership controls before combining the change. No assertion or ownership
-requirement has been removed, and native enum qualification remains open.
+The smaller diagnostic gate 789–791 passes its full-program outcome, AST and
+source audits: positive 57.36 seconds, false-value control 23.58 seconds and
+wrong-current control 24.46 seconds, each negative with its sole intended error.
+It needs no experimental cross-index coherence helper.
+
+Candidate 793 encodes the checked separation lemma from the existing indirect
+lifetime projection, retaining enum guards and full index/path/type keys. It
+selects concrete primitive referents with actual field permissions, unfolds and
+refolds both resources, and proves their address inequality. The checked helper
+preserves both snapshots. Generic and zero-sized referents receive no distinctness
+assumption. The call runs at method entry; the final package reserves immediately
+returned indexed resources when these separation calls are present.
+
+The candidate combines this change with 788's local histories and the enum
+exposure scheduling from 738. Its own build, three unit tests, eight encodings and
+eight full AST checks pass. Native enum 9, first-element 6, replacement 6 and
+local-history 7 are audited passes. Optional coercion 7 and original optional 9
+also complete successfully; owner histories 80 are running. Recovery `1b6a6c44b`
+preserves the exact compiler source. Broader 794 is queued on that same compiler
+for generic resources, metadata, prefix/suffix proofs, region iteration, nested
+calls and extra-next controls. This is not a full-matrix or milestone sign-off.
+
+Array experiments 795 and 797 build and pass eight encoding and AST checks each,
+but generated code still lacks the conditional bounds assertion and immediate
+contract. Both are withdrawn before native verification. The investigation now
+distinguishes the MIR trait declaration from the statically resolved array
+implementation and preserves the implementation's own generic substitutions.
+An experimental checked-precondition path and immediate-only array contract remain
+unqualified; conditional multi-stage expiry is unchanged. Diagnostics 796 and 798
+trace selection. The original RangeFull fixtures and out-of-bounds negative remain
+required, and the earlier incorrectly accepted negative is not waived.
 
 ## Follow-on scope authorized on 2026-11-01
 

@@ -5060,7 +5060,29 @@ First qualify the native failing positive/negative pair, then all owner,
 replacement and generic loop controls. Detailed checked-program derivation and
 integration constraints are retained in
 `target/stdlib-matrix-20261031-1236/half-resource-integration-notes.md`.
-The general encoder is not implemented or qualified yet.
+The paired interface is now implemented experimentally in candidate 656 as a
+shared final VIR lowering. It rewrites flat scalar/opaque continuations in
+contracts, invariants, packages and applications together. Full applications
+consume two instances; a half-package proof consumes one. Boundary conversions
+remain outside those applications. Conditional/quantified footprints retain
+their existing protocol, and conversions requiring full resources keep their
+original checked preconditions. No arbitrary existing full wand is split.
+The fresh own-branch build passes four encodings and four structural checks.
+Its first native gate is audited at **5/7**: the ordinary concrete positive and
+exact negative pass, while both generic split-owner cases retain the original
+value-frame failure. Pairing alone is insufficient.
+
+Complete-program pair 657/658 inlines the already checked 654 helpers. The
+positive passes in **7.99 seconds** and the negative fails only at the final
+false assertion in **6.53 seconds**; all methods and original contracts remain
+checked. Candidate 659 uses this derivation to compose linear opaque histories
+before concrete restoration. Existing checked boundary folds/unfolds expose
+the two half footprints; complete-key guards preserve overlapping scalar
+observations. The original final wand, including its value frames and pledges,
+remains the proof obligation. Four native encodings and structural checks pass;
+native verification is queued. Candidate 660 adds focused linearity and branch
+edge tests and avoids lowering branch-edge package expressions before their
+permission context is known. Neither candidate is adopted or qualified yet.
 
 The distinction matters: [Dardinier et al.'s CAV 2022
 paper](https://dardinier.me/papers/CAV22_Wands.pdf) shows that fractions of
@@ -5075,6 +5097,8 @@ wrong-result control fails before the intended diagnostic (361.44 seconds).
 The completed iterator group is audited at **30/32**, and the generic collection
 group at **10/10**. The prefix group is audited at **11/12**: all clients and
 exact negatives pass, but its library still times out after 600 seconds.
+The nested group is now audited at **9/11**: the repeated caller still fails,
+and its false-postcondition control times out; the other controls pass.
 The fresh checkout omitted the 50 owner fixtures, so its owner group did not
 start; this setup failure is retained. Retry 651 restores the exact fixture
 inventory from 632 and is audited at **73/75** on the same own637 compiler in

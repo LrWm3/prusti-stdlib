@@ -5079,10 +5079,24 @@ checked. Candidate 659 uses this derivation to compose linear opaque histories
 before concrete restoration. Existing checked boundary folds/unfolds expose
 the two half footprints; complete-key guards preserve overlapping scalar
 observations. The original final wand, including its value frames and pledges,
-remains the proof obligation. Four native encodings and structural checks pass;
-native verification is queued. Candidate 660 adds focused linearity and branch
+remains the proof obligation. Four native encodings and structural checks pass.
+The complete native focused gate is now audited at **7/7**: the generic
+split-owner positive passes in **4.32 seconds**, its exact negative in
+**4.26 seconds**, and the ordinary concrete ownership pair also passes.
+Candidate 660 adds focused linearity and branch
 edge tests and avoids lowering branch-edge package expressions before their
-permission context is known. Neither candidate is adopted or qualified yet.
+permission context is known. Its own rebuild, three protocol unit tests and
+four encodings/structural checks pass. The full owner gate is **74/75**: the
+generic split pair is repaired, but `owner_handoff_loop_before_after_pass`
+regresses with a missing accumulated summary after the loop. The existing
+false-postcondition control requires at least one iteration and passes; fresh
+zero-iteration positive/negative and nonzero positive controls are queued in
+663. Unedited complete-program replay 662 reproduces the missing summary at
+1957.9–1988.66 in 1.97 seconds. Checked identity shortcuts are being tested in
+664/665. No failure is waived, and neither candidate is adopted on main.
+The implementation is preserved and pushed in recovery commits `20a9c32cf`
+(shared lowering), `34afb19df` (composition/coherence) and `89bd3eaed`
+(branch-edge fix and tests). All code bytes match frozen candidate 660.
 
 The distinction matters: [Dardinier et al.'s CAV 2022
 paper](https://dardinier.me/papers/CAV22_Wands.pdf) shows that fractions of
@@ -5099,6 +5113,10 @@ group at **10/10**. The prefix group is audited at **11/12**: all clients and
 exact negatives pass, but its library still times out after 600 seconds.
 The nested group is now audited at **9/11**: the repeated caller still fails,
 and its false-postcondition control times out; the other controls pass.
+Whole-region restoration remains **3/7**, with the same indexed permission
+failure in both positives and extra diagnostics in both negatives. Enum checks
+remain **7/8**, with the replacement positive still open. These results do not
+qualify the combined revision.
 The fresh checkout omitted the 50 owner fixtures, so its owner group did not
 start; this setup failure is retained. Retry 651 restores the exact fixture
 inventory from 632 and is audited at **73/75** on the same own637 compiler in

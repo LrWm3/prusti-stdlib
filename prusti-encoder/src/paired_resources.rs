@@ -1,4 +1,4 @@
-//! Lower flat resource continuations to two separately checked half packages.
+//! Lower opaque resource continuations to two separately checked half packages.
 //!
 //! This is a representation of the continuation, not a rule for splitting an
 //! arbitrary existing wand. Contracts, invariants, packages and applications
@@ -53,7 +53,12 @@ fn leaf<'vir>(expr: vir::ExprBool<'vir>) -> Option<vir::PredicateApp<'vir>> {
 
 fn paired(wand: vir::Wand<'_>) -> bool {
     match (leaf(wand.lhs), leaf(wand.rhs)) {
-        (Some(lhs), Some(rhs)) => lhs.target == rhs.target,
+        // Physical storage conversions can require full permissions, even
+        // when their external footprint is one p_Param. Keep that protocol
+        // intact; only abstract indirect histories need paired continuations.
+        (Some(lhs), Some(rhs)) => {
+            lhs.target == "indirect_resources" && rhs.target == "indirect_resources"
+        }
         _ => false,
     }
 }
@@ -215,15 +220,16 @@ mod tests {
 
     fn continuation<'vir>(vcx: &'vir vir::VirCtxt<'vir>) -> vir::Wand<'vir> {
         let ty = vcx.mk_local_ex(vcx.mk_local_decl("T", vir::TYPE_TYVAL));
-        let p = |name| {
-            let addr = vcx.mk_local_ex(vcx.mk_local_decl(name, vir::TYPE_REF));
+        let metadata = vcx.mk_local_ex(vcx.mk_local_decl("metadata", vir::TYPE_PSNAP));
+        let resource = |name| {
+            let snapshot = vcx.mk_local_ex(vcx.mk_local_decl(name, vir::TYPE_PSNAP));
             vcx.mk_predicate_app_expr(vcx.alloc(vir::PredicateAppData {
-                target: "p_Param",
-                args: vcx.alloc_slice(&[addr.as_dyn(), ty.as_dyn()]),
+                target: "indirect_resources",
+                args: vcx.alloc_slice(&[snapshot.as_dyn(), ty.as_dyn(), metadata.as_dyn()]),
                 perm: None,
             }))
         };
-        vcx.mk_wand(p("current"), p("entry"))
+        vcx.mk_wand(resource("current"), resource("entry"))
     }
 
     fn proof<'vir>(

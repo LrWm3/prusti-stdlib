@@ -5652,10 +5652,36 @@ Additional direct-coercion controls (766, on the exact 758 compiler) isolate
 optional owner restoration from this newly exposed array API gap. They retain
 the count, cleared-slot and current-value assertions. The original RangeFull
 fixtures and their failures remain intact; these extra controls cannot replace
-them in a combined qualification claim. The array-specific positive, wrong
-length, bounds and custom-index controls are also being checked. Completion of
+them in a combined qualification claim. Candidate 764's array group is only
+2/6: its bounds negative is incorrectly accepted because the conditional
+contract is not selected. Its custom-index negative also needs the trait
+refinement annotation; the corrected fixture is preserved in recovery
+`4cef831a7` but has not been rerun. Neither result is waived. Completion of
 restoration, existing generic collection/ownership stabilization and combined
 qualification remains required before the user-requested pause.
+
+The coercion diagnostics isolate two missing history-discharge points. Full
+program 773 passes after packing the current concrete element resources,
+applying the already-returned current-to-entry history, and unpacking the entry
+resources immediately before the original local array operands' borrows expire.
+The original caller retained that history but never consumed it. Applying the
+same repair to rotation (775–777) removes the caller's permission failure but
+leaves the callee's current-resource reservation failure.
+
+In 778–780, moving the existing guarded swap-history assertion and application
+inside the optional owner's current-to-entry continuation fixes that remaining
+failure. The rotation positive passes in 31.97 seconds; the false and wrong-value
+controls each fail solely at their intended assertion. All original contracts,
+bodies and assertions remain. Together with 773 these four full-program
+diagnostics pass their outcome, AST and source-hash audits. They motivate a
+native encoder change, not a completed compiler qualification. Candidate 781
+failed at compilation; candidate 782 corrects its tuple consumers and expression
+comparison and tests the integrated scheduling and local-array discharge.
+
+Enum diagnostics 772 and 774 remain unqualified. Checked physical coherence
+helpers remove the previous final value failure, but reserving the immediately
+returned indexed resources exposes a missing entry resource in the outer
+package. No assertion or ownership requirement has been removed to accept it.
 
 ## Follow-on scope authorized on 2026-11-01
 

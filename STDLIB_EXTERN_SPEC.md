@@ -5366,6 +5366,41 @@ protocol unit tests, seven encodings and seven complete AST checks pass
 this remains an unadopted experiment. Stabilization and the mandatory pause
 have not yet been reached.
 
+The refreshed 709 region and enum groups are **3/7** and **7/8 audited checks**.
+Both region positives and both wrong-value controls fail on indexed generic
+permissions; enum replacement still fails an indexed permission assertion.
+The extra-next positive now passes in 375.49 seconds on own compiler 702,
+where the older combined baseline failed. Its three negative controls remain
+pending, so the family is not yet marked repaired.
+
+The next current-owner design must distinguish an ancestor's entry state from
+its restored descendant's current state. For `Option<&mut [T]>`, the original
+slice can still require restoration when the current option is `None`.
+Observing only the current option loses that owner; freezing every dereference
+instead loses the slice's current elements. The proposed scoped policy freezes
+the ancestor slot at entry and observes the restored slice storage now, retaining
+the original variant guard. It must be shared by predicate construction and
+generic boundary conversions, including their physical casts. Merely changing
+`is_handoff_node` or adding the ancestor as a physical frame is insufficient.
+
+Before integrating that policy, qualify the explicitly captured model
+716–719, including false, wrong-current-value and missing-current-resource
+controls. Then select a unique restored physical owner and carry its guard,
+origin and group consistently through both callee packaging and caller
+continuation histories. Bundling must recognize resource-free return types
+such as `usize`, while retaining every parent-frame obligation. Existing
+optional-owner positives/negatives and new mutation/replacement controls must
+pass before widening to escaped outputs or multiple physical owners. This is
+an unimplemented repair plan within the existing stabilization scope, not D1.
+
+Full-program diagnostics 720/721 preserve the current enum positive and add
+only one final false assertion for the negative. Both AST checks pass. They
+test `--separateMethodSolver` with the existing single-worker Ferrum pin,
+without method filtering, as candidate 715's serial prelude after 710. The
+Rust negative can also differ in cleanup/control flow, so its earlier success
+does not establish a solver defect. No backend setting is adopted from these
+pending diagnostics.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user initially authorized the remaining IM and matrix repairs followed by

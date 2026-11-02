@@ -5146,8 +5146,16 @@ No Ferrum change or additional axiom is involved.
 
 Recovery commit `f4a938990` preserves all 53 ownership fixtures; `d7cb048e5`
 contains the helper implementation, byte-matched to frozen build 680. Neither
-is adopted on main yet. The associated-output gate is running on that same
-build. The projected/dynamic replacement pair separately passes its four
+is adopted on main yet. The associated-output gate then exposed a physical-storage regression:
+680 passes only 2/6 first-element checks because a fractional physical
+continuation cannot satisfy a full slice-conversion contract. No failure is
+waived. Candidate 681 restricts pairing to opaque indirect histories and keeps
+physical continuations full. Its own rebuild, three protocol unit tests and
+11 encodings/structural checks pass; the audited native gates are now **12/12
+focused, 80/80 ownership, 6/6 first-element and 23/23 small controls**. The
+six replacement checks remain in progress. Recovery commit `7a5c8d600`
+preserves this restriction and matches frozen source `a6e9e1a8…` / driver
+`0808b5e5…`. Main adoption and combined qualification remain outstanding. The projected/dynamic replacement pair separately passes its four
 checks on frozen compiler 637; its completed runner awaits the serial
 interleave's release before the final audit record is written.
 

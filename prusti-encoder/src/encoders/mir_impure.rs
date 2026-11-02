@@ -893,6 +893,28 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             .and_then(|guide| self.expansion_index(guide))
             .map(|index| self.vcx.maybe_apply_label(index, label));
 
+        // Restoring a direct scalar reference requires its raw referent. An
+        // indexed owner may still hold the same cell under a captured key.
+        // Open that checked wrapper at the actual conversion boundary.
+        if matches!(fold_or_unfold, FoldOrUnfold::Unfold)
+            && let ty::TyKind::Ref(_, referent, ty::Mutability::Mut) = place_ty.ty.kind()
+            && matches!(
+                referent.kind(),
+                ty::TyKind::Uint(..) | ty::TyKind::Int(..) | ty::TyKind::Bool | ty::TyKind::Char
+            )
+        {
+            let conversion = self
+                .deps
+                .require_dep::<crate::encoders::ty::resource_conversion::ResourceConversionEnc>(
+                RustTyDecomposition::from_ty(place_ty.ty, self.context()),
+            )?;
+            let snapshot = self.vcx.maybe_apply_label(data.ref_to_snap(ref_p), label);
+            for view in conversion.scalar_views(snapshot) {
+                let raw = self.vcx.mk_predicate_app_expr(view.resource);
+                self.stmts(self.expose_restored_scalar_inputs(raw));
+            }
+        }
+
         let (stmts, frame) = match fold_or_unfold {
             FoldOrUnfold::Unfold => (
                 data.unfold(place_ty.variant_index, ref_p, index, None, label),

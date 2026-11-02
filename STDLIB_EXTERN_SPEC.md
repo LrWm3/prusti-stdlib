@@ -5336,6 +5336,36 @@ failures and cannot establish combined qualification. Ferrum's remote main is
 unchanged at `a2eec9a` when checked at 09:46 UTC; there is no newer runtime pin
 to adopt at this point.
 
+Candidate 708 remains unqualified: the repeated nested-call positive reaches
+the 600-second verifier timeout (607.39 seconds including the command). The
+simpler positive then runs substantially longer than its earlier 31-second
+baseline. The candidate is stopped at that point; its partial audit contains
+three preflight/runtime successes and the failed repeated positive, with seven
+missing native checks. The interrupted simple positive and remaining negatives
+are not counted as successes. The owned verifier process tree is stopped before
+releasing the serial worker; `probe708/interrupted.json` records the action.
+The stronger cross-index experiment is not included in subsequent candidates.
+
+Diagnostic 709 uses the exact own compiler 702. Its optional-owner group is
+**8/9 audited checks** in 39.07 seconds; `mut_option_generic_len_pass` still
+fails with `apply.failed:insufficient.permission` at the length call. Region,
+enum and extra-next diagnostics remain pending. An initial runner indentation
+error started no verifier and is archived before correction. The finite
+partial-heap model 711 fails return/application wand matching; its controls
+are skipped. Revised models 716–719 bind old and current observations outside
+the wand. Their corrected full AST checks pass, but verification is pending;
+the initial let-syntax parse failure is retained separately.
+
+Candidate 715 follows 710 with a smaller indexed-call change: materialization
+inlines only unconditional old `p_Param_snap` bindings when both sides of the
+restoration contain exclusively indexed resources. Final packages already use
+that policy. Guarded/deep observers and mixed/scalar stages retain captures;
+permission operands and value obligations are unchanged. Its own build, three
+protocol unit tests, seven encodings and seven complete AST checks pass
+(source `c645e935…`, driver `67e03d14…`). Native tests are queued after 710;
+this remains an unadopted experiment. Stabilization and the mandatory pause
+have not yet been reached.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user initially authorized the remaining IM and matrix repairs followed by

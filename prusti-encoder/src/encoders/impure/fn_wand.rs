@@ -320,6 +320,7 @@ pub(crate) struct OwnerHandoff<'vir> {
     owner: OwnerIdentity<'vir>,
     group: usize,
     restoration_group: usize,
+    observation_permissions: Option<vir::ExprBool<'vir>>,
     current: vir::ExprBool<'vir>,
     entry: vir::ExprBool<'vir>,
     bindings: Vec<(vir::LocalDeclSnap<'vir>, vir::ExprSnap<'vir>)>,
@@ -459,6 +460,13 @@ impl<'vir> OwnerHandoff<'vir> {
         visitor: &mut ImpureEncVisitor<'vir, '_, E>,
         script: &mut Vec<vir::Stmt<'vir>>,
     ) {
+        if let Some(permissions) = self.observation_permissions {
+            // An optional owner may have been cleared. Its original slice is
+            // then captured from the enclosing heap, rather than supplied by
+            // the current Option on the wand's left. Import that checked
+            // physical permission before evaluating current slice snapshots.
+            script.push(visitor.vcx.mk_assert_stmt(permissions));
+        }
         let mut substitute = HandoffSubstitute(FxHashMap::default());
         for &(decl, value) in &self.bindings {
             let value = value.fold_with(&mut substitute).unwrap_or(value);
@@ -2125,6 +2133,22 @@ impl<'vir> WandEncOutput<'vir> {
         } else {
             self.input_owner(node, args, call_ctx, vcx, deps)?
         };
+        let observation_permissions = if nested {
+            let storage = self.inputs.iter().copied().find(|input| {
+                input.mir_local() == node.mir_local() && input.region_idx().index() == 1
+            })?;
+            self.encode_predicates_for_function_shape_node(
+                vcx,
+                deps,
+                storage,
+                call_ctx,
+                Some(entry_heap),
+                None,
+                |local| args[local],
+            )
+        } else {
+            None
+        };
         let captures = vcx.alloc(std::cell::RefCell::new(Vec::new()));
         let current = self.encode_predicates_at_heap_depth(
             vcx,
@@ -2162,6 +2186,7 @@ impl<'vir> WandEncOutput<'vir> {
             owner,
             group: node.region_idx().index(),
             restoration_group: node.region_idx().index(),
+            observation_permissions,
             current,
             entry,
             bindings,

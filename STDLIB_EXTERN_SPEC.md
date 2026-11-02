@@ -5505,6 +5505,21 @@ provenance are audited. Its metadata, prefix and ownership gates remain in
 progress; this repairs the isolated generic capture regression without claiming
 combined stabilization or reaching the requested pause point.
 
+Candidate 722 also completes metadata **7/7** and focused prefix **8/8**, giving
+**25/25 audited checks** across its first three groups. The prefix positives
+take 208.35 and 386.20 seconds; both false controls and the wrong-state control
+produce their exact expected diagnostics (304.84, 173.86 and 241.98 seconds).
+The exported prefix library, owner and suffix groups remain pending. This
+combines the metadata ordering repair with the scoped capture policy on one
+own-built compiler; it is still not a complete stabilization or matrix result.
+
+The two remaining region positives report the same missing indexed tail
+resource in the shared generic `next` definition, at native position ID 573.
+Diagnostic 725 preserves the complete 709 program unchanged and adds only
+failure reporting to locate its exact source operation. Its full AST check
+passes; it is queued after 724, with no method filter or backend-setting change.
+This replay is for fault localization, not qualification.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user initially authorized the remaining IM and matrix repairs followed by

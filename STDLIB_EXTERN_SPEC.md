@@ -5187,9 +5187,13 @@ assumed frame. Other observation shapes keep their existing encoding.
 Both original and explicit whole-state suffix forms now pass **7/7 checks
 each**, including mutated-value, untouched-value, false-postcondition and
 missing-frame controls. The focused ownership gate passes **12/12** and
-first-element compatibility passes **6/6**, all audited. The full ownership,
-small, generic and metadata gates remain in progress. Eight encodings/full
-AST checks and the three protocol unit tests pass.
+first-element compatibility passes **6/6**, all audited. The full ownership gate subsequently passes **80/80** and small controls
+**23/23**. The generic cross-crate gate fails at **9/10**: its specification
+library reports a loop-restoration error, while all client/runtime/preflight
+checks pass. Thus 686 finishes at **144/145 attempted checks**; metadata is
+skipped. A progress update that inferred library success from the clients
+continuing was explicitly corrected after audit. Eight encodings/full AST
+checks and the three protocol unit tests pass.
 
 Recovery commits `11407f764` (call state), `0b0e730d3` (quantified observation)
 and `a214da3fd` (eight suffix fixtures) are pushed. All recovery encoder/adapter/VIR
@@ -5199,6 +5203,15 @@ collection/restoration families after the serial prefix diagnostics and 682
 nested-reference comparison. Guarded-frame candidate 648 is separately audited
 at **53/60**; its optional and whole-region failures remain unresolved.
 No new compiler adoption or full stabilization is claimed.
+
+Candidate 688 narrows the quantified old-point lowering to expiry pledges,
+where continuation matching requires it, and retains the previous pointwise
+encoding for ordinary postconditions. Its own rebuild and protocol unit tests
+pass; source `c4f63d41…`, driver `33851229…`. The library and both suffix forms
+must pass before compatibility testing resumes. Broader 687 will be skipped
+because its 686 prerequisite failed; preparing or encoding that run does not
+count as verification. Full-program prefix diagnostic 667 also times out at
+600 seconds and remains a failure.
 
 ## Follow-on scope authorized on 2026-11-01
 

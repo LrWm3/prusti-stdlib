@@ -5255,6 +5255,21 @@ new focused gate on the later 688 base; they do not waive the older raw timeout.
 Further regression groups stop if this native gate fails. No main adoption or
 stabilization completion is claimed.
 
+The exact-681 nested comparison 682 finishes at **9/11 audited checks**.
+`mut_element_nested_call_pass` and its false-postcondition control both fail
+with `apply.failed:wand.not.found`; the latter does not count as a valid
+negative. The simpler nested proof and the other negative controls pass.
+Candidate 697 also passes full encoding/AST checks for this repeated-call pair,
+bringing its structural total to eleven; native verification remains pending.
+Its source checkpoint is pushed as `faab3f3c0`, still unadopted on main.
+
+Metadata fallback 698/699 reorders the same aggregate-unpack postconditions to
+output permissions, whole-state equality, typing and pointwise framing. Both
+full AST checks pass. It runs only if the contract-reveal positive 695 fails,
+inside the same single-worker queue. No assertion or logical postcondition is
+removed. Diagnostic caller-only programs 700/701 are prepared for fault
+localization if needed; they are not queued and cannot qualify a feature.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user initially authorized the remaining IM and matrix repairs followed by

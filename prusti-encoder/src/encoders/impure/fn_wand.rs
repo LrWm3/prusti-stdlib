@@ -205,11 +205,19 @@ impl<'vir> CallSnapshots<'vir> {
     fn bind<E: TaskEncoder>(
         &mut self,
         bindings: &SnapshotBindings<'vir>,
+        inline_storage: bool,
         visitor: &mut ImpureEncVisitor<'vir, '_, E>,
     ) -> SnapshotSubstitute<'vir> {
         let mut substitute = SnapshotSubstitute(FxHashMap::default());
         for &(decl, value) in bindings.borrow().iter() {
             let value = value.fold_with(&mut substitute).unwrap_or(value);
+            // Match the contract's old storage observation directly for whole
+            // indexed stages, as final packaging already does. Guarded reads,
+            // indexed deep observers and mixed/scalar stages retain captures.
+            if inline_storage && unconditional_old_storage(value.as_dyn()) {
+                substitute.0.insert(decl.name, value.as_dyn());
+                continue;
+            }
             let captured = self.capture(value.as_dyn(), visitor);
             substitute.0.insert(decl.name, captured);
         }
@@ -1490,7 +1498,8 @@ impl<'vir> WandEncOutput<'vir> {
                 // Capture in dependency order. These are the same post-call
                 // observations bound outside the callee's returned wand; no
                 // read is moved out of its quantifier or expiry heap.
-                let mut substitute = captures.bind(bindings, visitor);
+                let mut substitute =
+                    captures.bind(bindings, whole_indexed_restoration(wand), visitor);
                 wand = wand.fold_with(&mut substitute).unwrap_or(wand);
                 let resources = resources
                     .into_iter()

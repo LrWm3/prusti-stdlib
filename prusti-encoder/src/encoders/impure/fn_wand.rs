@@ -2930,6 +2930,7 @@ fn transfer_frames<'vir>(
     }
     struct Leaf<'vir> {
         permission: vir::ExprBool<'vir>,
+        variant: bool,
         guard: vir::ExprBool<'vir>,
         variables: &'vir [vir::LocalDeclDyn<'vir>],
         triggers: &'vir [vir::Trigger<'vir>],
@@ -2941,6 +2942,7 @@ fn transfer_frames<'vir>(
         variables: &'vir [vir::LocalDeclDyn<'vir>],
         triggers: &'vir [vir::Trigger<'vir>],
         out: &mut Vec<Leaf<'vir>>,
+        variant: bool,
     ) {
         match expr.kind {
             vir::ExprKindData::PredicateApp(app)
@@ -2954,20 +2956,45 @@ fn transfer_frames<'vir>(
             {
                 out.push(Leaf {
                     permission: expr,
+                    variant,
                     guard,
                     variables,
                     triggers,
                 })
             }
             vir::ExprKindData::BinOp(op) if op.kind == vir::BinOpKind::And => {
-                leaves(vcx, op.lhs.downcast_ty(), guard, variables, triggers, out);
-                leaves(vcx, op.rhs.downcast_ty(), guard, variables, triggers, out);
+                leaves(
+                    vcx,
+                    op.lhs.downcast_ty(),
+                    guard,
+                    variables,
+                    triggers,
+                    out,
+                    variant,
+                );
+                leaves(
+                    vcx,
+                    op.rhs.downcast_ty(),
+                    guard,
+                    variables,
+                    triggers,
+                    out,
+                    variant,
+                );
             }
             vir::ExprKindData::BinOp(op)
                 if op.kind == vir::BinOpKind::Implies && stable_key(op.lhs) =>
             {
                 let guard = vcx.mk_conj(&[guard, op.lhs.downcast_ty()]);
-                leaves(vcx, op.rhs.downcast_ty(), guard, variables, triggers, out);
+                leaves(
+                    vcx,
+                    op.rhs.downcast_ty(),
+                    guard,
+                    variables,
+                    triggers,
+                    out,
+                    variant,
+                );
             }
             vir::ExprKindData::Forall(quantified) if variables.is_empty() => {
                 leaves(
@@ -2977,6 +3004,7 @@ fn transfer_frames<'vir>(
                     quantified.qvars,
                     quantified.triggers,
                     out,
+                    variant,
                 );
             }
             vir::ExprKindData::Ternary(branch) if stable_key(branch.cond.as_dyn()) => {
@@ -2990,6 +3018,7 @@ fn transfer_frames<'vir>(
                     variables,
                     triggers,
                     out,
+                    true,
                 );
                 let otherwise = vcx
                     .mk_unary_op_expr(vir::UnOpKind::Not, branch.cond.upcast_ty())
@@ -3001,6 +3030,7 @@ fn transfer_frames<'vir>(
                     variables,
                     triggers,
                     out,
+                    true,
                 );
             }
             // Keep a single quantified scope. Nested binders and let
@@ -3010,14 +3040,38 @@ fn transfer_frames<'vir>(
     }
     let mut inputs = Vec::new();
     let mut outputs = Vec::new();
-    leaves(vcx, lhs, vcx.mk_bool::<true>(), &[], &[], &mut inputs);
-    leaves(vcx, rhs, vcx.mk_bool::<true>(), &[], &[], &mut outputs);
+    leaves(
+        vcx,
+        lhs,
+        vcx.mk_bool::<true>(),
+        &[],
+        &[],
+        &mut inputs,
+        false,
+    );
+    leaves(
+        vcx,
+        rhs,
+        vcx.mk_bool::<true>(),
+        &[],
+        &[],
+        &mut outputs,
+        false,
+    );
     let mut facts = Vec::new();
     for output in outputs {
         let vir::ExprKindData::PredicateApp(after) = output.permission.kind else {
             unreachable!()
         };
         for input in &inputs {
+            // Variant framing is needed to restore variant-containing owners.
+            // Avoid adding conditional-result cross products to a plain owner
+            // (e.g. every Iterator::next yield versus the entire source). These
+            // are optional derived guarantees, not permissions or user pledges;
+            // retain the existing non-variant frames and all checked obligations.
+            if input.variant && !output.variant {
+                continue;
+            }
             if !output.variables.is_empty()
                 && !input.variables.is_empty()
                 && (output.variables.len() != input.variables.len()

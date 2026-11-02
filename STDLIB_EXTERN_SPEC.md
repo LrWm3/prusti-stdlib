@@ -65,7 +65,7 @@ different compilers are never added together.
 |---|---|---|
 | Whole matrix | Last complete matrix 339: 1,755/1,842; 87 failures, none waived | Rebuild final source and complete both backends with exact coverage |
 | Ownership, enum, local history, associated output | 793 audited 124/124; historical 722 audited 129/129 on its own compiler | Preserve as separate reference gates; rerun affected families after each repair |
-| Heavy prefix | H1 positive hits 600s twice; H2 positive also hits 600s; both exact negatives pass | Successor patches stopped; identity-preserving reduced model running on frozen H1; neither experiment is integrated |
+| Heavy prefix | H1 positive hits 600s twice; H2 positive also hits 600s; both exact negatives pass; reduced identity and suffix-state pairs pass | Successor patches stopped; fixed-context model now adds prefix-value observations on frozen H1; neither experiment is integrated |
 | Region iterator | 794: 3/7; missing tail indexed resources in both positives and wrong early errors in both negatives | 809's checked tail-snapshot equality succeeds, but the original resource assertion still fails; model review before a repair |
 | Nested calls | 794: 9/11; repeated positive missing wand, postcondition control times out | Full replay 810 times out at 600s with solver logging; previous failed hypotheses require model review |
 | Extra `next` | 794: 3/6; positive timeout and two wrong diagnostics | Retain all six controls; check as an affected regression of prefix framing |
@@ -212,8 +212,36 @@ final slot-identity assertion, omitting only referent-value observations. Its
 source, interpretation and fixed H1 provenance are recorded separately; the
 required acceptance files remain unchanged.
 
-Build H1 from the frozen baseline in its own worktree, check the complete generated
-programs, then run the native positive and exact negative. If they pass, run all
+The identity-preserving reduction passes its complete native positive in 118.76s
+and exact negative in 216.62s, with an audited 4/4 gate. This establishes basic
+ownership composition in that reduced context, not the original value proof.
+The next comparison fixes the original H1 compiler arguments and dependency
+metadata. Recheck the identity positive and negative first; only if both pass,
+add the initial referent-state snapshot and untouched-suffix loop invariant.
+Prefix-value observations and final value postconditions remain omitted only in
+these diagnostic fixtures. This distinguishes the cost of suffix-state
+observations while retaining physical ownership, slot identities and histories.
+The plan and sources are preserved in `prefix-state-model-plan.json`; no compiler
+patch or change to the fixed acceptance list is involved.
+
+That fixed-context comparison passes all four native expected outcomes: identity
+positive/negative in 106.74/178.86s, suffix-state positive/negative in
+238.41/306.17s. All generated programs pass structural checks; exact diagnostics,
+coverage and unchanged source/binaries are audited in `prefix-state-fixed-audit.json`.
+These are diagnostic reductions, not four newly qualified acceptance cases.
+The next recorded pair adds the concrete `u32` exemplar and updated-prefix state
+invariant to the suffix model, while still omitting final referent-value assertions
+and postconditions. It retains every existing permission, identity, history and
+suffix-state fact. This distinguishes loop-summary cost from the remaining final
+value proof; see `prefix-both-state-model-plan.json`.
+
+The historical 722 capture and the frozen baseline have identical adapter source,
+adapter manifest, workspace manifest and lockfile. The recorded 722 source patch
+hash also matches. Its historical pass therefore cannot be explained by a source
+change in those components; generated names and solver behavior remain relevant.
+
+Any eventual repair must rebuild from its isolated source, check the complete
+generated programs, and pass the native positive and exact negative. Then run all
 affected previously passing families before integrating: the full heavy-prefix
 group, extra-next controls, enum, optional/local histories, first-element and
 replacement controls, owner histories, generic/prefix libraries and suffix

@@ -5723,12 +5723,23 @@ returned indexed resources when these separation calls are present.
 
 The candidate combines this change with 788's local histories and the enum
 exposure scheduling from 738. Its own build, three unit tests, eight encodings and
-eight full AST checks pass. Native enum 9, first-element 6, replacement 6 and
-local-history 7 are audited passes. Optional coercion 7 and original optional 9
-also complete successfully; owner histories 80 are running. Recovery `1b6a6c44b`
-preserves the exact compiler source. Broader 794 is queued on that same compiler
-for generic resources, metadata, prefix/suffix proofs, region iteration, nested
-calls and extra-next controls. This is not a full-matrix or milestone sign-off.
+eight full AST checks pass. All 124 native checks are audited passes: enum 9,
+first-element 6, replacement 6, local-history 7, optional coercion 7, original
+optional 9 and owner histories 80. Recovery `1b6a6c44b` preserves the exact
+compiler source. Broader 794 uses that same compiler. Generic resources 10 and
+metadata 7 pass, including the specification library in 256.37 seconds. Its
+early-break resource positive then times out at 600 seconds, whereas candidate
+722 passed it in 208.35 seconds. The generic-prefix positive passes in 256.85
+seconds; the remaining diagnostics are still running. This regression is not
+waived, and there is no full-matrix or milestone sign-off.
+
+Comparing the generated early-break programs isolates additional quantified
+transfer-frame guarantees from optional results. Candidate 806 limits these
+derived variant frames to restored variant-containing owners, retaining all
+permissions, source pledges and non-variant frames. Its early-break program
+matches 722 exactly after removing comments and normalizing generated crate
+identifiers. This is diagnostic evidence only: the native heavy-prefix group
+and enum/optional/ownership regressions must pass before adopting the change.
 
 Array experiments 795 and 797 build and pass eight encoding and AST checks each,
 but generated code still lacks the conditional bounds assertion and immediate
@@ -5739,6 +5750,30 @@ An experimental checked-precondition path and immediate-only array contract rema
 unqualified; conditional multi-stage expiry is unchanged. Diagnostics 796 and 798
 trace selection. The original RangeFull fixtures and out-of-bounds negative remain
 required, and the earlier incorrectly accepted negative is not waived.
+
+Diagnostic 798 confirms that the resolved array implementation's contract is
+found, but selection rejects its `Index::Output == SliceIndex::Output` bound.
+Candidate 800 normalizes both sides without erasing regions, rejecting unresolved
+obligations and introduced region constraints. It builds and passes eight
+encoding and full AST checks. The standard-index bounds assertions are now
+present; the custom-index control does not receive them. Native qualification is
+queued, and recovery `be9a91fac` preserves this unqualified candidate.
+
+Two additional direct array controls cover reference-containing elements. The
+projection checker must quantify lifetimes in generic arguments before their
+substitution into both sides of the equality: repeated use of one type preserves
+its lifetime identity, while separate arguments remain independent. Candidate 801
+exposes an extra-binder encoding error, corrected in 802. Its ten encoding and AST
+checks then pass, but a guard stops native verification because the reference
+contract is still absent. Diagnostic 803 proves the output equality normalizes
+without region constraints and identifies a nested trait-bound rejection instead.
+Candidate 804's region-sensitive nested query remains insufficient; diagnostic
+805 identifies `RangeFull: SliceIndex<[&mut u32]>` as the failing nested goal.
+Candidate 807 tests continued selection in the original universal inference
+context, with bounded work and all final lifetime-constraint checks retained.
+The existing conditional and lifetime-negative controls must pass first. None
+of these encoding-only results establishes array verification or conditional
+multi-stage expiry support.
 
 ## Follow-on scope authorized on 2026-11-01
 

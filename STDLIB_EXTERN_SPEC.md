@@ -4912,6 +4912,27 @@ coverage audits remain under `target/stdlib-matrix-20261031-1236`. These repairs
 continue within the current stabilization scope; the mandatory pause below still
 applies before deferred feature work.
 
+### Adopted guarded-observation repair (618, 629, 631)
+
+The isolated capture repair from build 618 is adopted with three direct
+optional-slice regression fixtures. It removes redundant variant conditionals
+from inline indexed observations, while retaining guarded captures for every
+restoration package and temporary output reservation. Reservation packaging and
+application use the same saved values. The staged encoder matches the exact
+own-built 618 source; pending combined work remains separate.
+
+Both baseline 631 and repaired 629 pass **5/5 Ferrum checks**, including direct
+Some/empty/None clients with non-`Copy` elements and exact false-value/false-post
+controls. The Viper front end rejects all three baseline programs for invalid
+conditional triggers; all three repaired programs pass structural checking.
+The isolated repair also retains 16/16 metadata, enum and address controls, and
+all 75 owner outcomes match adopted main exactly (27 pass, 48 existing failures).
+This is a bounded capture/trigger repair, not completion of generic caller
+restoration, RangeFull associated-output values, or combined stabilization.
+Those failed clients and the latest combined failures remain in the evidence.
+No additional Silicon proof run was made for this small fix; major/final
+qualification retains the user's Silicon policy.
+
 ## Follow-on scope authorized on 2026-11-01
 
 The user initially authorized the remaining IM and matrix repairs followed by

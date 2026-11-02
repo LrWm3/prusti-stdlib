@@ -320,6 +320,7 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
         // Their resource keys are frozen at the package's entry heap. Keep
         // concrete storage on its existing path; reserving it introduces
         // unnecessary quantified wand proofs for ordinary reference borrows.
+        let retained_bindings = self.vcx.alloc(std::cell::RefCell::new(Vec::new()));
         let retained = if wands.is_empty() {
             Vec::new()
         } else {
@@ -343,7 +344,7 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
                         node,
                         None,
                         Some(vir::OldLabel::Label(label)),
-                        None,
+                        Some(retained_bindings),
                         |i| args[i],
                     )
                 })
@@ -352,6 +353,18 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
         let retained = (!retained.is_empty()).then(|| {
             self.vcx
                 .mk_wand(self.vcx.mk_bool::<true>(), self.vcx.mk_conj(&retained))
+        });
+        // Reservations are wands too: their free observations must retain
+        // enum guards when evaluated outside quantified resource assertions.
+        let retained = retained.map(|wand| {
+            let mut substitute = SnapshotSubstitute(FxHashMap::default());
+            for &(decl, value) in retained_bindings.borrow().iter() {
+                let value = value.fold_with(&mut substitute).unwrap_or(value);
+                let local = self.new_tmp(value.ty());
+                wand_packages.push(self.vcx.mk_pure_assign_stmt(local, value));
+                substitute.0.insert(decl.name, local.as_dyn());
+            }
+            wand.fold_with(&mut substitute).unwrap_or(wand)
         });
         if let Some(retained) = retained {
             wand_packages.push(self.vcx.mk_package_stmt(retained, &[]));
@@ -397,12 +410,13 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
                         .map(|a| a.edge().clone()),
                 );
             }
-            let Some(wand) = self.wands.mk_wand(
+            let bindings = self.vcx.alloc(std::cell::RefCell::new(Vec::new()));
+            let Some(mut wand) = self.wands.mk_wand(
                 &wand_data,
                 args,
                 None,
                 Some(label),
-                None,
+                Some(bindings),
                 None,
                 &[],
                 self.vcx,
@@ -410,6 +424,18 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
             ) else {
                 continue;
             };
+            // Viper evaluates free heap observations when it creates the
+            // wand, outside the variant guards inside that wand. Capture the
+            // same guarded reads as the method contract before packaging,
+            // leaving only pure values inside quantified resource keys.
+            let mut substitute = SnapshotSubstitute(FxHashMap::default());
+            for &(decl, value) in bindings.borrow().iter() {
+                let value = value.fold_with(&mut substitute).unwrap_or(value);
+                let local = self.new_tmp(value.ty());
+                wand_packages.push(self.vcx.mk_pure_assign_stmt(local, value));
+                substitute.0.insert(decl.name, local.as_dyn());
+            }
+            wand = wand.fold_with(&mut substitute).unwrap_or(wand);
             let rhs = wand_data
                 .rhs
                 .iter()

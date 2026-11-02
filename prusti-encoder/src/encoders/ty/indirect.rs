@@ -345,7 +345,14 @@ impl TaskEncoder for IndirectPredicatesEnc {
                                         };
                                     let inner_snap =
                                         vcx.maybe_apply_label(inner_snap, input.heap_label);
-                                    let inner_snap = if let Some(guard) = input.guard {
+                                    // A captured observation is hoisted outside its enum
+                                    // branch, so its heap read needs the variant guard.
+                                    // Inline observations already occur under that branch.
+                                    // Keeping a redundant conditional in their sequence
+                                    // lookup would also make quantifier triggers invalid.
+                                    let inner_snap = if let Some(guard) =
+                                        input.guard.filter(|_| input.bindings.is_some())
+                                    {
                                         let fallback = ref_domain
                                             .cast_to_callee_ctx(
                                                 ref_domain.value_access(input.snap.downcast_ty()),

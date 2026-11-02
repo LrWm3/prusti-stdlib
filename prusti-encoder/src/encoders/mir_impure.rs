@@ -3126,21 +3126,80 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     {
                         return false;
                     }
-                    // A same-type bound can produce a projection equality
-                    // whose two sides are syntactically identical. This
-                    // is reflexive without normalizing or erasing regions;
-                    // rustc's predicate solver may not normalize the term.
-                    if let ty::ClauseKind::Projection(projection) =
-                        instantiated.kind().skip_binder()
-                        && let Some(rhs) = projection.term.as_type()
-                        && let ty::TyKind::Alias(_, alias) = rhs.kind()
-                        && let ty::AliasTyKind::Projection { def_id } = alias.kind
-                        && let ty::AliasTermKind::ProjectionTy { def_id: lhs_def_id } =
-                            projection.projection_term.kind
-                        && def_id == lhs_def_id
-                        && alias.args == projection.projection_term.args
-                    {
-                        return true;
+                    if let ty::ClauseKind::Projection(_) = instantiated.kind().skip_binder() {
+                        // Quantify each lifetime occurrence in the call's generic
+                        // arguments before substitution. Reusing a generic type
+                        // on both sides then reuses that type's lifetimes, while
+                        // separate arguments keep independent lifetimes even
+                        // after static method resolution erased their names.
+                        let mut variables = Vec::new();
+                        let mut unsupported = false;
+                        let universal_args = ty::fold_regions(tcx, args, |region, depth| {
+                            if matches!(region.kind(), ty::RegionKind::ReBound(..)) {
+                                unsupported = true;
+                                return region;
+                            }
+                            let var = ty::BoundVar::from_usize(variables.len());
+                            variables
+                                .push(ty::BoundVariableKind::Region(ty::BoundRegionKind::Anon));
+                            ty::Region::new_bound(
+                                tcx,
+                                depth,
+                                ty::BoundRegion {
+                                    var,
+                                    kind: ty::BoundRegionKind::Anon,
+                                },
+                            )
+                        });
+                        if unsupported {
+                            return false;
+                        }
+                        // The clause binder is empty (checked above). Remove it
+                        // before substitution so new universal regions are not
+                        // shifted past the binder added below.
+                        let universal = ty::EarlyBinder::bind(tcx, clause.kind().skip_binder())
+                            .instantiate(tcx, universal_args)
+                            .skip_normalization();
+                        let ty::ClauseKind::Projection(projection) = universal else {
+                            unreachable!()
+                        };
+                        let lhs = projection.projection_term.to_term(tcx, ty::IsRigid::No);
+                        if lhs == projection.term {
+                            return true;
+                        }
+                        // Do not erase regions or assume output equality from
+                        // the presence of a trait bound. Normalize a universally
+                        // quantified pair and reject every unresolved obligation
+                        // and every region requirement introduced in doing so.
+                        use prusti_rustc_interface::trait_selection::traits::{
+                            ObligationCause, ObligationCtxt,
+                        };
+                        let infcx = prusti_interface::environment::EnvQuery::new(tcx).infer_ctxt();
+                        let ocx = ObligationCtxt::new(&infcx);
+                        let pair = ty::Binder::bind_with_vars(
+                            (lhs, projection.term),
+                            tcx.mk_bound_variable_kinds(&variables),
+                        );
+                        let Ok(pair) = ocx.deeply_normalize(
+                            &ObligationCause::dummy(),
+                            tcx.param_env(self.def_id),
+                            ty::Unnormalized::new(pair),
+                        ) else {
+                            return false;
+                        };
+                        if !ocx.evaluate_obligations_error_on_ambiguity().no_errors()
+                            || !infcx.take_registered_region_obligations().is_empty()
+                            || infcx.leak_check(ty::UniverseIndex::ROOT, None).is_err()
+                        {
+                            return false;
+                        }
+                        let constraints = infcx.take_and_reset_region_constraints();
+                        let (lhs, rhs) = pair.skip_binder();
+                        return constraints.verifys.is_empty()
+                            && constraints.constraints.is_empty()
+                            && lhs == rhs
+                            && !lhs.has_non_region_infer()
+                            && !rhs.has_non_region_infer();
                     }
                     // A fresh solver does not know MIR's inference regions.
                     // Universally quantify each occurrence independently:
@@ -3181,41 +3240,6 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                                 predicate,
                                 tcx.param_env(self.def_id),
                             );
-                    }
-                    if let ty::ClauseKind::Projection(projection) =
-                        instantiated.kind().skip_binder()
-                    {
-                        // Normalize both sides without erasing regions. This
-                        // branch is reached only for a region-free bound; the
-                        // quantified lifetime path above remains conservative.
-                        // Reject every unresolved obligation and every region
-                        // requirement introduced by normalization.
-                        use prusti_rustc_interface::trait_selection::traits::{
-                            ObligationCause, ObligationCtxt,
-                        };
-                        let query = prusti_interface::environment::EnvQuery::new(tcx);
-                        let infcx = query.infer_ctxt();
-                        let ocx = ObligationCtxt::new(&infcx);
-                        let lhs = projection.projection_term.to_term(tcx, ty::IsRigid::No);
-                        let Ok((lhs, rhs)) = ocx.deeply_normalize(
-                            &ObligationCause::dummy(),
-                            tcx.param_env(self.def_id),
-                            ty::Unnormalized::new((lhs, projection.term)),
-                        ) else {
-                            return false;
-                        };
-                        if !ocx.evaluate_obligations_error_on_ambiguity().no_errors()
-                            || !infcx.take_registered_region_obligations().is_empty()
-                            || infcx.leak_check(ty::UniverseIndex::ROOT, None).is_err()
-                        {
-                            return false;
-                        }
-                        let constraints = infcx.take_and_reset_region_constraints();
-                        return constraints.verifys.is_empty()
-                            && constraints.constraints.is_empty()
-                            && lhs == rhs
-                            && !lhs.has_non_region_infer()
-                            && !rhs.has_non_region_infer();
                     }
                     prusti_interface::environment::EnvQuery::new(tcx)
                         .evaluate_predicate(instantiated.as_predicate(), tcx.param_env(self.def_id))

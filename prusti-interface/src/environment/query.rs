@@ -515,7 +515,14 @@ impl<'tcx> EnvQuery<'tcx> {
             ImplSource::Builtin(BuiltinImplSource::Misc | BuiltinImplSource::Trivial, _) => {}
             _ => return false,
         }
-        for nested in selected.nested_obligations() {
+        let mut pending = selected.nested_obligations().to_vec();
+        let mut remaining = 128;
+        while let Some(nested) = pending.pop() {
+            // Failure to finish selection is not evidence for a bound.
+            if remaining == 0 {
+                return false;
+            }
+            remaining -= 1;
             let predicate = infcx.resolve_vars_if_possible(nested.predicate);
             let mut has_region = false;
             let _ = ty::fold_regions(self.tcx, predicate, |region, _| {
@@ -542,11 +549,41 @@ impl<'tcx> EnvQuery<'tcx> {
             {
                 continue;
             }
-            if has_region
-                || predicate.has_non_region_infer()
-                || !predicate.kind().bound_vars().is_empty()
-            {
+            if predicate.has_non_region_infer() || !predicate.kind().bound_vars().is_empty() {
                 return false;
+            }
+            if has_region {
+                // Continue selecting nested trait goals in this same inference
+                // context and universal universe. A query on a detached goal
+                // loses the placeholder evidence. Never accept an explicit
+                // outlives condition; all resulting constraints are audited below.
+                let ty::PredicateKind::Clause(ty::ClauseKind::Trait(trait_pred)) =
+                    predicate.kind().skip_binder()
+                else {
+                    return false;
+                };
+                if trait_pred.polarity != PredicatePolarity::Positive {
+                    return false;
+                }
+                let obligation = Obligation::new(
+                    self.tcx,
+                    ObligationCause::dummy(),
+                    param_env,
+                    ty::Binder::dummy(trait_pred),
+                );
+                let Ok(Some(selected)) = selection.poly_select(&obligation) else {
+                    return false;
+                };
+                match &selected {
+                    ImplSource::UserDefined(_) => {}
+                    ImplSource::Builtin(
+                        BuiltinImplSource::Misc | BuiltinImplSource::Trivial,
+                        _,
+                    ) => {}
+                    _ => return false,
+                }
+                pending.extend(selected.nested_obligations().iter().cloned());
+                continue;
             }
             let obligation =
                 Obligation::new(self.tcx, ObligationCause::dummy(), param_env, predicate);

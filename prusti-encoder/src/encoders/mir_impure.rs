@@ -201,6 +201,7 @@ where
     pub indexed_reads: FxHashMap<mir::Local, vir::ExprInt<'vir>>,
     /// A function postcondition can return storage and nested borrows in
     /// separate wands. Compose only the corresponding callee stage in each.
+    pub package_optional_element: Option<(ty::Ty<'vir>, usize)>,
     pub package_resource_stage: Option<super::impure::fn_wand::ResourceStage>,
     pub from_to_vars: FromToVars<'vir>,
     pub loop_snapshot_frames: Vec<LoopSnapshotFrame<'vir>>,
@@ -1289,7 +1290,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 let call = call_edge.metadata();
                 // Deduplicate obligations, not entire calls: one call can
                 // produce several wands that expire independently.
-                for (id, wand, before, after, handoffs, scalar_views) in
+                for (id, wand, before, after, handoffs, scalar_views, deferred) in
                     self.encode_function_call_wands(coupled)?
                 {
                     let key = (call.location().block, id, edge.conditions().clone());
@@ -1298,6 +1299,14 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     }
                     to_skip.push(key);
                     let guards = self.edge_condition(edge);
+                    if let Some(deferred) = deferred
+                        && deferred.retain(self, wand, guards.clone())
+                    {
+                        if let Some(footprint) = &mut footprint {
+                            footprint.parts.push(self.vcx.mk_wand_expr(wand));
+                        }
+                        continue;
+                    }
                     self.open_indexed_scalar_views(&scalar_views, &guards);
                     let (before, after) = self.freshen_call_application(before, after);
                     self.stmts(before);

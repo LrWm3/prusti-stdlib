@@ -1,6 +1,5 @@
 use crate::*;
 
-pub mod array;
 pub mod eq;
 pub mod float;
 pub mod iter;

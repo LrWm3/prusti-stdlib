@@ -290,6 +290,20 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         let Some(array) = indirect.array else {
             return Ok(());
         };
+        if !fold && self.package_resource_stage.is_none() {
+            let mut old = WandOldOuter::Label(label);
+            let original =
+                self.encode_lifetime_projection_resources(target, &mut old, None, None)?;
+            if let Some(sequence) = super::fn_wand::unique_collection_sequence(
+                self.vcx.mk_conj(&original),
+                "s_Array_to_seq",
+            ) {
+                let ty::TyKind::Array(element, _) = ty.kind() else {
+                    unreachable!()
+                };
+                self.restore_local_collection_histories(*element, sequence);
+            }
+        }
         let mut old_outer = WandOldOuter::Label(label);
         let index = self
             .vcx
@@ -1314,7 +1328,7 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         .or_insert_with(|| (facts.clone(), Vec::new()));
                     guards.push(self.vcx.mk_conj(&condition));
                 }
-                for (id, wand, _, _, _, _) in self.encode_function_call_wands(&edge)? {
+                for (id, wand, _, _, _, _, _) in self.encode_function_call_wands(&edge)? {
                     if dropped_result
                         && let Some(resources) = self.call_result_resources.get(&(call_block, id))
                     {

@@ -11,6 +11,7 @@ use crate::encoders::{
             ExprInput, IndirectPredicatesEnc, SnapshotBindings, projection_for_generalized_idx,
         },
         resource_boundary::{ResourceBoundaryEnc, ResourceBoundaryTask},
+        resource_collection::{ResourceCollection, ResourceCollectionEnc, ResourceCollectionTask},
         resource_conversion::ResourceConversionEnc,
     },
 };
@@ -43,6 +44,7 @@ pub(crate) type CallWand<'vir> = (
     Vec<vir::Stmt<'vir>>,
     Vec<OwnerHandoff<'vir>>,
     Vec<crate::encoders::ty::resource_conversion::ScalarResourceView<'vir>>,
+    Option<DeferredSliceHistory<'vir>>,
 );
 
 /// Observations made together at one call share their captured value. In
@@ -321,6 +323,7 @@ pub(crate) struct OwnerHandoff<'vir> {
     group: usize,
     restoration_group: usize,
     observation_permissions: Option<vir::ExprBool<'vir>>,
+    collection: Option<(ty::Ty<'vir>, ResourceCollection<'vir>)>,
     current: vir::ExprBool<'vir>,
     entry: vir::ExprBool<'vir>,
     bindings: Vec<(vir::LocalDeclSnap<'vir>, vir::ExprSnap<'vir>)>,
@@ -335,6 +338,112 @@ pub(crate) struct RestoredOwnerHandoff<'vir> {
     continuation: vir::Wand<'vir>,
     projection_path: Option<&'vir [&'vir str]>,
     guards: Vec<vir::ExprBool<'vir>>,
+    import_lhs: bool,
+    local_collection: Option<LocalCollectionHistory<'vir>>,
+}
+
+/// A plain generic slice call already returns a current-to-entry history.
+/// When proving an optional owner's handoff, consume it inside that handoff's
+/// continuation, after reserving the current resources for the caller.
+#[derive(Clone)]
+pub(crate) struct DeferredSliceHistory<'vir> {
+    element: ty::Ty<'vir>,
+    owner: OwnerIdentity<'vir>,
+}
+impl<'vir> DeferredSliceHistory<'vir> {
+    pub(crate) fn retain<E: TaskEncoder>(
+        &self,
+        visitor: &mut ImpureEncVisitor<'vir, '_, E>,
+        continuation: vir::Wand<'vir>,
+        guards: Vec<vir::ExprBool<'vir>>,
+    ) -> bool {
+        let Some((element, group)) = visitor.package_optional_element else {
+            return false;
+        };
+        if element != self.element {
+            return false;
+        }
+        visitor.restored_owner_handoffs.push(RestoredOwnerHandoff {
+            origin: None,
+            selection: None,
+            owner: self.owner,
+            group,
+            continuation,
+            projection_path: None,
+            guards,
+            import_lhs: true,
+            local_collection: None,
+        });
+        true
+    }
+}
+
+#[derive(Clone)]
+struct LocalCollectionHistory<'vir> {
+    element: ty::Ty<'vir>,
+    conversion: ResourceCollection<'vir>,
+    current: vir::ExprSeq<'vir>,
+    current_guard: vir::ExprBool<'vir>,
+    entry: vir::ExprSeq<'vir>,
+    entry_guard: vir::ExprBool<'vir>,
+    consumed: vir::ExprBool<'vir>,
+}
+
+/// Only a unique whole sequence is eligible. The optional owner's discriminant
+/// remains a guard, and the saved expressions retain their original heap labels.
+pub(crate) fn unique_collection_sequence<'vir>(
+    resource: vir::ExprBool<'vir>,
+    target: &str,
+) -> Option<vir::ExprSeq<'vir>> {
+    struct Sequences<'a, 'vir> {
+        target: &'a str,
+        values: Vec<vir::ExprSeq<'vir>>,
+    }
+    impl<'vir> Folder<'vir, (), !> for Sequences<'_, 'vir> {
+        fn fold_expr(&mut self, e: vir::ExprDyn<'vir>) -> Option<vir::ExprDyn<'vir>> {
+            if let vir::ExprKindData::FuncApp(app) = e.kind
+                && app.target == self.target
+            {
+                let seq = e.downcast_ty();
+                if !self
+                    .values
+                    .iter()
+                    .any(|saved| CallSnapshots::same(saved.as_dyn(), seq.as_dyn()))
+                {
+                    self.values.push(seq);
+                }
+                return None;
+            }
+            e.super_fold_with(self)
+        }
+    }
+    let mut sequences = Sequences {
+        target,
+        values: Vec::new(),
+    };
+    let _ = resource.fold_with(&mut sequences);
+    match sequences.values.as_slice() {
+        [seq] => Some(*seq),
+        _ => None,
+    }
+}
+
+fn optional_sequence<'vir>(
+    resource: vir::ExprBool<'vir>,
+) -> Option<(vir::ExprBool<'vir>, vir::ExprSeq<'vir>)> {
+    let vir::ExprKindData::Ternary(branch) = resource.kind else {
+        return None;
+    };
+    if !matches!(
+        branch.else_.kind,
+        vir::ExprKindData::Const(vir::ConstData::Bool(true))
+    ) {
+        return None;
+    }
+    Some((
+        branch.cond,
+        unique_collection_sequence(branch.then.downcast_ty(), "s_Slice_to_seq")?,
+    ))
 }
 
 impl<'vir> RestoredOwnerHandoff<'vir> {
@@ -435,7 +544,31 @@ impl<'vir> OwnerHandoff<'vir> {
             .current
             .fold_with(&mut substitute)
             .unwrap_or(self.current);
+        let local_collection = self.collection.as_ref().and_then(|(element, conversion)| {
+            if visitor.package_resource_stage.is_some() {
+                return None;
+            }
+            let (current_guard, current_seq) = optional_sequence(current)?;
+            let (entry_guard, entry_seq) = optional_sequence(self.entry)?;
+            let consumed = visitor.new_tmp(vir::TYPE_BOOL);
+            visitor.stmt(
+                visitor
+                    .vcx
+                    .mk_pure_assign_stmt(consumed, visitor.vcx.mk_bool::<false>()),
+            );
+            Some(LocalCollectionHistory {
+                element: *element,
+                conversion: conversion.clone(),
+                current: current_seq,
+                current_guard,
+                entry: entry_seq,
+                entry_guard,
+                consumed,
+            })
+        });
         RestoredOwnerHandoff {
+            import_lhs: false,
+            local_collection,
             origin,
             selection,
             owner: self.owner,
@@ -546,8 +679,14 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
                 guards.push(self.vcx.mk_eq_expr(owner.ty, handoff.owner.ty));
                 self.vcx.mk_if_stmt(
                     self.vcx.mk_conj(&guards),
-                    self.vcx
-                        .alloc_slice(&[self.vcx.mk_apply_stmt(handoff.continuation)]),
+                    self.vcx.alloc_slice(&{
+                        let mut statements = Vec::new();
+                        if handoff.import_lhs {
+                            statements.push(self.vcx.mk_assert_stmt(handoff.continuation.lhs));
+                        }
+                        statements.push(self.vcx.mk_apply_stmt(handoff.continuation));
+                        statements
+                    }),
                     &[],
                 )
             })
@@ -826,6 +965,18 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
                 .wands
                 .resource_stage(&wand_data, None, self.vcx, self.deps);
             let previous_stage = std::mem::replace(&mut self.package_resource_stage, stage);
+            let optional = wand_data.rhs.iter().find_map(|node| {
+                self.wands
+                    .optional_slice_handoff(*node, &wand_data, self.vcx)
+                    .then(|| {
+                        let shape: FunctionShapeNode<Generalized> = (*node).into();
+                        (
+                            WandEncOutput::optional_slice_element(shape.ty(sig), self.vcx).unwrap(),
+                            node.region_idx().index(),
+                        )
+                    })
+            });
+            let previous_optional = std::mem::replace(&mut self.package_optional_element, optional);
             let package_script = self.pcs_package_script_with_consumed_wands(
                 final_borrow_state,
                 rhs,
@@ -834,6 +985,7 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
                 &mut consumed_call_wands,
                 |edge| restores_opaque || !opaque_action(edge),
             );
+            self.package_optional_element = previous_optional;
             self.package_resource_stage = previous_stage;
             let mut package_script = package_script?;
 
@@ -1458,7 +1610,7 @@ impl<'vir> WandEncOutput<'vir> {
                 visitor,
             )?
             .into_iter()
-            .map(|(_, wand, _, _, _, _)| wand)
+            .map(|(_, wand, _, _, _, _, _)| wand)
             .collect())
     }
 
@@ -1717,6 +1869,15 @@ impl<'vir> WandEncOutput<'vir> {
                                 Self::optional_slice_element(shape.ty(self.fn_sig(vcx, None)), vcx)
                                     .unwrap();
                             let actual = call_ctx.normalize(element);
+                            if !matches!(actual.kind(), ty::TyKind::Param(..)) {
+                                let conversion =
+                                    visitor.deps.require_dep::<ResourceCollectionEnc>(
+                                        ResourceCollectionTask::pointwise(
+                                            RustTyDecomposition::from_ty(actual, visitor.def_id),
+                                        ),
+                                    )?;
+                                handoff.collection = Some((actual, conversion));
+                            }
                             let mut groups = Vec::new();
                             for arg in visitor.body.args_iter() {
                                 let regions: IndexVec<_, GeneralizedLifetime<'vir>> =
@@ -1742,7 +1903,33 @@ impl<'vir> WandEncOutput<'vir> {
                     }
                 }
             }
-            wands.push((id, wand, before, after, handoffs, scalar_views));
+            let deferred = if before.is_empty()
+                && after.is_empty()
+                && handoffs.is_empty()
+                && wand_data.rhs.len() == 1
+                && wand_data.lhs.len() == 1
+                && wand_data.pledges.is_empty()
+            {
+                let node = wand_data.rhs[0];
+                let shape: FunctionShapeNode<Generalized> = node.into();
+                let input = shape.ty(self.fn_sig(vcx, None));
+                if let ty::TyKind::Ref(_, slice, ty::Mutability::Mut) = input.kind()
+                    && let ty::TyKind::Slice(element) = slice.kind()
+                    && matches!(element.kind(), ty::TyKind::Param(..))
+                    && node.region_idx().index() == 1
+                {
+                    self.input_owner(node, args, Some(call_ctx), vcx, visitor.deps)
+                        .map(|owner| DeferredSliceHistory {
+                            element: call_ctx.normalize(*element),
+                            owner,
+                        })
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            wands.push((id, wand, before, after, handoffs, scalar_views, deferred));
         }
         if materialize {
             let def_id = self.function_data.def_id();
@@ -2187,6 +2374,7 @@ impl<'vir> WandEncOutput<'vir> {
             group: node.region_idx().index(),
             restoration_group: node.region_idx().index(),
             observation_permissions,
+            collection: None,
             current,
             entry,
             bindings,
@@ -3936,6 +4124,52 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
                 });
         }
         result
+    }
+
+    pub(crate) fn restore_local_collection_histories(
+        &mut self,
+        element: ty::Ty<'vir>,
+        sequence: vir::ExprSeq<'vir>,
+    ) {
+        if self.package_resource_stage.is_some() {
+            return;
+        }
+        for history in self.restored_owner_handoffs.clone().into_iter().rev() {
+            let Some(local) = history.local_collection else {
+                continue;
+            };
+            if self.vcx.tcx().erase_and_anonymize_regions(local.element)
+                != self.vcx.tcx().erase_and_anonymize_regions(element)
+            {
+                continue;
+            }
+            let mut guards = history.guards;
+            guards.push(local.entry_guard);
+            guards.push(self.vcx.mk_eq_expr(local.entry, sequence));
+            guards.push(
+                self.vcx
+                    .mk_eq_expr(local.consumed, self.vcx.mk_bool::<false>()),
+            );
+            let mut body = vec![
+                self.vcx.mk_if_stmt(
+                    local.current_guard,
+                    self.vcx
+                        .alloc_slice(&local.conversion.statements(local.current, true)),
+                    &[],
+                ),
+            ];
+            body.push(self.vcx.mk_apply_stmt(history.continuation));
+            body.extend(local.conversion.statements(local.entry, false));
+            body.push(
+                self.vcx
+                    .mk_pure_assign_stmt(local.consumed, self.vcx.mk_bool::<true>()),
+            );
+            self.stmt(self.vcx.mk_if_stmt(
+                self.vcx.mk_conj(&guards),
+                self.vcx.alloc_slice(&body),
+                &[],
+            ));
+        }
     }
 
     pub(crate) fn retain_owner_handoff(&mut self, restored: RestoredOwnerHandoff<'vir>) {

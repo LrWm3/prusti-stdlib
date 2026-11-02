@@ -57,7 +57,8 @@ struct CallSnapshots<'vir> {
 /// Indexed physical histories can keep unconditional old storage observations
 /// inline at the final package. Generic-resource-only histories retain captures:
 /// their loop abstractions use the captured identity when matching a later wand.
-/// Mixed and scalar stages also retain their existing capture policy.
+/// Indexed physical histories may also restore independent raw physical inputs.
+/// Pure scalar stages and histories containing nested wands keep captures.
 fn whole_indexed_restoration(wand: vir::Wand<'_>) -> bool {
     fn indexed_physical(expr: vir::ExprBool<'_>) -> bool {
         struct Indexed {
@@ -69,7 +70,7 @@ fn whole_indexed_restoration(wand: vir::Wand<'_>) -> bool {
                 match expr.kind {
                     vir::ExprKindData::PredicateApp(app) => match app.target {
                         "indexed_p_Param" => self.physical = true,
-                        "indexed_indirect_resources" => {}
+                        "indexed_indirect_resources" | "p_Param" => {}
                         _ => self.other = true,
                     },
                     vir::ExprKindData::Wand(_)

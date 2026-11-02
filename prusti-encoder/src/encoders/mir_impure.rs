@@ -1025,16 +1025,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         self.stmts(statements);
     }
 
-    /// A delayed scalar obligation can outlive an indexed view of its current
-    /// referent. Expose only a wrapper that is actually held, using the complete
-    /// scalar resource key; its index/path comes from an encoded expansion.
-    /// All operations are checked, and every opened wrapper is restored after
-    /// the intervening physical folds, before another call or phase boundary.
-    fn open_indexed_scalar_views(
-        &mut self,
-        views: &[crate::encoders::ty::resource_conversion::ScalarResourceView<'vir>],
-        guards: &[vir::ExprBool<'vir>],
-    ) {
+    fn indexed_scalar_prefixes(&self) -> Vec<[vir::ExprDyn<'vir>; 2]> {
         struct Prefixes<'vir>(Vec<[vir::ExprDyn<'vir>; 2]>);
         impl<'vir> vir::Folder<'vir, (), !> for Prefixes<'vir> {
             fn fold_expr(&mut self, expr: vir::ExprDyn<'vir>) -> Option<vir::ExprDyn<'vir>> {
@@ -1053,18 +1044,82 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 expr.super_fold_with(self)
             }
         }
-        let vcx = self.vcx;
         let mut prefixes = Prefixes(Vec::new());
         let mut captures = self.array_resource_captures.values().collect::<Vec<_>>();
         captures.sort_by_cached_key(|(_, resource)| format!("{resource:?}"));
         for (_, resource) in captures {
             let _ = resource.fold_with(&mut prefixes);
         }
+        prefixes.0
+    }
+
+    /// A final restoration may return a scalar input independently of the
+    /// indexed collection that temporarily owned it. Reclosures preserve their
+    /// original wrapper keys; expose a matching held wrapper when the actual
+    /// consequent requires the raw physical predicate. The original consequent
+    /// remains checked. Quantified and nested-wand obligations are not opened.
+    pub(crate) fn expose_restored_scalar_inputs(
+        &self,
+        consequent: vir::ExprBool<'vir>,
+    ) -> Vec<vir::Stmt<'vir>> {
+        fn collect<'vir>(expr: vir::ExprBool<'vir>, out: &mut Vec<vir::PredicateApp<'vir>>) {
+            match expr.kind {
+                vir::ExprKindData::PredicateApp(app) if app.target == "p_Param" => out.push(app),
+                vir::ExprKindData::BinOp(op) if op.kind == vir::BinOpKind::And => {
+                    collect(op.lhs.downcast_ty(), out);
+                    collect(op.rhs.downcast_ty(), out);
+                }
+                _ => {}
+            }
+        }
+        let mut required = Vec::new();
+        collect(consequent, &mut required);
+        let prefixes = self.indexed_scalar_prefixes();
+        let vcx = self.vcx;
+        let mut result = Vec::new();
+        for raw in required {
+            for prefix in &prefixes {
+                let args = prefix.iter().chain(raw.args).copied().collect::<Vec<_>>();
+                let wrapper = vcx.alloc(vir::PredicateAppData {
+                    target: "indexed_p_Param",
+                    args: vcx.alloc_slice(&args),
+                    perm: None,
+                });
+                let held = vcx
+                    .mk_bin_op_expr(
+                        vir::BinOpKind::CmpLt,
+                        vcx.mk_no_perm(),
+                        vcx.mk_predicate_perm_expr(wrapper),
+                    )
+                    .downcast_ty::<vir::Bool>();
+                let absent = vcx.mk_eq_expr(vcx.mk_predicate_perm_expr(raw), vcx.mk_no_perm());
+                result.push(vcx.mk_if_stmt(
+                    vcx.mk_conj(&[held, absent]),
+                    vcx.alloc_slice(&[vcx.mk_unfold_stmt(wrapper)]),
+                    &[],
+                ));
+            }
+        }
+        result
+    }
+
+    /// A delayed scalar obligation can outlive an indexed view of its current
+    /// referent. Expose only a wrapper that is actually held, using the complete
+    /// scalar resource key; its index/path comes from an encoded expansion.
+    /// All operations are checked, and every opened wrapper is restored after
+    /// the intervening physical folds, before another call or phase boundary.
+    fn open_indexed_scalar_views(
+        &mut self,
+        views: &[crate::encoders::ty::resource_conversion::ScalarResourceView<'vir>],
+        guards: &[vir::ExprBool<'vir>],
+    ) {
+        let vcx = self.vcx;
+        let prefixes = self.indexed_scalar_prefixes();
         for view in views {
             if view.resource.target != "p_Param" {
                 continue;
             }
-            for prefix in &prefixes.0 {
+            for prefix in &prefixes {
                 let args = prefix
                     .iter()
                     .chain(view.resource.args)

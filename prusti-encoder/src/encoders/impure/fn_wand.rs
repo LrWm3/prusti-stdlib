@@ -935,6 +935,7 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
             package_script.extend(crate::encoders::ty::indexed_coherence::restoration_calls(
                 self.vcx, wand.lhs, wand.rhs,
             ));
+            package_script.extend(self.expose_restored_scalar_inputs(wand.rhs));
 
             for EncodedPledge {
                 expiry_postcondition,

@@ -4,8 +4,8 @@ Read this first; detailed evidence stays in the artifact directories below.
 
 ## Active bounded batch
 
-- Runner: `reconciliation-20261102/parity-printer-fix-20261106/run.py`.
-- Started 2026-11-06 02:38:29 UTC, PID 41799; overall limit 5,400 seconds.
+- Runner: `reconciliation-20261102/parity-printer-fix-20261106/resume-pinned-lock/run.py`.
+- Resumed 2026-11-06 02:57:43 UTC, PID 274726; overall limit 5,400 seconds.
 - Read its `status.json`, then `result.json` and `results.json` when complete.
 - One verifier worker, branch parallelism off. Each proof retains 600s whole-program,
   30,000ms assertion, 100ms solver-check limits; both outer watchdogs are 720s.
@@ -25,12 +25,23 @@ Ferrum checkout: `/home/will/wk/exp/ferrum-stdlib-roundtrip-fix`, branch
 The shared Ferrum checkout remains untouched. Clean Prusti candidate:
 `/home/will/wk/exp/prusti-stdlib-parity-fix`, exact H1 source plus this dependency.
 
-The batch first requires the new structural regression to fail on the old printer
-and pass with the correction. It covers all five four-operand conjunction and
-disjunction trees, mixed permissions, guarded division, precedence and let scope,
-then existing printer/frontend tests. A validated printer change is committed and
-pushed on its isolated branch. It rebuilds both CLI and Prusti, records complete
-source/binary provenance, and runs full Rust `mut_native_resource_early_pass` and
+The new structural regression failed on the old printer and passed with the fix:
+5/5 roundtrip tests, 8/8 existing printer tests and 5/5 frontend tests passed.
+Coverage includes all five four-operand conjunction/disjunction trees, mixed
+permissions, guarded division, precedence and let scope. The printer correction
+is committed and pushed as `931a2d55831ca3dffc34444e8ff0f88750f20bbc`.
+
+The CLI build passed. The first batch then stopped after 321.36s because its Cargo
+update supplied `--precise 0.1.0` for a Git dependency; Cargo interpreted this as a
+Git revision. No native or CLI acceptance proofs ran. That failure is preserved.
+Removing the invalid argument resolved the path patches but also changed an
+unrelated Windows dependency edge; the preservation guard rejected that result
+before any build or proofs. Both failures are retained. The current continuation
+uses the original lockfile with only the three patched Ferrum Git source fields
+removed. All unrelated packages and edges are identical; locked offline Cargo
+metadata succeeds. It reuses completed tests/CLI build and rebuilds the same Prusti
+candidate. It records source/binary provenance and runs full
+Rust `mut_native_resource_early_pass` and
 its exact `_false` control natively, followed by each generated export through CLI.
 All four outcomes are recorded separately. Timeouts and wrong diagnostics fail.
 

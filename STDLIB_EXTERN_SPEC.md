@@ -38,8 +38,11 @@ unstarted reduced-model trace is retired. The bounded AST diagnostic completed:
 printing/parsing regroups pure and permission conjunctions in the first divergent
 package. A minimal roundtrip test reproduces this for pure and permission-containing
 conjunctions; explicit parentheses preserve both trees. An isolated printer fix now
-matches Boolean associativity to the existing parser. A bounded background batch
-checks its regression, rebuilds CLI and Prusti, then compares the original positive
+matches Boolean associativity to the existing parser; all 18 focused tests passed
+and Ferrum commit `931a2d5` is pushed. The CLI build passed; a Cargo update invocation
+error stopped the first batch before proofs. A subsequent unrelated lockfile
+change was rejected; the bounded continuation preserves every unrelated dependency,
+rebuilds Prusti, then compares the original positive
 and exact negative on both paths without diagnostic logging. Both paths already
 share frontend preparation; earlier native captures preceded that stage, so their
 ADT node counts do not establish missing preprocessing. The full timeout cause
@@ -80,7 +83,7 @@ different compilers are never added together.
 |---|---|---|
 | Whole matrix | Last complete matrix 339: 1,755/1,842; 87 failures, none waived | Rebuild final source and complete both backends with exact coverage |
 | Ownership, enum, local history, associated output | 793 audited 124/124; historical 722 audited 129/129 on its own compiler | Preserve as separate reference gates; rerun affected families after each repair |
-| CLI/native parity | Printer/parser associativity defect reproduced; isolated printer correction implemented; shared frontend preparation confirmed | Bounded regression/build and four-proof native/CLI batch running; timeout cause and full semantic parity unresolved |
+| CLI/native parity | Printer correction `931a2d5` pushed; 18/18 focused tests and CLI build pass; original Cargo invocation failure preserved | Corrected build/four-proof continuation running; no acceptance proof results yet; timeout cause and full semantic parity unresolved |
 | Heavy prefix | H1/H2 full positives time out; exact negatives pass. Reduced both-state positive fails restoration; exemplar-only pair passes | Ownership repairs on hold for parity investigation; no experiment integrated |
 | Region iterator | 794: 3/7; missing tail indexed resources in both positives and wrong early errors in both negatives | 809's checked tail-snapshot equality succeeds, but the original resource assertion still fails; model review before a repair |
 | Nested calls | 794: 9/11; repeated positive missing wand, postcondition control times out | Full replay 810 times out at 600s with solver logging; previous failed hypotheses require model review |

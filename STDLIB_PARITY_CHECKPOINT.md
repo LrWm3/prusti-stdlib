@@ -9,7 +9,8 @@ Read this first when resuming; consult the full plan only as needed.
 - Initial investigation budget: 90 minutes of active investigation, excluding the interrupted days. This iteration used approximately 10 minutes.
 - Integration baseline: `c2631cfb0` / `stdlib-restoration-baseline-20261102`, still unqualified.
 - Six pending main source files match their saved hashes. Frozen H1 driver also matches its manifest.
-- No verifier is active. The last exemplar diagnostic completed: positive 168.13s, exact negative 265.10s; diagnostic only.
+- Background AST diagnostic launched, PID `2972689`, with a 2,400-second overall limit. No solver verification is scheduled. Read its `status.json` and eventual `result.json` before doing further work.
+- The last exemplar diagnostic completed: positive 168.13s, exact negative 265.10s; diagnostic only.
 - Unstarted `trace-prefix-both-state.py` retired at the user's redirect.
 - Retain all original acceptance criteria, one verifier worker, branch parallelism off, 180/600s limits. Stop before D1–D6; no scheduled automation.
 
@@ -32,6 +33,15 @@ lead, not an established timeout cause or semantic defect. Logging affected prio
 outcomes; these traces remain diagnostic.
 
 ## Next bounded experiment
+
+**Running:** `reconciliation-20261102/parity-ast-20261106/run.py` restores exact H1
+source/dependencies and checks a fresh encode-only rendering with the frozen driver.
+It builds an instrumented copy in `/home/will/wk/exp/prusti-stdlib-parity-h1`, captures
+the native AST and the saved export after CLI translation/preparation, then stops.
+It records full ASTs, shape/metadata files, configuration and source/build provenance.
+The instrumentation never creates a solver session. A failed build, timeout or
+rendered-program mismatch stops the job and records a failure; there is no repair queue.
+See that directory's `plan.json`, `launch.json`, `status.json`, and `result.json`.
 
 Compare ASTs at native Session entry and after CLI frontend processing, focusing
 on the package at SMT trace line 27693 and divergence at native 30236 / CLI 30243.

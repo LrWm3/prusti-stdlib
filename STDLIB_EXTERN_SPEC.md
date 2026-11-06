@@ -34,7 +34,9 @@ implementation, or unsafe internals of the standard library.
 parity before further ownership repairs, using frozen H1 and its preserved inputs.
 Work in bounded iterations with a short [parity checkpoint](STDLIB_PARITY_CHECKPOINT.md).
 The last active exemplar diagnostic finished with both expected outcomes; the
-unstarted reduced-model trace is retired. No verifier is currently active.
+unstarted reduced-model trace is retired. A bounded background AST diagnostic is
+now running; it stops before solver verification. Its status and result paths are
+in the parity checkpoint.
 
 **Current stopping point (latest user instruction).** Finish restoration and
 stabilize the existing generic collection and ownership proofs, including the

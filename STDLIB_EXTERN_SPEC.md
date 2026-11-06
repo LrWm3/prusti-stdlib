@@ -38,11 +38,13 @@ A fresh, uninstrumented H1-based build passed the full native positive in 190.36
 CLI on its identical corrected export timed out at 600s. Both exact negatives
 reached their intended assertion. The audited classification corrects the runner's
 CLI timeout and exhale-control recognition; original artifacts remain intact.
-Parity and the earlier native timeout cause remain unresolved. A bounded controlled
-repeat now uses the original H1 native binary, corrected native binary and corrected
-CLI without rebuilding or logging. It checks reproducibility and preserved inputs
-before further changes. Both paths already share frontend preparation; earlier
-native AST captures preceded that stage. Detailed evidence is in the checkpoint.
+The controlled repeat then passed original H1 native in 201.28s, failed corrected
+native loop restoration in 282.86s, and timed out CLI again. Native exports match
+their prior programs excluding comments, establishing outcome variability without
+attributing its cause. A bounded diagnostic now captures actual shared verifier-entry
+ASTs and configuration twice per path, using isolated binaries and stopping before
+backend verification. Parity remains unresolved. Both paths already share frontend
+preparation; earlier native captures preceded that stage. Details are in the checkpoint.
 
 **Current stopping point (latest user instruction).** Finish restoration and
 stabilize the existing generic collection and ownership proofs, including the
@@ -79,8 +81,8 @@ different compilers are never added together.
 |---|---|---|
 | Whole matrix | Last complete matrix 339: 1,755/1,842; 87 failures, none waived | Rebuild final source and complete both backends with exact coverage |
 | Ownership, enum, local history, associated output | 793 audited 124/124; historical 722 audited 129/129 on its own compiler | Preserve as separate reference gates; rerun affected families after each repair |
-| CLI/native parity | Printer fix `931a2d5`: 18 focused tests pass; native positive 190.36s, CLI positive 600s timeout; both exact negatives pass | Controlled frozen-binary repeat running; full parity and timeout cause unresolved |
-| Heavy prefix | Historical H1/H2 positives timed out; printer-fix candidate native positive passes once, CLI times out; exact negatives pass | Controlled repeat before attributing the change; ownership repairs remain on hold and unintegrated |
+| CLI/native parity | Printer fix `931a2d5` passes 18 focused tests; both exact negatives pass. Native positive outcomes vary across repeats; corrected CLI times out twice | Actual shared verifier-entry AST/configuration captures running twice per path; parity unresolved |
+| Heavy prefix | Frozen H1 now passes once; corrected native passed then failed loop restoration; rendered programs unchanged excluding comments | Separate internal-input changes from solver/resource variability; ownership repairs remain on hold and unintegrated |
 | Region iterator | 794: 3/7; missing tail indexed resources in both positives and wrong early errors in both negatives | 809's checked tail-snapshot equality succeeds, but the original resource assertion still fails; model review before a repair |
 | Nested calls | 794: 9/11; repeated positive missing wand, postcondition control times out | Full replay 810 times out at 600s with solver logging; previous failed hypotheses require model review |
 | Extra `next` | 794: 3/6; positive timeout and two wrong diagnostics | Retain all six controls; check as an affected regression of prefix framing |

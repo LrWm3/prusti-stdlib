@@ -2,20 +2,39 @@
 
 Read this first; detailed evidence stays in artifacts.
 
-## Active bounded repeat
+## Active bounded capture
 
-- Runner: `reconciliation-20261102/parity-controlled-repeat-20261106/run.py`.
-- Started 2026-11-06 04:37:23 UTC, PID 1478042; overall limit 2,400 seconds.
-- Read its `status.json`, then `result.json` and `results.json` when complete.
-- Sequential positives: original frozen H1 native; corrected frozen native; corrected
-  CLI on the exact saved export. No rebuild, source change or diagnostic logging.
-- Each proof retains 600s whole-program, 30,000ms assertion, 100ms check and 720s
-  outer limits; one verifier worker, Ferrum branch parallelism off.
-- Hash-check source, binaries, solver, dependencies and exports. Record machine load
-  and compare repeated exports with previous programs, excluding comments.
-- Test reproducibility before attributing native improvement to the printer fix.
-  If stable, next compare ASTs at actual shared verifier entry and solver divergence;
-  if variable, investigate identical-run variability. No successor patches queued.
+- Runner: `reconciliation-20261102/parity-entry-capture-20261106/run.py`.
+- Started 2026-11-06 05:04:26 UTC, PID 1815812; overall limit 3,600 seconds.
+- Read its `status.json`, then `result.json` and `comparison.json` when complete.
+- Separate Ferrum/Prusti worktrees rebuild diagnostic binaries. Instrument only
+  actual `Session::verify` entry after each real frontend pipeline; record compact
+  AST shape, metadata, prepared text and effective backend configuration.
+- Capture native and CLI twice each, then deliberately return an error before
+  backend verification. No acceptance proof or new ownership patch in this job.
+- Compare within-path stability before cross-path differences. Callbacks and parser
+  back-references remain opaque; hashes alone do not prove semantic equivalence.
+- One worker, branch parallelism off. Build limits 900/1,800s, each capture 180s.
+  Previous 180/600s qualification limits remain unchanged. No successor queue.
+
+## Controlled repeat result
+
+The uninstrumented repeat completed in 1,096.16s with all frozen inputs preserved:
+
+| Positive run | Outcome |
+|---|---|
+| Original frozen H1 native | Passed, 201.28s; previously timed out twice |
+| Corrected frozen native | Failed loop restoration at Rust line 24, 282.86s; previously passed |
+| Corrected CLI, exact same saved export | Whole-program timeout again, 605.31s command time |
+
+Repeated native exports match their respective prior programs excluding comments.
+Thus native outcomes vary with unchanged binaries and rendered proof text. This
+rules out attributing the observed native improvement to the printer correction
+alone. It does not distinguish internal AST/context changes from solver/resource
+variability. The failure diagnostic alone does not identify a solver timeout.
+Machine load was recorded; causation is not established. The next discriminating
+experiment captures actual verifier-entry inputs rather than trying another patch.
+Evidence: `parity-controlled-repeat-20261106/results.json` and its command/log files.
 
 ## Completed candidate comparison
 

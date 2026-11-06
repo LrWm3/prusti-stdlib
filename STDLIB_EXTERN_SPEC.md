@@ -36,8 +36,9 @@ Work in bounded iterations with a short [parity checkpoint](STDLIB_PARITY_CHECKP
 The last active exemplar diagnostic finished with both expected outcomes; the
 unstarted reduced-model trace is retired. The bounded AST diagnostic completed:
 printing/parsing regroups pure and permission conjunctions in the first divergent
-package. The timeout cause remains unresolved; a minimal structural roundtrip
-diagnostic is running without solver verification.
+package. A minimal roundtrip test reproduces this for pure and permission-containing
+conjunctions; explicit parentheses preserve both trees. The full timeout cause
+remains unresolved and no background verifier is active.
 Detailed results and the next roundtrip experiment are in the parity checkpoint.
 
 **Current stopping point (latest user instruction).** Finish restoration and
@@ -75,7 +76,7 @@ different compilers are never added together.
 |---|---|---|
 | Whole matrix | Last complete matrix 339: 1,755/1,842; 87 failures, none waived | Rebuild final source and complete both backends with exact coverage |
 | Ownership, enum, local history, associated output | 793 audited 124/124; historical 722 audited 129/129 on its own compiler | Preserve as separate reference gates; rerun affected families after each repair |
-| CLI/native parity | Captured ASTs confirm conjunction regrouping before CLI preparation; it matches the first saved short-circuit scope divergence | Minimal render/parse roundtrip and structure-preserving export test; full timeout cause and semantic parity unresolved |
+| CLI/native parity | Minimal roundtrip reproduces the printer/parser associativity mismatch; explicit parentheses preserve all three structural controls | Full structure-preserving export test and matched proof comparison; timeout cause and full semantic parity unresolved |
 | Heavy prefix | H1/H2 full positives time out; exact negatives pass. Reduced both-state positive fails restoration; exemplar-only pair passes | Ownership repairs on hold for parity investigation; no experiment integrated |
 | Region iterator | 794: 3/7; missing tail indexed resources in both positives and wrong early errors in both negatives | 809's checked tail-snapshot equality succeeds, but the original resource assertion still fails; model review before a repair |
 | Nested calls | 794: 9/11; repeated positive missing wand, postcondition control times out | Full replay 810 times out at 600s with solver logging; previous failed hypotheses require model review |

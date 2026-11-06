@@ -10,7 +10,8 @@ Read this first when resuming; consult the full plan only as needed.
 - Integration baseline: `c2631cfb0` / `stdlib-restoration-baseline-20261102`, still unqualified.
 - Six pending main source files match their saved hashes. Frozen H1 driver also matches its manifest.
 - Initial AST diagnostic built successfully, then stopped before capture because its `PRUSTI_PARITY_*` environment names failed Prusti's strict configuration validation. Original failure preserved; no solver ran.
-- Corrected background capture launched, PID `3436732`, using `STDLIB_PARITY_*` names and the cached build. Overall limit: 1,200 seconds. Read `parity-ast-20261106/retry-env/status.json` and eventual `result.json` before further work.
+- Corrected environment capture then hit its 420s outer diagnostic limit while recursively formatting the CLI AST (2.7GB partial dump). No solver ran; this was instrumentation overhead, not a proof timeout.
+- Compact capture launched, PID `3685291`, with a 1,200s overall limit and cached build. Read `parity-ast-20261106/compact/status.json` and eventual `result.json` before further work.
 - The last exemplar diagnostic completed: positive 168.13s, exact negative 265.10s; diagnostic only.
 - Unstarted `trace-prefix-both-state.py` retired at the user's redirect.
 - Retain all original acceptance criteria, one verifier worker, branch parallelism off, 180/600s limits. Stop before D1–D6; no scheduled automation.
@@ -35,14 +36,17 @@ outcomes; these traces remain diagnostic.
 
 ## Next bounded experiment
 
-**Current runner:** `reconciliation-20261102/parity-ast-20261106/retry-env/run.py`.
-It reuses the successful initial build and frozen-rendering comparison, renames
-only the diagnostic environment keys, and performs an incremental rebuild/capture.
+**Current runner:** `reconciliation-20261102/parity-ast-20261106/compact/run.py`.
+It reuses the successful initial build and frozen-rendering comparison, and writes
+compact node records instead of recursive Debug output. It retains tree structure,
+purity boundaries, function names, leaves, triggers, positions and metadata tags.
+Parser back-references and callback internals are opaque: complete metadata parity
+is not claimed. Earlier failure artifacts remain intact.
 The first runner, `parity-ast-20261106/run.py`, restores exact H1
 source/dependencies and checks a fresh encode-only rendering with the frozen driver.
 It builds an instrumented copy in `/home/will/wk/exp/prusti-stdlib-parity-h1`, captures
 the native AST and the saved export after CLI translation/preparation, then stops.
-It records full ASTs, shape/metadata files, configuration and source/build provenance.
+It records AST shape/metadata files, configuration and source/build provenance.
 The instrumentation never creates a solver session. A failed build, timeout or
 rendered-program mismatch stops the job and records a failure; there is no repair queue.
 See that directory's `plan.json`, `launch.json`, `status.json`, and `result.json`.

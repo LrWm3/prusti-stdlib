@@ -33,20 +33,16 @@ implementation, or unsafe internals of the standard library.
 **Current priority (user redirect; resumed 2026-11-06).** Investigate CLI/native
 parity before further ownership repairs, using frozen H1 and its preserved inputs.
 Work in bounded iterations with a short [parity checkpoint](STDLIB_PARITY_CHECKPOINT.md).
-The last active exemplar diagnostic finished with both expected outcomes; the
-unstarted reduced-model trace is retired. The bounded AST diagnostic completed:
-printing/parsing regroups pure and permission conjunctions in the first divergent
-package. A minimal roundtrip test reproduces this for pure and permission-containing
-conjunctions; explicit parentheses preserve both trees. An isolated printer fix now
-matches Boolean associativity to the existing parser; all 18 focused tests passed
-and Ferrum commit `931a2d5` is pushed. The CLI build passed; a Cargo update invocation
-error stopped the first batch before proofs. A subsequent unrelated lockfile
-change was rejected; the bounded continuation preserves every unrelated dependency,
-rebuilds Prusti, then compares the original positive
-and exact negative on both paths without diagnostic logging. Both paths already
-share frontend preparation; earlier native captures preceded that stage, so their
-ADT node counts do not establish missing preprocessing. The full timeout cause
-remains unresolved. Results and provenance are in the parity checkpoint.
+The isolated printer fix `931a2d5` passed 18 focused tests and is pushed.
+A fresh, uninstrumented H1-based build passed the full native positive in 190.36s;
+CLI on its identical corrected export timed out at 600s. Both exact negatives
+reached their intended assertion. The audited classification corrects the runner's
+CLI timeout and exhale-control recognition; original artifacts remain intact.
+Parity and the earlier native timeout cause remain unresolved. A bounded controlled
+repeat now uses the original H1 native binary, corrected native binary and corrected
+CLI without rebuilding or logging. It checks reproducibility and preserved inputs
+before further changes. Both paths already share frontend preparation; earlier
+native AST captures preceded that stage. Detailed evidence is in the checkpoint.
 
 **Current stopping point (latest user instruction).** Finish restoration and
 stabilize the existing generic collection and ownership proofs, including the
@@ -83,8 +79,8 @@ different compilers are never added together.
 |---|---|---|
 | Whole matrix | Last complete matrix 339: 1,755/1,842; 87 failures, none waived | Rebuild final source and complete both backends with exact coverage |
 | Ownership, enum, local history, associated output | 793 audited 124/124; historical 722 audited 129/129 on its own compiler | Preserve as separate reference gates; rerun affected families after each repair |
-| CLI/native parity | Printer correction `931a2d5` pushed; 18/18 focused tests and CLI build pass; original Cargo invocation failure preserved | Corrected build/four-proof continuation running; no acceptance proof results yet; timeout cause and full semantic parity unresolved |
-| Heavy prefix | H1/H2 full positives time out; exact negatives pass. Reduced both-state positive fails restoration; exemplar-only pair passes | Ownership repairs on hold for parity investigation; no experiment integrated |
+| CLI/native parity | Printer fix `931a2d5`: 18 focused tests pass; native positive 190.36s, CLI positive 600s timeout; both exact negatives pass | Controlled frozen-binary repeat running; full parity and timeout cause unresolved |
+| Heavy prefix | Historical H1/H2 positives timed out; printer-fix candidate native positive passes once, CLI times out; exact negatives pass | Controlled repeat before attributing the change; ownership repairs remain on hold and unintegrated |
 | Region iterator | 794: 3/7; missing tail indexed resources in both positives and wrong early errors in both negatives | 809's checked tail-snapshot equality succeeds, but the original resource assertion still fails; model review before a repair |
 | Nested calls | 794: 9/11; repeated positive missing wand, postcondition control times out | Full replay 810 times out at 600s with solver logging; previous failed hypotheses require model review |
 | Extra `next` | 794: 3/6; positive timeout and two wrong diagnostics | Retain all six controls; check as an affected regression of prefix framing |

@@ -9,7 +9,8 @@ Read this first when resuming; consult the full plan only as needed.
 - Initial investigation budget: 90 minutes of active investigation, excluding the interrupted days. This iteration used approximately 10 minutes.
 - Integration baseline: `c2631cfb0` / `stdlib-restoration-baseline-20261102`, still unqualified.
 - Six pending main source files match their saved hashes. Frozen H1 driver also matches its manifest.
-- Background AST diagnostic launched, PID `2972689`, with a 2,400-second overall limit. No solver verification is scheduled. Read its `status.json` and eventual `result.json` before doing further work.
+- Initial AST diagnostic built successfully, then stopped before capture because its `PRUSTI_PARITY_*` environment names failed Prusti's strict configuration validation. Original failure preserved; no solver ran.
+- Corrected background capture launched, PID `3436732`, using `STDLIB_PARITY_*` names and the cached build. Overall limit: 1,200 seconds. Read `parity-ast-20261106/retry-env/status.json` and eventual `result.json` before further work.
 - The last exemplar diagnostic completed: positive 168.13s, exact negative 265.10s; diagnostic only.
 - Unstarted `trace-prefix-both-state.py` retired at the user's redirect.
 - Retain all original acceptance criteria, one verifier worker, branch parallelism off, 180/600s limits. Stop before D1–D6; no scheduled automation.
@@ -34,7 +35,10 @@ outcomes; these traces remain diagnostic.
 
 ## Next bounded experiment
 
-**Running:** `reconciliation-20261102/parity-ast-20261106/run.py` restores exact H1
+**Current runner:** `reconciliation-20261102/parity-ast-20261106/retry-env/run.py`.
+It reuses the successful initial build and frozen-rendering comparison, renames
+only the diagnostic environment keys, and performs an incremental rebuild/capture.
+The first runner, `parity-ast-20261106/run.py`, restores exact H1
 source/dependencies and checks a fresh encode-only rendering with the frozen driver.
 It builds an instrumented copy in `/home/will/wk/exp/prusti-stdlib-parity-h1`, captures
 the native AST and the saved export after CLI translation/preparation, then stops.

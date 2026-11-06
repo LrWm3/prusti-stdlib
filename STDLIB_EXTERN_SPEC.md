@@ -30,6 +30,12 @@ implementation, or unsafe internals of the standard library.
 
 ## Current qualification checkpoint (2026-11-02)
 
+**Current priority (user redirect; resumed 2026-11-06).** Investigate CLI/native
+parity before further ownership repairs, using frozen H1 and its preserved inputs.
+Work in bounded iterations with a short [parity checkpoint](STDLIB_PARITY_CHECKPOINT.md).
+The last active exemplar diagnostic finished with both expected outcomes; the
+unstarted reduced-model trace is retired. No verifier is currently active.
+
 **Current stopping point (latest user instruction).** Finish restoration and
 stabilize the existing generic collection and ownership proofs, including the
 combined qualification below, then pause and report back. Do not start D1–D6
@@ -65,7 +71,8 @@ different compilers are never added together.
 |---|---|---|
 | Whole matrix | Last complete matrix 339: 1,755/1,842; 87 failures, none waived | Rebuild final source and complete both backends with exact coverage |
 | Ownership, enum, local history, associated output | 793 audited 124/124; historical 722 audited 129/129 on its own compiler | Preserve as separate reference gates; rerun affected families after each repair |
-| Heavy prefix | H1 positive hits 600s twice; H2 positive also hits 600s; both exact negatives pass; reduced identity and suffix-state pairs pass | Successor patches stopped; fixed-context model now adds prefix-value observations on frozen H1; neither experiment is integrated |
+| CLI/native parity | Saved SMT option sequences match through the first meaningful divergence; short-circuit scopes and permission-conjunction grouping differ | Compare ASTs after frontend processing; cause and semantic parity remain unresolved |
+| Heavy prefix | H1/H2 full positives time out; exact negatives pass. Reduced both-state positive fails restoration; exemplar-only pair passes | Ownership repairs on hold for parity investigation; no experiment integrated |
 | Region iterator | 794: 3/7; missing tail indexed resources in both positives and wrong early errors in both negatives | 809's checked tail-snapshot equality succeeds, but the original resource assertion still fails; model review before a repair |
 | Nested calls | 794: 9/11; repeated positive missing wand, postcondition control times out | Full replay 810 times out at 600s with solver logging; previous failed hypotheses require model review |
 | Extra `next` | 794: 3/6; positive timeout and two wrong diagnostics | Retain all six controls; check as an affected regression of prefix framing |

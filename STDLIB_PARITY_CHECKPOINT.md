@@ -11,7 +11,8 @@ Read this first when resuming; consult the full plan only as needed.
 - Six pending main source files match their saved hashes. Frozen H1 driver also matches its manifest.
 - Initial AST diagnostic built successfully, then stopped before capture because its `PRUSTI_PARITY_*` environment names failed Prusti's strict configuration validation. Original failure preserved; no solver ran.
 - Corrected environment capture then hit its 420s outer diagnostic limit while recursively formatting the CLI AST (2.7GB partial dump). No solver ran; this was instrumentation overhead, not a proof timeout.
-- Compact capture completed in 72.38s. No background process or solver is active. Frozen binaries and pending main files remain unchanged. Current evidence: `parity-ast-20261106/compact/review.json`.
+- Compact capture completed in 72.38s. Frozen binaries and pending main files remain unchanged. Evidence: `parity-ast-20261106/compact/review.json`.
+- Minimal roundtrip diagnostic is running, PID `3974142`, with a 1,200s overall limit. Read `parity-ast-20261106/roundtrip/status.json` and eventual `result.json`. No solver is scheduled.
 - The last exemplar diagnostic completed: positive 168.13s, exact negative 265.10s; diagnostic only.
 - Unstarted `trace-prefix-both-state.py` retired at the user's redirect.
 - Retain all original acceptance criteria, one verifier worker, branch parallelism off, 180/600s limits. Stop before D1–D6; no scheduled automation.
@@ -56,7 +57,17 @@ full semantic parity and the cause of the whole-program timeout remain unresolve
 
 ## Next bounded experiment
 
-Test a minimal native conjunction AST through printing and parsing. Then use
+Pinned source now confirms the mismatch: `BuiltinOp::fixity` gives `And`
+`InfixLeft`, while `fast_parser::binary_operator` marks `&&` right-associative.
+The running diagnostic constructs three native expressions: an already-right-
+associated pure control, a left-grouped pure conjunction, and a left-grouped
+conjunction containing full predicate permission. It parses both ordinary and
+fully parenthesized renderings through the CLI frontend. Expected results: the
+right-associated control matches; both left-grouped ordinary renderings differ;
+all explicitly parenthesized renderings match the original expression AST.
+This checks structure, not metadata or proof outcomes. It stops after these cases.
+
+After the minimal native conjunction test, use
 structure-preserving parentheses in a diagnostic export and check whether the
 first package scope divergence disappears. Preserve the original H1 driver,
 positive, exact negative and limits. No ownership patch or qualified repair yet.

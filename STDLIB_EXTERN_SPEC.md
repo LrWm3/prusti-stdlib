@@ -36,7 +36,8 @@ Work in bounded iterations with a short [parity checkpoint](STDLIB_PARITY_CHECKP
 The last active exemplar diagnostic finished with both expected outcomes; the
 unstarted reduced-model trace is retired. The bounded AST diagnostic completed:
 printing/parsing regroups pure and permission conjunctions in the first divergent
-package. The timeout cause remains unresolved; no background verifier is active.
+package. The timeout cause remains unresolved; a minimal structural roundtrip
+diagnostic is running without solver verification.
 Detailed results and the next roundtrip experiment are in the parity checkpoint.
 
 **Current stopping point (latest user instruction).** Finish restoration and

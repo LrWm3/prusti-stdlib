@@ -43,8 +43,13 @@ native loop restoration in 282.86s, and timed out CLI again. Native exports matc
 their prior programs excluding comments, establishing outcome variability without
 attributing its cause. The bounded diagnostic completed four actual shared verifier-entry captures in
 706.36s. Prepared text matches after removing comments; captured solver settings
-match, with only frontend filename/ignore-file differences. Structural AST and
-metadata differences still need review; no proofs ran. Parity remains unresolved. Both paths already share frontend
+match, with only frontend filename/ignore-file differences. After comparison-only
+empty/single-statement Seqn normalization, 73,012 node records align with only two
+ReadPerm comparison-kind differences; both lower to the same less-than term builder.
+Native expression metadata is stable across repeats. A bounded diagnostic now traces
+both frozen corrected binaries to compare actual SMT requests/context on one exact
+program. Logging effects remain explicit; unlogged qualification is still required.
+Parity remains unresolved. Both paths already share frontend
 preparation; earlier native captures preceded that stage. Details are in the checkpoint.
 
 **Current stopping point (latest user instruction).** Finish restoration and
@@ -82,7 +87,7 @@ different compilers are never added together.
 |---|---|---|
 | Whole matrix | Last complete matrix 339: 1,755/1,842; 87 failures, none waived | Rebuild final source and complete both backends with exact coverage |
 | Ownership, enum, local history, associated output | 793 audited 124/124; historical 722 audited 129/129 on its own compiler | Preserve as separate reference gates; rerun affected families after each repair |
-| CLI/native parity | Printer fix `931a2d5` passes 18 focused tests; both exact negatives pass. Native positive outcomes vary across repeats; corrected CLI times out twice | Four entry captures complete; prepared text and solver settings match, structural AST/metadata differences remain; parity unresolved |
+| CLI/native parity | Printer fix `931a2d5` passes 18 focused tests; both negatives pass; native outcomes vary and CLI times out. Entry text/settings match; canonical records differ only in two ReadPerm comparisons | Bounded corrected native/CLI solver traces running; compare actual requests and incremental context before another repair |
 | Heavy prefix | Frozen H1 now passes once; corrected native passed then failed loop restoration; rendered programs unchanged excluding comments | Separate internal-input changes from solver/resource variability; ownership repairs remain on hold and unintegrated |
 | Region iterator | 794: 3/7; missing tail indexed resources in both positives and wrong early errors in both negatives | 809's checked tail-snapshot equality succeeds, but the original resource assertion still fails; model review before a repair |
 | Nested calls | 794: 9/11; repeated positive missing wand, postcondition control times out | Full replay 810 times out at 600s with solver logging; previous failed hypotheses require model review |

@@ -1,15 +1,42 @@
-# CLI/native parity checkpoint — 2026-11-06
+# CLI/native parity checkpoint — 2026-11-08
 
 Read this first; detailed evidence stays in artifacts.
+
+## Active bounded solver comparison
+
+- Runner: `reconciliation-20261102/parity-corrected-solver-trace-20261108/run.py`.
+- Started 2026-11-08 15:18:49 UTC, PID 1990403; overall limit 1,800 seconds.
+- Read `status.json`, then `result.json`, `results.json` and `comparison.json`.
+- Use frozen corrected native/CLI binaries; no rebuild or source repair. Run the
+  original full Rust positive, then CLI on its exact just-generated export.
+- Add identical `proverLogFile`/`reportReasonUnknown` diagnostic settings on both
+  paths; preserve 600/30,000/100 limits, outer 720s, one worker and branch false.
+- Preserve SMT files/hashes and compare actual command order/context: raw first,
+  then source-position qids normalized. No expression reassociation or reordering.
+- Logging has changed prior outcomes. This batch is diagnostic and cannot replace
+  unlogged qualification; previous exact negatives remain recorded. No successor queue.
+
+## Reviewed verifier-entry differences
+
+After removing empty Seqn records and unwrapping single-statement Seqn with no
+local declarations **for comparison only**, all four captures contain 73,012
+retained node records. Each path is stable across repeats. Native and CLI differ
+at just two expression kinds in the `ReadPerm` axiom: native `LtCmp`, CLI
+`PermLtCmp`. Both lower through the evaluator to `TermFactory::less`; this source
+review does not establish identical final solver contexts. Native expression
+metadata also matches across both captures; callback internals remain opaque.
+Rendered prepared text matches excluding comments. No verifier AST was normalized
+or weakened. Evidence: `parity-entry-capture-20261106/structure-review-canonical.json`
+and `metadata-repeat-review.json`; preliminary normalization reports are superseded.
 
 ## Completed capture — reviewed 2026-11-08
 
 - Runner: `reconciliation-20261102/parity-entry-capture-20261106/run.py`.
 - Started 2026-11-06 05:04:26 UTC, PID 1815812; overall limit 3,600 seconds.
-- Completed all four captures in 706.36s; no active job. See `review.json`.
+- Completed all four captures in 706.36s. See `review.json`; new trace job above.
 - Prepared Viper text matches between native repeats and native/CLI after removing
   comments. Captured solver settings match; configuration differences are only the
-  frontend filename and `ignore_file`. AST structure/metadata still require review.
+  frontend filename and `ignore_file`. Reviewed structural differences are described above.
 - This diagnostic did not run proofs; parity and prior CLI timeouts remain unresolved.
 - Separate Ferrum/Prusti worktrees rebuild diagnostic binaries. Instrument only
   actual `Session::verify` entry after each real frontend pipeline; record compact

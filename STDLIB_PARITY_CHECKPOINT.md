@@ -2,11 +2,19 @@
 
 Read this first; detailed evidence stays in artifacts.
 
-## Active bounded solver comparison
+## Completed bounded solver comparison
 
 - Runner: `reconciliation-20261102/parity-corrected-solver-trace-20261108/run.py`.
 - Started 2026-11-08 15:18:49 UTC, PID 1990403; overall limit 1,800 seconds.
-- Read `status.json`, then `result.json`, `results.json` and `comparison.json`.
+- Completed in 1,135.60s; no active job. See `review.json` and `comparison.json`.
+- Native hit the 600s whole-program limit (618.91s command); CLI failed restoration
+  after 492.42s with prover incompleteness `canceled`. These logged outcomes are diagnostic.
+- First 39,757 commands match after only source-position qid normalization. At the
+  first later divergence, the same 500ms query returned native `unsat` in 223ms
+  versus CLI `unknown`/`canceled` in 513ms. Subsequent command order then differs.
+- Quantifier labels already differ at raw command 7,116, so input equality is not
+  established. Next isolate qid effects versus solver/resource variability by
+  replaying preserved prefixes; no encoding change is justified by this evidence.
 - Use frozen corrected native/CLI binaries; no rebuild or source repair. Run the
   original full Rust positive, then CLI on its exact just-generated export.
 - Add identical `proverLogFile`/`reportReasonUnknown` diagnostic settings on both

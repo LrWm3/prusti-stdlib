@@ -2,11 +2,15 @@
 
 Read this first; detailed evidence stays in artifacts.
 
-## Active bounded capture
+## Completed capture — reviewed 2026-11-08
 
 - Runner: `reconciliation-20261102/parity-entry-capture-20261106/run.py`.
 - Started 2026-11-06 05:04:26 UTC, PID 1815812; overall limit 3,600 seconds.
-- Read its `status.json`, then `result.json` and `comparison.json` when complete.
+- Completed all four captures in 706.36s; no active job. See `review.json`.
+- Prepared Viper text matches between native repeats and native/CLI after removing
+  comments. Captured solver settings match; configuration differences are only the
+  frontend filename and `ignore_file`. AST structure/metadata still require review.
+- This diagnostic did not run proofs; parity and prior CLI timeouts remain unresolved.
 - Separate Ferrum/Prusti worktrees rebuild diagnostic binaries. Instrument only
   actual `Session::verify` entry after each real frontend pipeline; record compact
   AST shape, metadata, prepared text and effective backend configuration.

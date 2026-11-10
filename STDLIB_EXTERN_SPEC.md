@@ -30,43 +30,25 @@ implementation, or unsafe internals of the standard library.
 
 ## Current qualification checkpoint (2026-11-02)
 
-**Current priority (user redirect; resumed 2026-11-06).** Investigate CLI/native
-parity before further ownership repairs, using frozen H1 and its preserved inputs.
-Work in bounded iterations with a short [parity checkpoint](STDLIB_PARITY_CHECKPOINT.md).
-The isolated printer fix `931a2d5` passed 18 focused tests and is pushed.
-A fresh, uninstrumented H1-based build passed the full native positive in 190.36s;
-CLI on its identical corrected export timed out at 600s. Both exact negatives
-reached their intended assertion. The audited classification corrects the runner's
-CLI timeout and exhale-control recognition; original artifacts remain intact.
-The controlled repeat then passed original H1 native in 201.28s, failed corrected
-native loop restoration in 282.86s, and timed out CLI again. Native exports match
-their prior programs excluding comments, establishing outcome variability without
-attributing its cause. The bounded diagnostic completed four actual shared verifier-entry captures in
-706.36s. Prepared text matches after removing comments; captured solver settings
-match, with only frontend filename/ignore-file differences. After comparison-only
-empty/single-statement Seqn normalization, 73,012 node records align with only two
-ReadPerm comparison-kind differences; both lower to the same less-than term builder.
-Native expression metadata is stable across repeats. The corrected trace completed: 39,757 commands match after source-position qid
-normalization. The first later divergence follows a 500ms solver query: native
-unsat in 223ms versus CLI canceled/unknown in 513ms. Native ultimately timed out;
-CLI failed restoration. The preceding 3,052 solver responses match as well. A controlled four-run prefix
-replay varied only source qids in N,C,C,N order and completed in 634.12s. Identical
-CLI-label input proved the target in 212.65ms once and returned canceled/unknown at
-501.06ms once; native-label input proved both times (451.97/45.24ms). Identical-input
-variability is established, while qid effects remain unisolated. Earlier responses
-changed in the first two replays and matched in the last two. No Rust qualification
-is established by this SMT-only replay. A second six-run experiment isolated the
-wall-clock mechanism: identical timed input/response history yields different
-solver work, while all four resource-mode native/CLI runs match all 2,839 responses,
-129,144,583 cumulative work units and every search statistic. Runtime/memory/allocation
-statistics still vary; fixed-work target time spans 745.52–1,105.65ms. The first
-variable query is a 500ms quantified-chunk depletion check; cancellation can change
-incremental search and whether depleted chunks are retained. Resource mode changes
-budget semantics and requires full Rust validation before adoption or qualification.
-No active job; temporary original H1 inputs need restoration before that gate. Logged outcomes remain diagnostic;
-unlogged qualification is still required.
-Parity remains unresolved. Both paths already share frontend
-preparation; earlier native captures preceded that stage. Details are in the checkpoint.
+**Current priority (user redirect; updated 2026-11-10).** Resolve CLI/native parity
+before further ownership repairs. Printer correction `931a2d5` passes 18 focused
+tests and is pushed on its isolated Ferrum branch. Actual verifier-entry text and
+solver settings agree apart from comments/input handling; normalized node records
+differ only in two permission comparisons lowered to the same term builder.
+Timed incremental Z3 checks perform different work even with identical input and
+response histories. Fixed-resource prefix replays match all 2,839 responses and
+129,144,583 work units across native/CLI labels, identifying the wall-clock cutoff
+mechanism behind observed variability through that prefix.
+
+**The full resource-mode Rust gate failed:** all four checks (positive/negative,
+native/CLI) reached the600-second whole-program limit; no positive or intended
+negative diagnostic passed. Outer 720s watchdogs did not fire. Source/dependency
+restoration matches all 2,992/187 captured files and original crate IDs. Frozen
+corrected binaries and main changes are preserved; both exports match prior proof
+text without comments. Resource mode is not adopted or qualified. No active job.
+Next collect full-proof query cost evidence under the unchanged limit and review
+expensive obligations before another repair. The concise
+[parity checkpoint](STDLIB_PARITY_CHECKPOINT.md) links all detailed artifacts.
 
 **Current stopping point (latest user instruction).** Finish restoration and
 stabilize the existing generic collection and ownership proofs, including the
@@ -103,7 +85,7 @@ different compilers are never added together.
 |---|---|---|
 | Whole matrix | Last complete matrix 339: 1,755/1,842; 87 failures, none waived | Rebuild final source and complete both backends with exact coverage |
 | Ownership, enum, local history, associated output | 793 audited 124/124; historical 722 audited 129/129 on its own compiler | Preserve as separate reference gates; rerun affected families after each repair |
-| CLI/native parity | Printer fix `931a2d5` passes 18 focused tests; both negatives pass; native outcomes vary and CLI times out. Entry text/settings match; canonical records differ only in two ReadPerm comparisons | Trace complete: first divergence follows 500ms query (native unsat, CLI canceled); Cause isolated through first variable query: timed work varies; all four fixed-resource native/CLI runs have identical responses/search work. Full Rust resource-mode validation pending; qualification unresolved |
+| CLI/native parity | Printer fix passes 18 tests; fixed-work prefixes reproduce across labels. Full resource-mode Rust gate: all 4 cases time out at 600s; no positive or exact negative passes | Profile costly full-proof obligations under unchanged limits; resource mode remains unqualified and unadopted |
 | Heavy prefix | Frozen H1 now passes once; corrected native passed then failed loop restoration; rendered programs unchanged excluding comments | Separate internal-input changes from solver/resource variability; ownership repairs remain on hold and unintegrated |
 | Region iterator | 794: 3/7; missing tail indexed resources in both positives and wrong early errors in both negatives | 809's checked tail-snapshot equality succeeds, but the original resource assertion still fails; model review before a repair |
 | Nested calls | 794: 9/11; repeated positive missing wand, postcondition control times out | Full replay 810 times out at 600s with solver logging; previous failed hypotheses require model review |

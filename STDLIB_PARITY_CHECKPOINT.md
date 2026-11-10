@@ -1,14 +1,21 @@
-# CLI/native parity checkpoint — 2026-11-08
+# CLI/native parity checkpoint — 2026-11-10
 
 Read this first. Evidence root:
 `target/stdlib-matrix-20261031-1236/reconciliation-20261102/`.
 
-## Active bounded experiment
+## Completed replay — current result
 
 - Runner: `parity-qid-replay-20261108/run.py` under the evidence root.
 - Started 2026-11-08 16:18:53 UTC, PID 2713804; total cap 2,700s.
-- Read `status.json`, then `result.json`, `summary.json` and per-run `results.json`.
-- Fresh Z3 processes replay native/CLI/native-label variants in N,C,C,N order.
+- Finished all four replays in 634.12s; no active job. See `review.json`.
+- Identical CLI-label input proved the target once in 212.65ms and returned
+  unknown/canceled once at 501.06ms. Native-label input proved it in 451.97/45.24ms.
+- This establishes identical-input variability; it does not exclude qid effects.
+  Earlier responses changed in the first two replays but matched in the last two.
+- Post-unsat reason-unknown text can be stale; use the actual target result.
+- Next investigate stable query/resource behavior before another encoding patch.
+  Rust qualification and full parity remain unresolved.
+- Fresh Z3 processes replay native/CLI-label variants in N,C,C,N order.
   The two preserved prefixes contain 39,757 identical commands except source qids.
   All original 3,052 earlier responses match. The target retains its 500ms timeout;
   each replay has a 600s outer watchdog. One worker; no compiler/source changes.

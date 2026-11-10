@@ -50,9 +50,12 @@ Native expression metadata is stable across repeats. The corrected trace complet
 normalization. The first later divergence follows a 500ms solver query: native
 unsat in 223ms versus CLI canceled/unknown in 513ms. Native ultimately timed out;
 CLI failed restoration. The preceding 3,052 solver responses match as well. A controlled four-run prefix
-replay now varies only source qids, in N,C,C,N order, retaining the 500ms target
-limit and recording earlier response changes. It distinguishes label effects from
-within-input variability without another source patch. Logged outcomes remain diagnostic;
+replay varied only source qids in N,C,C,N order and completed in 634.12s. Identical
+CLI-label input proved the target in 212.65ms once and returned canceled/unknown at
+501.06ms once; native-label input proved both times (451.97/45.24ms). Identical-input
+variability is established, while qid effects remain unisolated. Earlier responses
+changed in the first two replays and matched in the last two. No Rust qualification
+is established by this SMT-only replay. Logged outcomes remain diagnostic;
 unlogged qualification is still required.
 Parity remains unresolved. Both paths already share frontend
 preparation; earlier native captures preceded that stage. Details are in the checkpoint.
@@ -92,7 +95,7 @@ different compilers are never added together.
 |---|---|---|
 | Whole matrix | Last complete matrix 339: 1,755/1,842; 87 failures, none waived | Rebuild final source and complete both backends with exact coverage |
 | Ownership, enum, local history, associated output | 793 audited 124/124; historical 722 audited 129/129 on its own compiler | Preserve as separate reference gates; rerun affected families after each repair |
-| CLI/native parity | Printer fix `931a2d5` passes 18 focused tests; both negatives pass; native outcomes vary and CLI times out. Entry text/settings match; canonical records differ only in two ReadPerm comparisons | Trace complete: first divergence follows 500ms query (native unsat, CLI canceled); controlled source-qid prefix replay running (N,C,C,N); distinguish label effects from within-input variability |
+| CLI/native parity | Printer fix `931a2d5` passes 18 focused tests; both negatives pass; native outcomes vary and CLI times out. Entry text/settings match; canonical records differ only in two ReadPerm comparisons | Trace complete: first divergence follows 500ms query (native unsat, CLI canceled); Replay complete: identical CLI input passes once and times out once; variability established, qid effects unisolated; full parity unresolved |
 | Heavy prefix | Frozen H1 now passes once; corrected native passed then failed loop restoration; rendered programs unchanged excluding comments | Separate internal-input changes from solver/resource variability; ownership repairs remain on hold and unintegrated |
 | Region iterator | 794: 3/7; missing tail indexed resources in both positives and wrong early errors in both negatives | 809's checked tail-snapshot equality succeeds, but the original resource assertion still fails; model review before a repair |
 | Nested calls | 794: 9/11; repeated positive missing wand, postcondition control times out | Full replay 810 times out at 600s with solver logging; previous failed hypotheses require model review |

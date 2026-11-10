@@ -3,7 +3,44 @@
 Read this first. Evidence root:
 `target/stdlib-matrix-20261031-1236/reconciliation-20261102/`.
 
-## Completed replay — current result
+## Identified variability — current result
+
+The six-run timer/resource experiment finished in **1,406.69s**. No active job.
+Evidence: `parity-variability-resource-20261110/review.json`, `summary.json`, inputs,
+all stdout, per-case CPU/wall measurements and solver statistics.
+
+- Earliest known variable query2839 is the 500ms quantified permission depletion
+  check. Proving `forall provided-taken == 0` removes the depleted chunk; an
+  unknown result conservatively retains remaining permission. Later mandatory
+  consumption/restoration obligations remain intact.
+- Two identical timer-native replays have identical response histories but perform
+  different work: cumulative 100,289,610 vs94,159,115; target 549,354 vs713,364 units.
+  Both target checks use about 500ms CPU/wall. Cancellation changes reasoning
+  progress even before response sequences differ; incremental search can then
+  diverge. Learned-clause differences are inferred, not directly captured.
+- All four resource-native/CLI replays produce identical 2,839 responses, cumulative
+  **129,144,583** work and target **1,130,340** work. All solver statistics except
+  time, memory and allocations match. No label-dependent search-work difference
+  appears through this prefix. Fixed work therefore removes observed logical/work
+  variability here; this does not establish complete CLI/native semantic parity.
+- Fixed-work runtime still varies: target 745.52–1,105.65ms wall and approximately
+  740–1,100ms CPU. Specific frequency/cache/hardware cause is unmeasured. Large
+  descheduling gaps are absent in these target samples.
+- Resource mode uses Ferrum's existing ms*10,000 mapping. It changes budget semantics
+  and costs more work/time; it is diagnostic, not a replacement qualification result.
+  Original 180/600 qualification limits and exact negative controls remain required.
+- A handshake fixes possible stdout-queue underestimation in older elapsed timings.
+  The new worker records CPU and deterministic work as well as responses.
+
+Next: restore temporary original H1 source/dependencies (missing before this batch),
+then validate the full Rust positive/exact negative on both paths under an explicit
+resource configuration with 600s whole/outer limits. Do not count prior SMT-only
+results as Rust acceptance or integrate ownership repairs without their gates.
+The initial missing-/tmp harness failure is preserved; the exact hash-matching
+persistent harness completed the diagnostic. Used SMT inputs and frozen binaries
+are unchanged.
+
+## Completed label replay
 
 - Runner: `parity-qid-replay-20261108/run.py` under the evidence root.
 - Started 2026-11-08 16:18:53 UTC, PID 2713804; total cap 2,700s.

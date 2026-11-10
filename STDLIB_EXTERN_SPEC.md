@@ -55,7 +55,15 @@ CLI-label input proved the target in 212.65ms once and returned canceled/unknown
 501.06ms once; native-label input proved both times (451.97/45.24ms). Identical-input
 variability is established, while qid effects remain unisolated. Earlier responses
 changed in the first two replays and matched in the last two. No Rust qualification
-is established by this SMT-only replay. Logged outcomes remain diagnostic;
+is established by this SMT-only replay. A second six-run experiment isolated the
+wall-clock mechanism: identical timed input/response history yields different
+solver work, while all four resource-mode native/CLI runs match all 2,839 responses,
+129,144,583 cumulative work units and every search statistic. Runtime/memory/allocation
+statistics still vary; fixed-work target time spans 745.52–1,105.65ms. The first
+variable query is a 500ms quantified-chunk depletion check; cancellation can change
+incremental search and whether depleted chunks are retained. Resource mode changes
+budget semantics and requires full Rust validation before adoption or qualification.
+No active job; temporary original H1 inputs need restoration before that gate. Logged outcomes remain diagnostic;
 unlogged qualification is still required.
 Parity remains unresolved. Both paths already share frontend
 preparation; earlier native captures preceded that stage. Details are in the checkpoint.
@@ -95,7 +103,7 @@ different compilers are never added together.
 |---|---|---|
 | Whole matrix | Last complete matrix 339: 1,755/1,842; 87 failures, none waived | Rebuild final source and complete both backends with exact coverage |
 | Ownership, enum, local history, associated output | 793 audited 124/124; historical 722 audited 129/129 on its own compiler | Preserve as separate reference gates; rerun affected families after each repair |
-| CLI/native parity | Printer fix `931a2d5` passes 18 focused tests; both negatives pass; native outcomes vary and CLI times out. Entry text/settings match; canonical records differ only in two ReadPerm comparisons | Trace complete: first divergence follows 500ms query (native unsat, CLI canceled); Replay complete: identical CLI input passes once and times out once; variability established, qid effects unisolated; full parity unresolved |
+| CLI/native parity | Printer fix `931a2d5` passes 18 focused tests; both negatives pass; native outcomes vary and CLI times out. Entry text/settings match; canonical records differ only in two ReadPerm comparisons | Trace complete: first divergence follows 500ms query (native unsat, CLI canceled); Cause isolated through first variable query: timed work varies; all four fixed-resource native/CLI runs have identical responses/search work. Full Rust resource-mode validation pending; qualification unresolved |
 | Heavy prefix | Frozen H1 now passes once; corrected native passed then failed loop restoration; rendered programs unchanged excluding comments | Separate internal-input changes from solver/resource variability; ownership repairs remain on hold and unintegrated |
 | Region iterator | 794: 3/7; missing tail indexed resources in both positives and wrong early errors in both negatives | 809's checked tail-snapshot equality succeeds, but the original resource assertion still fails; model review before a repair |
 | Nested calls | 794: 9/11; repeated positive missing wand, postcondition control times out | Full replay 810 times out at 600s with solver logging; previous failed hypotheses require model review |

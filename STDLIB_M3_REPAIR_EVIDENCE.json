@@ -328,6 +328,158 @@
           "sha256": "c5c45aa331bc2ce4e4e3b70acdde09398e1a610c2ae11529ae62c71bc4d8c029"
         }
       ]
+    },
+    {
+      "id": "03-inferred-lifetimes",
+      "experiment_commit": "2217388ef9092ad5e2898d306af9a020210dd73a",
+      "integration_commit": "37dd94bddb62117a92f5ea841bfb143e2c121f26",
+      "non_documentation_source_matches": true,
+      "backports": [
+        "e9dd7929c",
+        "2247e831d"
+      ],
+      "status": "qualified repair; overall baseline checkpoint incomplete",
+      "backend": "Silicon",
+      "program_timeout_seconds": 90,
+      "focused_controls": {
+        "matched": 12,
+        "expected": 12
+      },
+      "suite_checks": {
+        "matched": 374,
+        "expected": 374
+      },
+      "specification_unit_tests": 36,
+      "gate": {
+        "suites": {
+          "borrow": {
+            "matched": 90,
+            "expected": 90,
+            "seconds": 971.3,
+            "longest": {
+              "case": "spec-library",
+              "passed": true,
+              "seconds": 45.23
+            }
+          },
+          "collections": {
+            "matched": 27,
+            "expected": 27,
+            "seconds": 248.89,
+            "longest": {
+              "case": "boundaries_pass",
+              "passed": true,
+              "seconds": 30.73
+            }
+          },
+          "extern": {
+            "matched": 97,
+            "expected": 97,
+            "seconds": 388.94,
+            "longest": {
+              "case": "pass",
+              "passed": true,
+              "seconds": 12.6
+            }
+          },
+          "hash": {
+            "matched": 51,
+            "expected": 51,
+            "seconds": 340.79,
+            "longest": {
+              "case": "collection_get_mut_expiry_pass",
+              "passed": true,
+              "seconds": 19.59
+            }
+          },
+          "iterator": {
+            "matched": 66,
+            "expected": 66,
+            "seconds": 420.41,
+            "longest": {
+              "case": "spec-library",
+              "passed": true,
+              "seconds": 30.24
+            }
+          },
+          "sequence": {
+            "matched": 22,
+            "expected": 22,
+            "seconds": 83.29,
+            "longest": {
+              "case": "spec-library",
+              "passed": true,
+              "seconds": 16.52
+            }
+          },
+          "vec": {
+            "matched": 21,
+            "expected": 21,
+            "seconds": 142.09,
+            "longest": {
+              "case": "spec-library",
+              "passed": true,
+              "seconds": 19.26
+            }
+          }
+        },
+        "material_timing_increases": []
+      },
+      "binary_sha256": {
+        "cargo-prusti": "992c11e18034b5d4305119aa913de42285de3f7e39e52a17ca301f76ae6025fb",
+        "prusti-driver": "e5af9e516b0ca57e907cd497d4af8dde393b7f1d6964d6590e1fbe93d079b2e2",
+        "prusti-rustc": "c2eb76fbf49521762cf2faf9b031585199ce453977be489e797e09aeec47657a",
+        "prusti-server": "fc273b04ac198ce1a9ec083913006123cf5dce2f9852a6a4f915a3c1b9226a68",
+        "prusti-server-driver": "9e27f3a315bc071b7db6af061bb56c029636f706761940dc8a6aa146af918e5e",
+        "prusti-smt-solver": "0799c783005b612b440c6ebc5e2aa521d1d89b123500097ee5ddffa962356ee7"
+      },
+      "artifact_root": "../prusti-stdlib/target/stdlib-ownership-inference-20261114/repairs/03-inferred-lifetimes",
+      "artifact_manifest": [
+        {
+          "path": "source-before.json",
+          "sha256": "a45efe0dd392565aaa9be2afa304fdb5cf3c1c93827ec7c9c3439541d1b3d3de"
+        },
+        {
+          "path": "source-after.json",
+          "sha256": "042e0733e4d67d333427472205d1b411cdd4df4904b8c0ab233d2cfd906203f1"
+        },
+        {
+          "path": "candidate.patch",
+          "sha256": "ed7577a1b7358004c522813844beaf7388a17248d62e720b183684f7ead75c0f"
+        },
+        {
+          "path": "binaries.json",
+          "sha256": "6497e3d2ac4217d149aa8f7467239016ff3c15653b9cc3492dd09af096ca1579"
+        },
+        {
+          "path": "tools.json",
+          "sha256": "3979f24e8dace91392bbe2c5d6a974990f4d50512885e7e473f6fea167c6b5ee"
+        },
+        {
+          "path": "settings.json",
+          "sha256": "ab0162487b8ee27699d61f52e9200bbb9f223495865473bd18e331a1580cbf79"
+        },
+        {
+          "path": "expected-coverage.json",
+          "sha256": "ba219360529c4f4596893ef5276418b6a9a2084ca91361735c4d8e170ea141ba"
+        },
+        {
+          "path": "gate-review.json",
+          "sha256": "2abb0b8b4621d7043c03705ef404648cbbe73465ef565bedbefc1b5096ba0070"
+        },
+        {
+          "path": "integration.json",
+          "sha256": "5c0f351105d0933ee19a5851ef96ac022fe9d1a67396decffd30ea13be85123d"
+        },
+        {
+          "path": "preservation.json",
+          "sha256": "c834534c2d8d4c8c1aa63028c6f5daf6d6e55dc11fbabb16ba9a94ce183baca9"
+        },
+        {
+          "path": "audit/results.json",
+          "sha256": "84b70d811cbc1e707310e90140e4a08537760662b2db675f304d37e42018f63f"
+        }
+      ]
     }
   ],
   "checkpoint_complete": false

@@ -49,7 +49,7 @@ prove that a rewrite is necessary. Resource units are not calibrated millisecond
 | Phase | Work and acceptance | Status |
 |---|---|---|
 | R0: reproduce and audit M3 | Rebuild `be1364c7c` with PCG `e54bf675468d`, original Rust/Java/Viper/Z3 settings; run complete historical hash, extern, iterator and borrow gates, specification unit tests, and audit later correctness changes and controls. Freeze source, binaries, exact coverage, settings and results. | Reproduction/audit complete; adoption blocked by incorrect acceptance |
-| R1a: baseline correctness imports | Backport entry-state capture (`bbb6b0520`) and expiry-context guards (`c17aaa266`) separately, qualify their controls and affected historical families, and resolve or explicitly retain the remaining audit restrictions. | Entry-state/trigger and expiry-scope repairs integrated through `336776ddd`: latest gate 371/371 checks, 10/10 controls, 36 unit tests; inferred lifetimes next |
+| R1a: baseline correctness imports | Backport audited correctness repairs individually and qualify all fifteen controls and affected historical families. | Repairs integrated through `37dd94bdd`: latest gate 374/374 checks, 12/12 controls, 36 unit tests; mutable-read diagnostics and quantified expiry heaps remain |
 | R1b: Ferrum compatibility | Import the adapter and necessary compatibility changes individually; pin the backend and printer correction; rebuild this branch and qualify the corrected baseline on both backends. Keep compatibility separate from ownership changes. | Not started |
 | R2: checked ownership and prophecy core | Specify and implement local transfer rules for scalar mutation, reborrowing, reference replacement and one selected element, with manually supplied value relations. Establish the soundness boundary and native positive/negative proofs. | Not started |
 | R3: original difficult proof | Verify unchanged `mut_native_resource_early_pass` and its exact false control, plus targeted wrong-prefix/wrong-suffix, replacement, generic/non-Copy and zero-sized controls. Compare old encoding and explicit summaries with the same value invariants. | Not started |
@@ -58,25 +58,22 @@ prove that a rewrite is necessary. Resource units are not calibrated millisecond
 
 ### R1 progress
 
-The entry-state and trigger-capture repair is integrated at `70b825daa`.
-The rebuilt isolated candidate passes 364/364 checks across all seven historical
-stdlib families, four focused native controls, and 36 specification unit tests.
-The first entry-only candidate exposed a trigger regression (362/363); frozen
-M3 passed the original sequence gate 21/21. The combined repair preserves the
-captured-trigger binding outside the quantifier and adds a negative control.
-Its sequence gate passes 22/22. No material timing increase was found using the
-recorded comparison (more than double and at least ten seconds slower).
+Three repairs are integrated: entry-state/trigger captures (`70b825daa`), expiry
+scope (`336776ddd`), and inferred lifetimes (`37dd94bdd`). The latest combined
+candidate passes 374/374 checks across seven historical stdlib families, 12/12
+focused native controls, and 36 specification unit tests on Silicon. Source,
+binary and pending-main preservation checks pass; the integrated compiler source
+matches the tested experiment byte for byte.
 
-The qualified experimental and integrated source files match byte for byte;
-source, binary and pending-main preservation checks pass. Full evidence is in
-[the repair record](STDLIB_M3_REPAIR_EVIDENCE.json). The first checkpoint is still
-incomplete: expiry-scope, remaining audit gaps and final Ferrum/Silicon baseline
-qualification remain. Expiry scope is integrated at `336776ddd`, with 371/371
-affected checks, 10/10 focused controls and 36 unit tests. It rejects invalid
-expiry contexts while preserving valid pledges; no unrelated `after_call`
-machinery was imported. One iterator timing increase (7.84s to 19.15s) did not
-repeat: two native checks passed in 7.64s and 8.06s with unchanged noncomment
-Viper text. Inferred lifetimes are the next isolated repair.
+The entry-only attempt exposed a trigger regression, repaired and requalified
+before integration. The scope gate had one 19.15s iterator outlier; two native
+repeats passed in 7.64s and 8.06s with unchanged noncomment Viper text. The lifetime
+gate has no material timing increases against the preceding candidate.
+
+[The repair record](STDLIB_M3_REPAIR_EVIDENCE.json) preserves exact coverage,
+provenance and timings. Missing-permission diagnostics and quantified expiry-heap
+selection remain. The first checkpoint also requires the separate Ferrum import
+and own-branch final qualification on both backends. R2 has not begun.
 
 ### R0 result: reproduced, but not qualified for adoption
 

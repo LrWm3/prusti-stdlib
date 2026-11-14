@@ -31,8 +31,12 @@ implementation, or unsafe internals of the standard library.
 ## Ownership summaries and inference experiment (2026-11-14)
 
 **Phase boundary.** Work on `stdlib/ownership-inference-m3` in the isolated
-`prusti-stdlib-ownership-inference` worktree. R0 reproduction and audit are complete; report their result and stop before R1.
-M3 is not qualified for adoption unchanged. The current main tree, six pending encoder files, frozen H1
+`prusti-stdlib-ownership-inference` worktree. The user has authorized repairing
+M3 and proceeding to the first usable baseline checkpoint: complete R1a and R1b,
+then report before R2. Require all fifteen audit controls, the affected historical
+suites, own-branch builds and dual-backend qualification on the final baseline.
+Keep the original M3 reproduction as a frozen comparison; it is not qualified
+for adoption unchanged. The current main tree, six pending encoder files, frozen H1
 compiler and proof inputs remain preserved. No architecture change is accepted
 merely because an earlier suite passed.
 
@@ -45,7 +49,7 @@ prove that a rewrite is necessary. Resource units are not calibrated millisecond
 | Phase | Work and acceptance | Status |
 |---|---|---|
 | R0: reproduce and audit M3 | Rebuild `be1364c7c` with PCG `e54bf675468d`, original Rust/Java/Viper/Z3 settings; run complete historical hash, extern, iterator and borrow gates, specification unit tests, and audit later correctness changes and controls. Freeze source, binaries, exact coverage, settings and results. | Reproduction/audit complete; adoption blocked by incorrect acceptance |
-| R1a: baseline correctness imports | Backport entry-state capture (`bbb6b0520`) and expiry-context guards (`c17aaa266`) separately, qualify their controls and affected historical families, and resolve or explicitly retain the remaining audit restrictions. | Required before baseline adoption; not started |
+| R1a: baseline correctness imports | Backport entry-state capture (`bbb6b0520`) and expiry-context guards (`c17aaa266`) separately, qualify their controls and affected historical families, and resolve or explicitly retain the remaining audit restrictions. | In progress: entry-state capture first, then expiry scope and remaining audit gaps |
 | R1b: Ferrum compatibility | Import the adapter and necessary compatibility changes individually; pin the backend and printer correction; rebuild this branch and qualify the corrected baseline on both backends. Keep compatibility separate from ownership changes. | Not started |
 | R2: checked ownership and prophecy core | Specify and implement local transfer rules for scalar mutation, reborrowing, reference replacement and one selected element, with manually supplied value relations. Establish the soundness boundary and native positive/negative proofs. | Not started |
 | R3: original difficult proof | Verify unchanged `mut_native_resource_early_pass` and its exact false control, plus targeted wrong-prefix/wrong-suffix, replacement, generic/non-Copy and zero-sized controls. Compare old encoding and explicit summaries with the same value invariants. | Not started |

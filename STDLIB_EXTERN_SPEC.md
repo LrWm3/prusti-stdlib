@@ -30,9 +30,9 @@ implementation, or unsafe internals of the standard library.
 
 ## Ownership summaries and inference experiment (2026-11-14)
 
-**Authorized next step.** Work on `stdlib/ownership-inference-m3` in the isolated
-`prusti-stdlib-ownership-inference` worktree. Complete R0 below, report its result,
-and stop before R1. The current main tree, six pending encoder files, frozen H1
+**Phase boundary.** Work on `stdlib/ownership-inference-m3` in the isolated
+`prusti-stdlib-ownership-inference` worktree. R0 reproduction and audit are complete; report their result and stop before R1.
+M3 is not qualified for adoption unchanged. The current main tree, six pending encoder files, frozen H1
 compiler and proof inputs remain preserved. No architecture change is accepted
 merely because an earlier suite passed.
 
@@ -44,12 +44,33 @@ prove that a rewrite is necessary. Resource units are not calibrated millisecond
 
 | Phase | Work and acceptance | Status |
 |---|---|---|
-| R0: reproduce and audit M3 | Rebuild `be1364c7c` with PCG `e54bf675468d`, original Rust/Java/Viper/Z3 settings; run complete historical hash, extern, iterator and borrow gates, specification unit tests, and audit later correctness changes and controls. Freeze source, binaries, exact coverage, settings and results. | In progress; stop after reporting this phase |
-| R1: Ferrum compatibility | Import the adapter and necessary compatibility changes individually; pin the backend and printer correction; rebuild this branch and qualify R0 coverage on both backends. Keep compatibility separate from ownership changes. | Not started |
+| R0: reproduce and audit M3 | Rebuild `be1364c7c` with PCG `e54bf675468d`, original Rust/Java/Viper/Z3 settings; run complete historical hash, extern, iterator and borrow gates, specification unit tests, and audit later correctness changes and controls. Freeze source, binaries, exact coverage, settings and results. | Reproduction/audit complete; adoption blocked by incorrect acceptance |
+| R1a: baseline correctness imports | Backport entry-state capture (`bbb6b0520`) and expiry-context guards (`c17aaa266`) separately, qualify their controls and affected historical families, and resolve or explicitly retain the remaining audit restrictions. | Required before baseline adoption; not started |
+| R1b: Ferrum compatibility | Import the adapter and necessary compatibility changes individually; pin the backend and printer correction; rebuild this branch and qualify the corrected baseline on both backends. Keep compatibility separate from ownership changes. | Not started |
 | R2: checked ownership and prophecy core | Specify and implement local transfer rules for scalar mutation, reborrowing, reference replacement and one selected element, with manually supplied value relations. Establish the soundness boundary and native positive/negative proofs. | Not started |
 | R3: original difficult proof | Verify unchanged `mut_native_resource_early_pass` and its exact false control, plus targeted wrong-prefix/wrong-suffix, replacement, generic/non-Copy and zero-sized controls. Compare old encoding and explicit summaries with the same value invariants. | Not started |
 | R4: bounded value inference | Add equality/bounds propagation and a small Houdini-style candidate language over immutable values; recheck inferred entry/preservation/use obligations. Add CHC/Spacer only for a concrete required relation the simpler layer cannot infer. | Not started |
 | R5: restore and qualify | Restore newer families incrementally against the unchanged 790-client/2,198-check inventory; freeze final source, rebuild and run complete Ferrum/Silicon matrices. Commit/push qualified changes and stop before D1-D6. | Not started |
+
+### R0 result: reproduced, but not qualified for adoption
+
+The fresh own-branch build passes **291/291 suite checks** and **36/36
+specification unit tests**. Exact coverage: hash 51/51, extern 97/97, iterator
+66/66 (61 historical plus five additions), and borrow 77/77. All four libraries
+verify; no historical-suite timeout, skip or diagnostic mismatch occurred.
+
+The separate 15-case later-correctness audit matches **3/15**. It finds two
+unexpected acceptances, including an incorrect quantified `old(...)`
+postcondition; one verification failure, five internal errors, two wrong
+diagnostics and two unsupported cases remain. A historically passing M3 gate is
+therefore insufficient for adopting this compiler unchanged. No ownership or
+inference implementation has begun, and the combined matrix remains unqualified.
+
+See the [correctness/import audit](STDLIB_M3_CORRECTNESS_AUDIT.md) and
+[machine-readable evidence](STDLIB_M3_BASELINE_EVIDENCE.json) for exact controls,
+provenance, timings and the required next fixes. Source and binary preservation
+checks passed, including all six pending main files. R0 jobs have finished.
+The next phase starts with individual correctness backports before adapter work.
 
 ### R0 definition and provenance
 
@@ -119,7 +140,8 @@ permission cost requires proof-structure or backend work. Contract selection and
 native/CLI translation errors require interface/adapter repairs. No inference
 timeout or solver unknown establishes a fact. Keep arithmetic overflow explicit.
 
-Use bounded online profiling and bounded samples, never an unbounded stack trace.
+During long waits, sleep five minutes between status checks, as requested by the
+user. Use bounded online profiling and bounded samples, never an unbounded stack trace.
 The deleted 19GB trace will not be recreated. Keep exact proof and build inputs;
 record cold uninstrumented elapsed time, solver work and proof size. Predetermine
 three cold repeats for the R3 representative on each path; report every outcome.
@@ -127,7 +149,7 @@ Below 60 seconds is a stretch performance target, separate from correctness and
 the established qualification limits. After two failed hypotheses for a symptom,
 review the model and require a discriminating next experiment.
 
-Ferrum remains the routine backend after R1; Silicon runs at major sign-off and
+Ferrum remains the routine backend after R1b; Silicon runs at major sign-off and
 final combined qualification. Use one worker and disable Ferrum branch
 parallelism. Commit/push coherent validated chunks. Do not start D1-D6 or schedule
 automation.

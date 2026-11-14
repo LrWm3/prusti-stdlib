@@ -1,0 +1,5737 @@
+{
+  "schema": 1,
+  "date": "2026-11-14",
+  "branch": "stdlib/ownership-inference-m3",
+  "compiler_source_revision": "be1364c7cc749736100bff0b72d8e324558cec7e",
+  "build_revision": "dea19af6d650e4028c66d62809447bcabcbad00e",
+  "pcg_revision": "e54bf675468d44c5e3c0d0e2eca6b7e837e11270",
+  "decision": "Historical reproduction and initial audit complete. M3 rejected for adoption unchanged: incorrect quantified old-state postcondition accepted; invalid quantified expiry context accepted. Combined implementation remains unqualified.",
+  "settings": {
+    "backend": "Silicon",
+    "workers": 1,
+    "program_timeout": 90,
+    "command_timeout": 300,
+    "cache": false,
+    "check_overflows": true,
+    "check_panics": true,
+    "resource_mode_override": false
+  },
+  "tool_versions": {
+    "rustc_version": "rustc 1.99.0-nightly (d453bdd8f 2026-08-14)\nbinary: rustc\ncommit-hash: d453bdd8f092d099bc336f0bda4163f809ad18e0\ncommit-date: 2026-08-14\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0-nightly\nLLVM version: 23.1.0\n",
+    "java_version": "openjdk version \"21.0.2\" 2024-01-16\nOpenJDK Runtime Environment (build 21.0.2+13-58)\nOpenJDK 64-Bit Server VM (build 21.0.2+13-58, mixed mode, sharing)\n",
+    "z3_version": "Z3 version 4.16.0 - 64 bit\n"
+  },
+  "tool_sha256": {
+    "java": "5dda16a9b19944151e5bfc0684f438a6a1a3d2a2e28d19cb5bc0422daeaf185d",
+    "jvm": "469622a2ac334812bed71790e7e8ba9c66e7d04ecee5dc628b4c4df77315bf9f",
+    "viper": "6d11d2b73efe97b97026050f13d966c5ec599cf70d43022346382e065a49cf7c",
+    "z3": "e583c4186a45e72411fa2cb2048401eed03f0f8e5f24694676a8f6271a50b765"
+  },
+  "viper_release_pin": "v-2026-09-01-0834",
+  "silicon_git_revision": "6b540aa4",
+  "binaries": [
+    {
+      "sha256": "8c6507a2308a99b94434bf784b1cd9247aadfac2acc6b89ace0f67579240e0f3",
+      "name": "cargo-prusti"
+    },
+    {
+      "sha256": "9dcabd0d84d1f64ec7ff8e2cd6cef63ebb1b1980a184b49591bdf665e279fa4e",
+      "name": "prusti-driver"
+    },
+    {
+      "sha256": "db8249a3134b16b7f131401b00d06d082cb23288fe7102c53ead3a6555f24aec",
+      "name": "prusti-rustc"
+    },
+    {
+      "sha256": "36da29e6587caf091bc5b6112236bb696cf0cf397dc64d08a98e8d92cde84d86",
+      "name": "prusti-server"
+    },
+    {
+      "sha256": "82a87069f9e1711edfe2a9b5f1f4ef297453457701c077d7f89981ea6c29ccfb",
+      "name": "prusti-server-driver"
+    },
+    {
+      "sha256": "71b74886121d273c2a9328f418ba364e9ac8e953978f4f9beb23c798799b4ad9",
+      "name": "prusti-smt-solver"
+    }
+  ],
+  "suite_checks": 291,
+  "specification_unit_tests": {
+    "passed": 36,
+    "failed": 0,
+    "ignored": 0,
+    "filtered_out": 0
+  },
+  "suites": {
+    "hash": {
+      "expected_count": 51,
+      "actual_count": 51,
+      "exact_coverage": true,
+      "matched": 51,
+      "outcomes": {
+        "passed": 20,
+        "matched rejection": 31
+      },
+      "seconds": 318.39,
+      "longest": {
+        "case": "collection_lookup_pass",
+        "passed": true,
+        "seconds": 16.23
+      },
+      "cases": [
+        {
+          "case": "rust-check",
+          "passed": true,
+          "seconds": 0.36,
+          "outcome": "passed",
+          "expected": {
+            "case": "rust-check",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "spec-library",
+          "passed": true,
+          "seconds": 11.31,
+          "outcome": "passed",
+          "expected": {
+            "case": "spec-library",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-collection_empty_pass",
+          "passed": true,
+          "seconds": 0.15,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-collection_empty_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-collection_get_mut_expiry_pass",
+          "passed": true,
+          "seconds": 0.15,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-collection_get_mut_expiry_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-collection_get_mut_pass",
+          "passed": true,
+          "seconds": 0.15,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-collection_get_mut_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-collection_insert_pass",
+          "passed": true,
+          "seconds": 0.15,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-collection_insert_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-collection_lookup_pass",
+          "passed": true,
+          "seconds": 0.15,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-collection_lookup_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-collection_remove_pass",
+          "passed": true,
+          "seconds": 0.15,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-collection_remove_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-guarded_pure_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-guarded_pure_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-key_laws_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-key_laws_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-key_model_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-key_model_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "collection_empty_pass",
+          "passed": true,
+          "seconds": 5.52,
+          "outcome": "passed",
+          "expected": {
+            "case": "collection_empty_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/collection_empty_pass.rs",
+            "sha256": "52896ba2be1428027663b8b61ccac1d04b65b4a32f682b892610391f2f402e3f",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "collection_get_mut_expiry_pass",
+          "passed": true,
+          "seconds": 14.09,
+          "outcome": "passed",
+          "expected": {
+            "case": "collection_get_mut_expiry_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/collection_get_mut_expiry_pass.rs",
+            "sha256": "992cad15e290b095559d44c51841493d55ffa9ed338101ab3d5d0b2c5e41bc72",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "collection_get_mut_pass",
+          "passed": true,
+          "seconds": 11.2,
+          "outcome": "passed",
+          "expected": {
+            "case": "collection_get_mut_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/collection_get_mut_pass.rs",
+            "sha256": "50e89ff2a658ca832d4aa4625ee7db8266993ce9f09a5e09c810da42b39f12e0",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "collection_insert_pass",
+          "passed": true,
+          "seconds": 13.82,
+          "outcome": "passed",
+          "expected": {
+            "case": "collection_insert_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/collection_insert_pass.rs",
+            "sha256": "7e041c06d805cd9560ceda4ef4794b8debf6bf2d49efd3a7849aeaa4d301c658",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "collection_lookup_pass",
+          "passed": true,
+          "seconds": 16.23,
+          "outcome": "passed",
+          "expected": {
+            "case": "collection_lookup_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/collection_lookup_pass.rs",
+            "sha256": "f1be03bf49d880349c8c6f7654b32254c915dcd3f108f53077bdcdb3e19a8132",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "collection_remove_pass",
+          "passed": true,
+          "seconds": 14.03,
+          "outcome": "passed",
+          "expected": {
+            "case": "collection_remove_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/collection_remove_pass.rs",
+            "sha256": "615967e0feaf4e0c72974250a222fa1a8c3b54d4271e89ed15c7e376c6e78e78",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "guarded_pure_pass",
+          "passed": true,
+          "seconds": 3.5,
+          "outcome": "passed",
+          "expected": {
+            "case": "guarded_pure_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/guarded_pure_pass.rs",
+            "sha256": "6b54771c86ec744ac39739dcf01fefad043ee3a61c4c5202de4e44201ffd099e",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "key_laws_pass",
+          "passed": true,
+          "seconds": 5.38,
+          "outcome": "passed",
+          "expected": {
+            "case": "key_laws_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/key_laws_pass.rs",
+            "sha256": "b95728b772839eaa4a44c8c4abec3ff08b9b89022b225179c07530de16af6e71",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "key_model_pass",
+          "passed": true,
+          "seconds": 6.29,
+          "outcome": "passed",
+          "expected": {
+            "case": "key_model_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/key_model_pass.rs",
+            "sha256": "74e920ac419580a8bb21d16ac611862da4bbe3e661e061849517257dd6fc0013",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "collection_clear_unbound",
+          "passed": true,
+          "seconds": 4.81,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "collection_clear_unbound",
+            "expected": "reject",
+            "annotations": [
+              [
+                7,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/collection_clear_unbound.rs",
+            "sha256": "1ab79e9d3f667cc6daca9ff9432173742aa3b0c1b1d3a26e1bca5795a7f4e86b",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "collection_clear_wrong",
+          "passed": true,
+          "seconds": 5.41,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "collection_clear_wrong",
+            "expected": "reject",
+            "annotations": [
+              [
+                9,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/collection_clear_wrong.rs",
+            "sha256": "7fe6e4cd08dd8f02730650b1d7a75c16bfad9c1c4481e799f7bfbab294b9d934",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "collection_empty_unbound",
+          "passed": true,
+          "seconds": 4.81,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "collection_empty_unbound",
+            "expected": "reject",
+            "annotations": [
+              [
+                7,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/collection_empty_unbound.rs",
+            "sha256": "3ea735ef451f9e2e7455b13cdb42b21d68e5ac612a78477d272c7af883d81670",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "collection_empty_wrong",
+          "passed": true,
+          "seconds": 4.64,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "collection_empty_wrong",
+            "expected": "reject",
+            "annotations": [
+              [
+                6,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/collection_empty_wrong.rs",
+            "sha256": "a1a2f44314e8064ff9e8d37a1a1c012f58b0032a7005535481d0c8fe0c955e94",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "collection_get_mut_expiry_unbound",
+          "passed": true,
+          "seconds": 9.8,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "collection_get_mut_expiry_unbound",
+            "expected": "reject",
+            "annotations": [
+              [
+                8,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/collection_get_mut_expiry_unbound.rs",
+            "sha256": "ef465d131573a85bca5f22675a121f2d4245aaa06088fbedf979cf28db3b5649",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "collection_get_mut_expiry_wrong_frame",
+          "passed": true,
+          "seconds": 14.43,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "collection_get_mut_expiry_wrong_frame",
+            "expected": "reject",
+            "annotations": [
+              [
+                10,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/collection_get_mut_expiry_wrong_frame.rs",
+            "sha256": "79e888e1b93ca2c62179f517a4b684493a48a10607e7adb773570e6719056fcc",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "collection_get_mut_expiry_wrong_length",
+          "passed": true,
+          "seconds": 15.13,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "collection_get_mut_expiry_wrong_length",
+            "expected": "reject",
+            "annotations": [
+              [
+                11,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/collection_get_mut_expiry_wrong_length.rs",
+            "sha256": "c1d37465781375f079c7421006063f2957c9869ed60c8f61f5faf9c1fcea0642",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "collection_get_mut_unbound",
+          "passed": true,
+          "seconds": 7.18,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "collection_get_mut_unbound",
+            "expected": "reject",
+            "annotations": [
+              [
+                9,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/collection_get_mut_unbound.rs",
+            "sha256": "b28a30579a17caae8739ed17ed27787032a54ed9c693f12bfa8fde0317b7bcc4",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "collection_get_mut_wrong_absent",
+          "passed": true,
+          "seconds": 5.94,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "collection_get_mut_wrong_absent",
+            "expected": "reject",
+            "annotations": [
+              [
+                8,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/collection_get_mut_wrong_absent.rs",
+            "sha256": "04a84b3c550e036a83a377f720e50fd3ad2f55b58f5eeb65662db90591305b6e",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "collection_get_mut_wrong_value",
+          "passed": true,
+          "seconds": 5.89,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "collection_get_mut_wrong_value",
+            "expected": "reject",
+            "annotations": [
+              [
+                8,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/collection_get_mut_wrong_value.rs",
+            "sha256": "3842cd6ee399f1332b9bb332181d3aaa1cfb0d5be661023cbeeab3114c529e13",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "collection_insert_wrong_collision",
+          "passed": true,
+          "seconds": 5.98,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "collection_insert_wrong_collision",
+            "expected": "reject",
+            "annotations": [
+              [
+                9,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/collection_insert_wrong_collision.rs",
+            "sha256": "f0e1d8d9ce0de45b5c72e8ea67dffad08afc086d1e28196dfc718b163408b624",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "collection_insert_wrong_frame",
+          "passed": true,
+          "seconds": 5.33,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "collection_insert_wrong_frame",
+            "expected": "reject",
+            "annotations": [
+              [
+                8,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/collection_insert_wrong_frame.rs",
+            "sha256": "f49d20afeb259a353c40896b7c0b19d32739adbf91305bbb49ead0b5de3b69f2",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "collection_insert_wrong_length",
+          "passed": true,
+          "seconds": 5.63,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "collection_insert_wrong_length",
+            "expected": "reject",
+            "annotations": [
+              [
+                9,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/collection_insert_wrong_length.rs",
+            "sha256": "82663a31b20be0559f28db2a32f022d2df62ec22f498404503688a129296c50a",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "collection_insert_wrong_previous",
+          "passed": true,
+          "seconds": 9.11,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "collection_insert_wrong_previous",
+            "expected": "reject",
+            "annotations": [
+              [
+                8,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/collection_insert_wrong_previous.rs",
+            "sha256": "e6848092b059efe856575e8b6a8ba2199f8da4784653fe300cc8fbb3d36106d6",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "collection_len_unbound",
+          "passed": true,
+          "seconds": 7.78,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "collection_len_unbound",
+            "expected": "reject",
+            "annotations": [
+              [
+                7,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/collection_len_unbound.rs",
+            "sha256": "49ea47d2cc094272be1d5e9ca9365f68560e939acc23eb9f56176ee0e55a003a",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "collection_lookup_heterogeneous",
+          "passed": true,
+          "seconds": 7.5,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "collection_lookup_heterogeneous",
+            "expected": "reject",
+            "annotations": [
+              [
+                8,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/collection_lookup_heterogeneous.rs",
+            "sha256": "a29a14dd2d1fa5da026691e8011cf42dfdc061f998a64ffd535df5f99f1e1bc6",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "collection_lookup_unbound",
+          "passed": true,
+          "seconds": 8.37,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "collection_lookup_unbound",
+            "expected": "reject",
+            "annotations": [
+              [
+                7,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/collection_lookup_unbound.rs",
+            "sha256": "14a6f91721d63ffe88bdab43fc09afc934da33b4686939dfcae9270331a4a714",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "collection_lookup_wrong_absent",
+          "passed": true,
+          "seconds": 9.3,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "collection_lookup_wrong_absent",
+            "expected": "reject",
+            "annotations": [
+              [
+                8,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/collection_lookup_wrong_absent.rs",
+            "sha256": "13051af4f59292d46f827013fb5a48a40ee8f7a1e9fa7b6d51cd60a77c09930d",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "collection_lookup_wrong_value",
+          "passed": true,
+          "seconds": 5.93,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "collection_lookup_wrong_value",
+            "expected": "reject",
+            "annotations": [
+              [
+                8,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/collection_lookup_wrong_value.rs",
+            "sha256": "ec8bac75a40c5f346e074e461bbff71456335e9dc71a6e21fbebf104d73fd5f4",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "collection_remove_wrong_frame",
+          "passed": true,
+          "seconds": 6.24,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "collection_remove_wrong_frame",
+            "expected": "reject",
+            "annotations": [
+              [
+                9,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/collection_remove_wrong_frame.rs",
+            "sha256": "37db43dfa6a1d11bc3a5db1dafd29481a802543c4f98554be9cdd9ee5d0683ab",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "collection_remove_wrong_length",
+          "passed": true,
+          "seconds": 5.01,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "collection_remove_wrong_length",
+            "expected": "reject",
+            "annotations": [
+              [
+                10,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/collection_remove_wrong_length.rs",
+            "sha256": "1ff60ce9d5d97fb60bc33c5523a0dc12a8060e544eb9ce631d60384d96c0bed9",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "collection_remove_wrong_previous",
+          "passed": true,
+          "seconds": 5.0,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "collection_remove_wrong_previous",
+            "expected": "reject",
+            "annotations": [
+              [
+                8,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/collection_remove_wrong_previous.rs",
+            "sha256": "5d98f0f54b5fe310f7d7a2259f9100dce36a165adad7bf48c585441926dc9325",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "collection_set_unbound",
+          "passed": true,
+          "seconds": 4.96,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "collection_set_unbound",
+            "expected": "reject",
+            "annotations": [
+              [
+                7,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/collection_set_unbound.rs",
+            "sha256": "c27ec0002e23a6a3ea6626cfd8f483fd22951bdf37ea654e30f619eb9a5ceeea",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "collection_set_wrong",
+          "passed": true,
+          "seconds": 5.54,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "collection_set_wrong",
+            "expected": "reject",
+            "annotations": [
+              [
+                6,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/collection_set_wrong.rs",
+            "sha256": "4a0492fccbd79915d41b8fd7bb138378e9f19717264fc811a5553c18545199f5",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "collection_set_wrong_duplicate",
+          "passed": true,
+          "seconds": 8.89,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "collection_set_wrong_duplicate",
+            "expected": "reject",
+            "annotations": [
+              [
+                8,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/collection_set_wrong_duplicate.rs",
+            "sha256": "d8bfc6e813bd9df73cb25052355f2e883eaca9956042898bcce101f0ecefead5",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "generic_projection_wrong",
+          "passed": true,
+          "seconds": 6.16,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "generic_projection_wrong",
+            "expected": "reject",
+            "annotations": [
+              [
+                5,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/generic_projection_wrong.rs",
+            "sha256": "39b2754d4da534f9bae1f7f12cf61460f2dbb5122f169bea94963ca7ae0712ae",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "guarded_pure_wrong",
+          "passed": true,
+          "seconds": 5.97,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "guarded_pure_wrong",
+            "expected": "reject",
+            "annotations": [
+              [
+                6,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/guarded_pure_wrong.rs",
+            "sha256": "896d934bbee38015da31e02f0bf12dab98d2dcb88143ebaf9e3f86a6a361d50e",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "key_collision_wrong",
+          "passed": true,
+          "seconds": 6.7,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "key_collision_wrong",
+            "expected": "reject",
+            "annotations": [
+              [
+                8,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/key_collision_wrong.rs",
+            "sha256": "57e99cae22d60d015e4aa90d3244d55d478aec7a03de3af49106e51d85fe5830",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "key_snapshot_wrong",
+          "passed": true,
+          "seconds": 5.82,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "key_snapshot_wrong",
+            "expected": "reject",
+            "annotations": [
+              [
+                7,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/key_snapshot_wrong.rs",
+            "sha256": "b1fd31f2296fc3e693970fc0424bf6e0588c8d6f57dfe9d98b713e1ff6334c69",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "projection_eq_bridge_wrong",
+          "passed": true,
+          "seconds": 7.48,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "projection_eq_bridge_wrong",
+            "expected": "reject",
+            "annotations": [
+              [
+                7,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/projection_eq_bridge_wrong.rs",
+            "sha256": "7e48b186845dd18d36b4dc2b2e972deba355d4fee0f738fa5994ed0701319eda",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "unmodeled_equality_wrong",
+          "passed": true,
+          "seconds": 4.72,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "unmodeled_equality_wrong",
+            "expected": "reject",
+            "annotations": [
+              [
+                5,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_hash_spec/src/bin/unmodeled_equality_wrong.rs",
+            "sha256": "877e0070067810aa66c2f812b4224d8d9410d9a1666e0fb55a4ab060c1b1e65d",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        }
+      ]
+    },
+    "extern": {
+      "expected_count": 97,
+      "actual_count": 97,
+      "exact_coverage": true,
+      "matched": 97,
+      "outcomes": {
+        "passed": 34,
+        "matched rejection": 62,
+        "matched unsupported rejection": 1
+      },
+      "seconds": 344.46,
+      "longest": {
+        "case": "traits_pass",
+        "passed": true,
+        "seconds": 11.52
+      },
+      "cases": [
+        {
+          "case": "rust-check",
+          "passed": true,
+          "seconds": 0.46,
+          "outcome": "passed",
+          "expected": {
+            "case": "rust-check",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "rust-core-only",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "rust-core-only",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "core-only",
+          "passed": true,
+          "seconds": 8.18,
+          "outcome": "passed",
+          "expected": {
+            "case": "core-only",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "spec-library",
+          "passed": true,
+          "seconds": 7.68,
+          "outcome": "passed",
+          "expected": {
+            "case": "spec-library",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-conditional_expiry_pass",
+          "passed": true,
+          "seconds": 0.15,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-conditional_expiry_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-conditional_inherent_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-conditional_inherent_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-conditional_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-conditional_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-conditional_poly_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-conditional_poly_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-conditional_projection_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-conditional_projection_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-cross_crate_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-cross_crate_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-iterator_capability_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-iterator_capability_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-lifetimes_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-lifetimes_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-refinement_borrowed_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-refinement_borrowed_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-refinement_lifetime_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-refinement_lifetime_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-refinement_mutable_frame_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-refinement_mutable_frame_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-refinement_mutable_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-refinement_mutable_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-refinement_owned_noncopy_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-refinement_owned_noncopy_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-traits_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-traits_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "conditional_expiry_pass",
+          "passed": true,
+          "seconds": 4.29,
+          "outcome": "passed",
+          "expected": {
+            "case": "conditional_expiry_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/conditional_expiry_pass.rs",
+            "sha256": "58b80f0a734b45e46e70b262155052ce196511ad6532251460f034ae00f70fc0",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "conditional_inherent_pass",
+          "passed": true,
+          "seconds": 3.98,
+          "outcome": "passed",
+          "expected": {
+            "case": "conditional_inherent_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/conditional_inherent_pass.rs",
+            "sha256": "342984d4087d7a5aac5dda6f0fe930c9513c8d712d7f83140238c3366f230f51",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "conditional_pass",
+          "passed": true,
+          "seconds": 5.32,
+          "outcome": "passed",
+          "expected": {
+            "case": "conditional_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/conditional_pass.rs",
+            "sha256": "bd49c78ac233fd5a0c20017a9ee58878729e3564ca834e653cbc9fdb9bedee4a",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "conditional_poly_pass",
+          "passed": true,
+          "seconds": 6.49,
+          "outcome": "passed",
+          "expected": {
+            "case": "conditional_poly_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/conditional_poly_pass.rs",
+            "sha256": "93b1c45a5f341cb2ac63c9f294d4bdd621ac0fbc3088e8afffb015b63eb0bc91",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "conditional_projection_pass",
+          "passed": true,
+          "seconds": 6.05,
+          "outcome": "passed",
+          "expected": {
+            "case": "conditional_projection_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/conditional_projection_pass.rs",
+            "sha256": "d39a261f5316caa09c3decc5e2bda8c8b141b73e551640f396af06e845562497",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "cross_crate_pass",
+          "passed": true,
+          "seconds": 7.45,
+          "outcome": "passed",
+          "expected": {
+            "case": "cross_crate_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/cross_crate_pass.rs",
+            "sha256": "720daeed72cc1457763a4c79aff5d3adf79cb51daa101f7d203c2cec5117f0ef",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "iterator_capability_pass",
+          "passed": true,
+          "seconds": 8.7,
+          "outcome": "passed",
+          "expected": {
+            "case": "iterator_capability_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/iterator_capability_pass.rs",
+            "sha256": "ccd81ea3fc393bdc2a62ef127d2742aedea0ba19c7b0f9b61179a7eb20022596",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "lifetimes_pass",
+          "passed": true,
+          "seconds": 6.74,
+          "outcome": "passed",
+          "expected": {
+            "case": "lifetimes_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/lifetimes_pass.rs",
+            "sha256": "1328f759db4f5f84f94864599668a668bfed52bf4ea2711c470c33c4d00583ea",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "pass",
+          "passed": true,
+          "seconds": 9.38,
+          "outcome": "passed",
+          "expected": {
+            "case": "pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/pass.rs",
+            "sha256": "0758ebb52bae85cdcc262fbee4cf761347572a9cd59798d50b61ee3dac304119",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "refinement_borrowed_pass",
+          "passed": true,
+          "seconds": 5.6,
+          "outcome": "passed",
+          "expected": {
+            "case": "refinement_borrowed_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/refinement_borrowed_pass.rs",
+            "sha256": "c8d7e01cf4100c7477456cb73fb71b9dbd7b17e353c5a400704b9f109f58a698",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "refinement_lifetime_pass",
+          "passed": true,
+          "seconds": 4.6,
+          "outcome": "passed",
+          "expected": {
+            "case": "refinement_lifetime_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/refinement_lifetime_pass.rs",
+            "sha256": "b18c524b1ccb2751cbc599c40438175caadd736db096f0301b6b68d06ba9c26e",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "refinement_mutable_frame_pass",
+          "passed": true,
+          "seconds": 5.74,
+          "outcome": "passed",
+          "expected": {
+            "case": "refinement_mutable_frame_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/refinement_mutable_frame_pass.rs",
+            "sha256": "1f08c602b0d227d66d398169b1d2e1fbc8ffc4b63b5cf5f9cab55c06e4f3c256",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "refinement_mutable_pass",
+          "passed": true,
+          "seconds": 6.12,
+          "outcome": "passed",
+          "expected": {
+            "case": "refinement_mutable_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/refinement_mutable_pass.rs",
+            "sha256": "e00b3f64f6e57867ea08ef277e19ceceba5fc1711f42c0741b569692bdecb3f4",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "refinement_owned_noncopy_pass",
+          "passed": true,
+          "seconds": 6.37,
+          "outcome": "passed",
+          "expected": {
+            "case": "refinement_owned_noncopy_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/refinement_owned_noncopy_pass.rs",
+            "sha256": "3131cdfb7793acec32ad5771223abcfad3aca15d0bbe0edc16ffb1dfcb702ea6",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "traits_pass",
+          "passed": true,
+          "seconds": 11.52,
+          "outcome": "passed",
+          "expected": {
+            "case": "traits_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/traits_pass.rs",
+            "sha256": "3caccdcf9163e20dfd0eb2b3c43edfd741ed9b93787851004311cab97c7d165f",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "bounds_stronger_associated",
+          "passed": true,
+          "seconds": 0.56,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "bounds_stronger_associated",
+            "expected": "reject",
+            "annotations": [
+              [
+                9,
+                "incorrect",
+                "Invalid external specification"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/bounds_stronger_associated.rs",
+            "sha256": "645b9292d5ceaef82851fea60c3a5081f798be09edfc74a6139ef95bc3e787db",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: invalid specification] Invalid external specification"
+          ]
+        },
+        {
+          "case": "bounds_stronger_lifetime",
+          "passed": true,
+          "seconds": 0.46,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "bounds_stronger_lifetime",
+            "expected": "reject",
+            "annotations": [
+              [
+                3,
+                "incorrect",
+                "Invalid external specification"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/bounds_stronger_lifetime.rs",
+            "sha256": "1662595b8f4bd8df79947f50b72f82f1dc84ec2902078a8878ce1c2701eb839c",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: invalid specification] Invalid external specification"
+          ]
+        },
+        {
+          "case": "bounds_stronger_outlives",
+          "passed": true,
+          "seconds": 0.45,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "bounds_stronger_outlives",
+            "expected": "reject",
+            "annotations": [
+              [
+                3,
+                "incorrect",
+                "Invalid external specification"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/bounds_stronger_outlives.rs",
+            "sha256": "3e3aab2fb81662031e0c7cf7e7a427668aa9dd2249de376b43f08cd2de55ffa7",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: invalid specification] Invalid external specification"
+          ]
+        },
+        {
+          "case": "bounds_stronger_supertrait",
+          "passed": true,
+          "seconds": 0.5,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "bounds_stronger_supertrait",
+            "expected": "reject",
+            "annotations": [
+              [
+                6,
+                "incorrect",
+                "Invalid external specification"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/bounds_stronger_supertrait.rs",
+            "sha256": "9c231b0b88aee6c99bacb5be3efa9d274b19713579bbc7aecccc4a77469f9f72",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: invalid specification] Invalid external specification"
+          ]
+        },
+        {
+          "case": "bounds_stronger_trait",
+          "passed": true,
+          "seconds": 0.45,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "bounds_stronger_trait",
+            "expected": "reject",
+            "annotations": [
+              [
+                3,
+                "incorrect",
+                "Invalid external specification"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/bounds_stronger_trait.rs",
+            "sha256": "322373019d280e9da78d9e3dd9d658ad5da94e95a7f4de72ce00cdc3c5903a23",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: invalid specification] Invalid external specification"
+          ]
+        },
+        {
+          "case": "conditional_equal_lifetimes",
+          "passed": true,
+          "seconds": 6.2,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "conditional_equal_lifetimes",
+            "expected": "reject",
+            "annotations": [
+              [
+                6,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/conditional_equal_lifetimes.rs",
+            "sha256": "e81f78b67d2e8cd03d490a21d7e62e28c1ed0c1ff7093b6af633e0838bf10781",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "conditional_expiry_closure",
+          "passed": true,
+          "seconds": 0.51,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "conditional_expiry_closure",
+            "expected": "reject",
+            "annotations": [
+              [
+                3,
+                "parse",
+                "conditional expiry is not supported in closure specifications"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/conditional_expiry_closure.rs",
+            "sha256": "3c07984c1b63f885e5a9ae4b9d99b7735f955e126c1d4bd6aeab7a5c3717ad95",
+            "historical_61": true
+          },
+          "errors": [
+            "conditional expiry is not supported in closure specifications"
+          ]
+        },
+        {
+          "case": "conditional_expiry_lifetime",
+          "passed": true,
+          "seconds": 7.11,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "conditional_expiry_lifetime",
+            "expected": "reject",
+            "annotations": [
+              [
+                6,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/conditional_expiry_lifetime.rs",
+            "sha256": "63853edafff6297e9cdd40f0dfa10440af1fb6a1ef8219325813ea4e80dce632",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "conditional_expiry_no_wand",
+          "passed": true,
+          "seconds": 5.53,
+          "outcome": "matched unsupported rejection",
+          "expected": {
+            "case": "conditional_expiry_no_wand",
+            "expected": "reject",
+            "annotations": [
+              [
+                3,
+                "unsupported",
+                "conditional expiry requires exactly one borrow wand"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/conditional_expiry_no_wand.rs",
+            "sha256": "6fbf5954beeea79d32b0495e51482df5716b8a684686c5edefe837186a083339",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: unsupported feature] conditional expiry requires exactly one borrow wand"
+          ]
+        },
+        {
+          "case": "conditional_expiry_pre_wrong",
+          "passed": true,
+          "seconds": 6.32,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "conditional_expiry_pre_wrong",
+            "expected": "reject",
+            "annotations": [
+              [
+                7,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/conditional_expiry_pre_wrong.rs",
+            "sha256": "04723f7153cdc10690a63bd893f7543cfed66f6ee4a7b2a2abcb34486fcd1a57",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "conditional_expiry_unbound",
+          "passed": true,
+          "seconds": 6.88,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "conditional_expiry_unbound",
+            "expected": "reject",
+            "annotations": [
+              [
+                7,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/conditional_expiry_unbound.rs",
+            "sha256": "614c9c8f702d0648db7c0920e3d022ec57faaa263b9b7a244b71de0b0605192e",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "conditional_expiry_wrong",
+          "passed": true,
+          "seconds": 3.93,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "conditional_expiry_wrong",
+            "expected": "reject",
+            "annotations": [
+              [
+                7,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/conditional_expiry_wrong.rs",
+            "sha256": "6fbcf7a0f3a1d74eebe7e47301df9e0af0bcdde527c107a6f8008f5f706d5146",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "conditional_generic_lifetime",
+          "passed": true,
+          "seconds": 3.72,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "conditional_generic_lifetime",
+            "expected": "reject",
+            "annotations": [
+              [
+                6,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/conditional_generic_lifetime.rs",
+            "sha256": "0ed764d55b91e0beecac9b7219cc516d81b98a45c617b67d81c86f12c82f1a92",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "conditional_inherent_lifetime",
+          "passed": true,
+          "seconds": 3.61,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "conditional_inherent_lifetime",
+            "expected": "reject",
+            "annotations": [
+              [
+                6,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/conditional_inherent_lifetime.rs",
+            "sha256": "fd30062bb07108a91d889e2ad1d88012df87b29f42f5189a39415d6042332c18",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "conditional_inherent_pre_wrong",
+          "passed": true,
+          "seconds": 3.62,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "conditional_inherent_pre_wrong",
+            "expected": "reject",
+            "annotations": [
+              [
+                6,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/conditional_inherent_pre_wrong.rs",
+            "sha256": "26bedaf21909cd80fadd647264dd94a9d072512e81c5cbada450776cce44ff7d",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "conditional_inherent_unbound",
+          "passed": true,
+          "seconds": 3.66,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "conditional_inherent_unbound",
+            "expected": "reject",
+            "annotations": [
+              [
+                6,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/conditional_inherent_unbound.rs",
+            "sha256": "5c595714d5d1fc5f3c9bb08aee38c2052e09ba20fd78f86ffb4a2a68e85ad22e",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "conditional_lifetime",
+          "passed": true,
+          "seconds": 3.71,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "conditional_lifetime",
+            "expected": "reject",
+            "annotations": [
+              [
+                6,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/conditional_lifetime.rs",
+            "sha256": "8187a0cc35ddaed2ff18cee89a9810aaf1cc286bdaf454d9b80bc3f4bd06b682",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "conditional_lifetime_bound",
+          "passed": true,
+          "seconds": 3.77,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "conditional_lifetime_bound",
+            "expected": "reject",
+            "annotations": [
+              [
+                8,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/conditional_lifetime_bound.rs",
+            "sha256": "f1495baf1a432d7450994c5eeb22e6ad345101307a03a16d887b6b15a2918e06",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "conditional_nested_lifetime",
+          "passed": true,
+          "seconds": 4.5,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "conditional_nested_lifetime",
+            "expected": "reject",
+            "annotations": [
+              [
+                6,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/conditional_nested_lifetime.rs",
+            "sha256": "cbd0067fb714a632af3697e01650f34b7788ea961a74f8d3238e5b8bc2d9878e",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "conditional_poly_static",
+          "passed": true,
+          "seconds": 3.77,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "conditional_poly_static",
+            "expected": "reject",
+            "annotations": [
+              [
+                6,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/conditional_poly_static.rs",
+            "sha256": "88ae3cbe0b81864297947b0a678e93528fd198506e0e883f0857dc9a30c88d3a",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "conditional_poly_unbound",
+          "passed": true,
+          "seconds": 4.91,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "conditional_poly_unbound",
+            "expected": "reject",
+            "annotations": [
+              [
+                6,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/conditional_poly_unbound.rs",
+            "sha256": "04cde302bf605c45efdafa5f9f7a15c3743d52ccda34861dc2967777f29a20c1",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "conditional_pre_wrong",
+          "passed": true,
+          "seconds": 6.02,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "conditional_pre_wrong",
+            "expected": "reject",
+            "annotations": [
+              [
+                7,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/conditional_pre_wrong.rs",
+            "sha256": "fee4eba077e821e4dec8d181e6a4b6304d947e74066915fde5466c40ff7365d7",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "conditional_projection_different",
+          "passed": true,
+          "seconds": 6.09,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "conditional_projection_different",
+            "expected": "reject",
+            "annotations": [
+              [
+                6,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/conditional_projection_different.rs",
+            "sha256": "aedf7c1f8726968a579da87b39127709c614e9187bd664adaf1d3f97176a73d2",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "conditional_projection_lifetime",
+          "passed": true,
+          "seconds": 6.03,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "conditional_projection_lifetime",
+            "expected": "reject",
+            "annotations": [
+              [
+                6,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/conditional_projection_lifetime.rs",
+            "sha256": "ec5ee27fe385b4894e13e068f7055be910f3e914c93e864ae8b915ab0e9bfb64",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "conditional_projection_unbound",
+          "passed": true,
+          "seconds": 6.5,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "conditional_projection_unbound",
+            "expected": "reject",
+            "annotations": [
+              [
+                7,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/conditional_projection_unbound.rs",
+            "sha256": "c2e50232daf84db7dbbfd9ea70001e1979103bff54bf79fa086b0ba07ceb2ebd",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "conditional_sized_static",
+          "passed": true,
+          "seconds": 6.12,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "conditional_sized_static",
+            "expected": "reject",
+            "annotations": [
+              [
+                6,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/conditional_sized_static.rs",
+            "sha256": "1484e010e7a4e6b651cd42f4cddaf005ae7e978392470d00a084a899a9ed117f",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "conditional_state_wrong",
+          "passed": true,
+          "seconds": 6.35,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "conditional_state_wrong",
+            "expected": "reject",
+            "annotations": [
+              [
+                8,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/conditional_state_wrong.rs",
+            "sha256": "15e12d6df6ca86cf64842db3317fe8f436b851416d593d79f37ad02a11f026d1",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "conditional_unbound",
+          "passed": true,
+          "seconds": 6.32,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "conditional_unbound",
+            "expected": "reject",
+            "annotations": [
+              [
+                6,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/conditional_unbound.rs",
+            "sha256": "3cc7082198ac47486f5b32e98730bae27f1c8a54b15df10c17c2519b3502d28a",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "cross_crate_wrong_value",
+          "passed": true,
+          "seconds": 4.12,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "cross_crate_wrong_value",
+            "expected": "reject",
+            "annotations": [
+              [
+                10,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/cross_crate_wrong_value.rs",
+            "sha256": "be91437cbef3e9105f642807d71af8e713d220a658cad65c0306b7caeeb1843b",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "duplicate_bundled_replace",
+          "passed": true,
+          "seconds": 1.06,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "duplicate_bundled_replace",
+            "expected": "reject",
+            "annotations": [
+              [
+                3,
+                "incorrect",
+                "duplicate specification for `std::mem::replace` from crate `duplicate_bundled_replace` and `prusti_contracts`"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/duplicate_bundled_replace.rs",
+            "sha256": "72178782f0f86d70137b62c1a873423d2cc72680ef459ad7e078055977c92c99",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: invalid specification] duplicate specification for `std::mem::replace` from crate `duplicate_bundled_replace` and `prusti_contracts`"
+          ]
+        },
+        {
+          "case": "duplicate_imported",
+          "passed": true,
+          "seconds": 0.46,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "duplicate_imported",
+            "expected": "reject",
+            "annotations": [
+              [
+                8,
+                "incorrect",
+                "duplicate specification for `std::option::Option::<T>::unwrap` from crate `duplicate_imported` and `prusti_contracts`"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/duplicate_imported.rs",
+            "sha256": "d6090e8187a950c3547c001543616a6f9a1bc4c6ca83452b8a8cb65493e7808d",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: invalid specification] duplicate specification for `std::option::Option::<T>::unwrap` from crate `duplicate_imported` and `prusti_contracts`"
+          ]
+        },
+        {
+          "case": "duplicate_imported_trait",
+          "passed": true,
+          "seconds": 0.51,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "duplicate_imported_trait",
+            "expected": "reject",
+            "annotations": [
+              [
+                8,
+                "incorrect",
+                "duplicate specification for `target_api::Bounded::bounded` from crate `duplicate_imported_trait` and `stdlib_specs`"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/duplicate_imported_trait.rs",
+            "sha256": "a9dd1d1e5798c66d9b5ae5d5e3421234bf9f1e76f4eb5661121c1333afbf0457",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: invalid specification] duplicate specification for `target_api::Bounded::bounded` from crate `duplicate_imported_trait` and `stdlib_specs`"
+          ]
+        },
+        {
+          "case": "duplicate_local",
+          "passed": true,
+          "seconds": 0.46,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "duplicate_local",
+            "expected": "reject",
+            "annotations": [
+              [
+                14,
+                "incorrect",
+                "duplicate specification for target_api::shared"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/duplicate_local.rs",
+            "sha256": "db9cd07397d263994f0e32225b962009e5c2c4e70d6ceb40d57ac8a6851c8e67",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: invalid specification] duplicate specification for target_api::shared"
+          ]
+        },
+        {
+          "case": "false_assert",
+          "passed": true,
+          "seconds": 3.41,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "false_assert",
+            "expected": "reject",
+            "annotations": [
+              [
+                5,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/false_assert.rs",
+            "sha256": "28a3d4e3164931236a78ed294087742115122773e1afaae2636dbe36bf369275",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "iterator_capability_lifetime",
+          "passed": true,
+          "seconds": 3.51,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "iterator_capability_lifetime",
+            "expected": "reject",
+            "annotations": [
+              [
+                16,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/iterator_capability_lifetime.rs",
+            "sha256": "313feb2687d1e799176981d75d2676cc19feb9251f66699e97d816fc9cc68ed7",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "iterator_capability_unbound",
+          "passed": true,
+          "seconds": 4.35,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "iterator_capability_unbound",
+            "expected": "reject",
+            "annotations": [
+              [
+                8,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/iterator_capability_unbound.rs",
+            "sha256": "48953cd804d5a0b0b3712f071a98136d0baa5a8d5bf75d5a46e266c9ffb315ad",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "iterator_capability_wrong",
+          "passed": true,
+          "seconds": 4.66,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "iterator_capability_wrong",
+            "expected": "reject",
+            "annotations": [
+              [
+                8,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/iterator_capability_wrong.rs",
+            "sha256": "141af16cc38c2613116eab7e0b369eb8720c320e26143015d848607dec4b3bce",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "lifetime_early_bound",
+          "passed": true,
+          "seconds": 0.46,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "lifetime_early_bound",
+            "expected": "reject",
+            "annotations": [
+              [
+                3,
+                "incorrect",
+                "Invalid external specification"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/lifetime_early_bound.rs",
+            "sha256": "76db2eaacff51a57ae711e7feb62329c6084c7aca4ee1ad926b39d3e92fbad0b",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: invalid specification] Invalid external specification"
+          ]
+        },
+        {
+          "case": "lifetime_merged",
+          "passed": true,
+          "seconds": 0.56,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "lifetime_merged",
+            "expected": "reject",
+            "annotations": [
+              [
+                5,
+                "incorrect",
+                "Invalid external specification"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/lifetime_merged.rs",
+            "sha256": "53dd842cd6673b40d743165e602a3842000704140baa89a0f0d5c03ed4a7e9e9",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: invalid specification] Invalid external specification"
+          ]
+        },
+        {
+          "case": "lifetime_nested",
+          "passed": true,
+          "seconds": 0.51,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "lifetime_nested",
+            "expected": "reject",
+            "annotations": [
+              [
+                4,
+                "incorrect",
+                "Invalid external specification"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/lifetime_nested.rs",
+            "sha256": "5ca860a7e2f698137f2032a0c662341c30c2014c3f79cf8dd02adb870741392f",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: invalid specification] Invalid external specification"
+          ]
+        },
+        {
+          "case": "lifetime_shortened_output",
+          "passed": true,
+          "seconds": 0.56,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "lifetime_shortened_output",
+            "expected": "reject",
+            "annotations": [
+              [
+                3,
+                "incorrect",
+                "Invalid external specification"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/lifetime_shortened_output.rs",
+            "sha256": "c954b57994ddfcfea8407d627b47834d52663e7ae43d0ec6ec81ee675341848f",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: invalid specification] Invalid external specification"
+          ]
+        },
+        {
+          "case": "lifetime_static_input",
+          "passed": true,
+          "seconds": 0.46,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "lifetime_static_input",
+            "expected": "reject",
+            "annotations": [
+              [
+                3,
+                "incorrect",
+                "Invalid external specification"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/lifetime_static_input.rs",
+            "sha256": "0824c3f9ba589a6896da3814fa56db25fa4c561aa43b67abfb57b28b7fc1d936",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: invalid specification] Invalid external specification"
+          ]
+        },
+        {
+          "case": "overflow",
+          "passed": true,
+          "seconds": 3.82,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "overflow",
+            "expected": "reject",
+            "annotations": [
+              [
+                4,
+                "error",
+                "operation may overflow"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/overflow.rs",
+            "sha256": "b82626e5ce90521d20744679d17e82e94ae6945ea1e2da36b40d326766a2b484",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] operation may overflow"
+          ]
+        },
+        {
+          "case": "pledge_wrong_post",
+          "passed": true,
+          "seconds": 3.87,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "pledge_wrong_post",
+            "expected": "reject",
+            "annotations": [
+              [
+                9,
+                "error",
+                "pledge postcondition might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/pledge_wrong_post.rs",
+            "sha256": "b460aa4df3d2f22891ed193b6eedc1cf3804caa20c4c78dbe9b0b8a101da65a0",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] pledge postcondition might not hold"
+          ]
+        },
+        {
+          "case": "refinement_borrowed_wrong",
+          "passed": true,
+          "seconds": 5.07,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "refinement_borrowed_wrong",
+            "expected": "reject",
+            "annotations": [
+              [
+                10,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/refinement_borrowed_wrong.rs",
+            "sha256": "83dc2ec1630d09d4bbd837cd2862fb717ddb2c78e852aa2650a5aef18916d867",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "refinement_const_wrong",
+          "passed": true,
+          "seconds": 6.61,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "refinement_const_wrong",
+            "expected": "reject",
+            "annotations": [
+              [
+                6,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/refinement_const_wrong.rs",
+            "sha256": "fbaa309e8f52a794d5177da0d70a235b43c3b7d3e221013df9db6420e70545cf",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "refinement_lifetime_generic_wrong",
+          "passed": true,
+          "seconds": 6.7,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "refinement_lifetime_generic_wrong",
+            "expected": "reject",
+            "annotations": [
+              [
+                5,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/refinement_lifetime_generic_wrong.rs",
+            "sha256": "509cfee7b5fb60412be56a1f44fcc54988176837a822b666cccb85dc2188efc0",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "refinement_lifetime_stronger_pre",
+          "passed": true,
+          "seconds": 5.99,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "refinement_lifetime_stronger_pre",
+            "expected": "reject",
+            "annotations": [
+              [
+                6,
+                "error",
+                "the implementation's precondition may be stronger than the trait method's"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/refinement_lifetime_stronger_pre.rs",
+            "sha256": "e2d87bc1e4dfb515a049088ccb98b737329757378b47d5622d3ce022ffc519ca",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] the implementation's precondition may be stronger than the trait method's"
+          ]
+        },
+        {
+          "case": "refinement_mutable_wrong_post",
+          "passed": true,
+          "seconds": 6.05,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "refinement_mutable_wrong_post",
+            "expected": "reject",
+            "annotations": [
+              [
+                9,
+                "error",
+                "the implementation's postcondition may be weaker than the trait method's"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/refinement_mutable_wrong_post.rs",
+            "sha256": "875c783b26f2ba2de3acfe1dc926eb805e7ad0c4ddb04e7a3c1a9104842a4d44",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] the implementation's postcondition may be weaker than the trait method's"
+          ]
+        },
+        {
+          "case": "refinement_mutable_wrong_state",
+          "passed": true,
+          "seconds": 7.57,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "refinement_mutable_wrong_state",
+            "expected": "reject",
+            "annotations": [
+              [
+                6,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/refinement_mutable_wrong_state.rs",
+            "sha256": "4c994bb78180c0c0dd86b7346c8f9b96a4d57254db1da5149d5c7f2c98b6b907",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "refinement_stronger_pre",
+          "passed": true,
+          "seconds": 5.24,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "refinement_stronger_pre",
+            "expected": "reject",
+            "annotations": [
+              [
+                10,
+                "error",
+                "the implementation's precondition may be stronger than the trait method's"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/refinement_stronger_pre.rs",
+            "sha256": "2911dec313376dfaaf1521a4b0d68da30c63ceae7ed97ad00de3713dc051faee",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] the implementation's precondition may be stronger than the trait method's"
+          ]
+        },
+        {
+          "case": "refinement_weaker_post",
+          "passed": true,
+          "seconds": 5.23,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "refinement_weaker_post",
+            "expected": "reject",
+            "annotations": [
+              [
+                11,
+                "error",
+                "the implementation's postcondition may be weaker than the trait method's"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/refinement_weaker_post.rs",
+            "sha256": "ffa07f19380ba1a416ff3084e9081b105f1eac7265574f7659f9cce1640204ca",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] the implementation's postcondition may be weaker than the trait method's"
+          ]
+        },
+        {
+          "case": "replace_wrong_destination",
+          "passed": true,
+          "seconds": 4.94,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "replace_wrong_destination",
+            "expected": "reject",
+            "annotations": [
+              [
+                11,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/replace_wrong_destination.rs",
+            "sha256": "135d597b9c5abc458b3fb2e13b20909cfa98e6a5601472e6e74736a124c9ed27",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "replace_wrong_return",
+          "passed": true,
+          "seconds": 3.87,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "replace_wrong_return",
+            "expected": "reject",
+            "annotations": [
+              [
+                11,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/replace_wrong_return.rs",
+            "sha256": "9607877a019e7b3e892ed98231fce5ddf6f068297dd129ba105f017460baa135",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "signature_coercion",
+          "passed": true,
+          "seconds": 0.46,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "signature_coercion",
+            "expected": "reject",
+            "annotations": [
+              [
+                5,
+                "incorrect",
+                "Invalid external specification"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/signature_coercion.rs",
+            "sha256": "21479126f1e3a40cb38330fcbf8a3e8b9ce265af8a7ad209feb698c11c3f7f25",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: invalid specification] Invalid external specification"
+          ]
+        },
+        {
+          "case": "signature_generics",
+          "passed": true,
+          "seconds": 0.56,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "signature_generics",
+            "expected": "reject",
+            "annotations": [
+              [
+                3,
+                "incorrect",
+                "Invalid external specification"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/signature_generics.rs",
+            "sha256": "002e9d5becf014cb98d54b4298ab6bcf1f2d3a9a973346438a108983cbb5e6c3",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: invalid specification] Invalid external specification"
+          ]
+        },
+        {
+          "case": "signature_return_coercion",
+          "passed": true,
+          "seconds": 0.46,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "signature_return_coercion",
+            "expected": "reject",
+            "annotations": [
+              [
+                3,
+                "incorrect",
+                "Invalid external specification"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/signature_return_coercion.rs",
+            "sha256": "d7452cee1e8a8f263681143951097971299bb6835f5a8fa15ff4297f6f2482c3",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: invalid specification] Invalid external specification"
+          ]
+        },
+        {
+          "case": "signature_specialized",
+          "passed": true,
+          "seconds": 0.46,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "signature_specialized",
+            "expected": "reject",
+            "annotations": [
+              [
+                8,
+                "incorrect",
+                "Invalid external specification"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/signature_specialized.rs",
+            "sha256": "b45a16170640a5cebb8dbe94e16824b83f8fea85d9b3e922af27602cf805c9f0",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: invalid specification] Invalid external specification"
+          ]
+        },
+        {
+          "case": "trait_generic_refinement",
+          "passed": true,
+          "seconds": 3.46,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "trait_generic_refinement",
+            "expected": "reject",
+            "annotations": [
+              [
+                8,
+                "error",
+                "postcondition might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/trait_generic_refinement.rs",
+            "sha256": "9bb15b73f017f279e217e084632c6f195d5d1703245175c66b1d00adbad624c0",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] postcondition might not hold"
+          ]
+        },
+        {
+          "case": "trait_wrong_value",
+          "passed": true,
+          "seconds": 3.67,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "trait_wrong_value",
+            "expected": "reject",
+            "annotations": [
+              [
+                8,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/trait_wrong_value.rs",
+            "sha256": "76aa248ee1d960d3f9bfbe9203b6c03e1a2fda014e536f42edac0a4a0fa4e79a",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "unwrap_none",
+          "passed": true,
+          "seconds": 3.89,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "unwrap_none",
+            "expected": "reject",
+            "annotations": [
+              [
+                4,
+                "error",
+                "precondition might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/unwrap_none.rs",
+            "sha256": "0fa586f5f27553dd838e630d6b0178c34ed732cebcebff08982722a10d77fa0f",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] precondition might not hold"
+          ]
+        },
+        {
+          "case": "unwrap_unknown",
+          "passed": true,
+          "seconds": 3.55,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "unwrap_unknown",
+            "expected": "reject",
+            "annotations": [
+              [
+                4,
+                "error",
+                "precondition might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/unwrap_unknown.rs",
+            "sha256": "876f5b57c1adc331dd5d6acf9d14cbb7e00c5bfd5af71b515223f0dafaa489b2",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] precondition might not hold"
+          ]
+        },
+        {
+          "case": "unwrap_wrong_value",
+          "passed": true,
+          "seconds": 3.98,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "unwrap_wrong_value",
+            "expected": "reject",
+            "annotations": [
+              [
+                10,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_extern_spec/src/bin/unwrap_wrong_value.rs",
+            "sha256": "4ff00b5cff492917fb375ca52192fd354a09ea1658b1db63059f3386b4f83039",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        }
+      ]
+    },
+    "iterator": {
+      "expected_count": 66,
+      "actual_count": 66,
+      "exact_coverage": true,
+      "matched": 66,
+      "outcomes": {
+        "passed": 34,
+        "matched rejection": 25,
+        "matched unsupported rejection": 7
+      },
+      "seconds": 377.82,
+      "historical_61": {
+        "count": 61,
+        "matched": 61
+      },
+      "five_additions": {
+        "count": 5,
+        "matched": 5
+      },
+      "longest": {
+        "case": "spec-library",
+        "passed": true,
+        "seconds": 25.1
+      },
+      "cases": [
+        {
+          "case": "rust-check",
+          "passed": true,
+          "seconds": 0.41,
+          "outcome": "passed",
+          "expected": {
+            "case": "rust-check",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "spec-library",
+          "passed": true,
+          "seconds": 25.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "spec-library",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-borrowed_direct_pass",
+          "passed": true,
+          "seconds": 0.2,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-borrowed_direct_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-borrowed_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-borrowed_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-early_break_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-early_break_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-exact_length_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-exact_length_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-modeled_for_pass",
+          "passed": true,
+          "seconds": 0.15,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-modeled_for_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-mut_direct_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-mut_direct_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-native_for_extra_next_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-native_for_extra_next_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-native_for_nested_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-native_for_nested_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-native_for_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-native_for_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-owned_pass",
+          "passed": true,
+          "seconds": 0.15,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-owned_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-shared_count_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-shared_count_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-shared_direct_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-shared_direct_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-shared_for_source_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-shared_for_source_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-shared_into_iter_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-shared_into_iter_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-shared_loop_direct_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-shared_loop_direct_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-shared_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-shared_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "borrowed_direct_pass",
+          "passed": true,
+          "seconds": 10.12,
+          "outcome": "passed",
+          "expected": {
+            "case": "borrowed_direct_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/borrowed_direct_pass.rs",
+            "sha256": "6dfe0cd1dac52251f3ed55814a22c8409a033f13ad1b4247001af0feb516ee75",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "borrowed_pass",
+          "passed": true,
+          "seconds": 9.43,
+          "outcome": "passed",
+          "expected": {
+            "case": "borrowed_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/borrowed_pass.rs",
+            "sha256": "f18c3fb9b364521d86fbe9d1091013ec1ac7ba75266b9dbdbb503403f2ddedb2",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "early_break_pass",
+          "passed": true,
+          "seconds": 10.39,
+          "outcome": "passed",
+          "expected": {
+            "case": "early_break_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/early_break_pass.rs",
+            "sha256": "d4792f11dc49e85e2d9493241790a957bee49f940a7378c4236bb2cf8fb8f63a",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "exact_length_pass",
+          "passed": true,
+          "seconds": 10.32,
+          "outcome": "passed",
+          "expected": {
+            "case": "exact_length_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/exact_length_pass.rs",
+            "sha256": "ddf8ba8664fc9f593834717708daffef0d04cf4e563c2c2f10e542db99f40e82",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "modeled_for_pass",
+          "passed": true,
+          "seconds": 4.54,
+          "outcome": "passed",
+          "expected": {
+            "case": "modeled_for_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/modeled_for_pass.rs",
+            "sha256": "faff261c4695d7a681e5a1a8b7248441ec5c2b68a84d2b0defa90ac226b569d0",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "mut_direct_pass",
+          "passed": true,
+          "seconds": 6.66,
+          "outcome": "passed",
+          "expected": {
+            "case": "mut_direct_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/mut_direct_pass.rs",
+            "sha256": "c4a2f8cd74d75292f6be9c397f012eefee69b18656a14fc64e746ea462327e04",
+            "historical_61": false
+          },
+          "errors": []
+        },
+        {
+          "case": "native_for_extra_next_pass",
+          "passed": true,
+          "seconds": 7.09,
+          "outcome": "passed",
+          "expected": {
+            "case": "native_for_extra_next_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/native_for_extra_next_pass.rs",
+            "sha256": "fa84d9968d08af7060e4a67ee05fd6cdbee954a8ade43598ff75a68fbd64d825",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "native_for_nested_pass",
+          "passed": true,
+          "seconds": 8.93,
+          "outcome": "passed",
+          "expected": {
+            "case": "native_for_nested_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/native_for_nested_pass.rs",
+            "sha256": "28cc70ea6492e03c2edd8b70e47effdfbe440cde0b448d36a791d8d7a9f1ba82",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "native_for_pass",
+          "passed": true,
+          "seconds": 6.81,
+          "outcome": "passed",
+          "expected": {
+            "case": "native_for_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/native_for_pass.rs",
+            "sha256": "b6a40c87c1e2c77f4f14168941fa4a8af46474a5a9fe52d891d738677a425e17",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "owned_pass",
+          "passed": true,
+          "seconds": 12.62,
+          "outcome": "passed",
+          "expected": {
+            "case": "owned_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/owned_pass.rs",
+            "sha256": "bb2b28ef944b2e6d050ba196a6a7301f5c472d81e8843b1639dafb92d93649b6",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "shared_count_pass",
+          "passed": true,
+          "seconds": 7.52,
+          "outcome": "passed",
+          "expected": {
+            "case": "shared_count_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/shared_count_pass.rs",
+            "sha256": "954b75eae463bd128284277160286c552c64189833e1afcea6296657f65822fc",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "shared_direct_pass",
+          "passed": true,
+          "seconds": 11.42,
+          "outcome": "passed",
+          "expected": {
+            "case": "shared_direct_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/shared_direct_pass.rs",
+            "sha256": "16d092490d22a8eee1ef3bac0e208393cccb6164751f469943a675b0786e4047",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "shared_for_source_pass",
+          "passed": true,
+          "seconds": 8.09,
+          "outcome": "passed",
+          "expected": {
+            "case": "shared_for_source_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/shared_for_source_pass.rs",
+            "sha256": "da16a5fb32bedb002a4d236054e99057b36a9f7e5e6612f4915b3e7493e4a8a3",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "shared_into_iter_pass",
+          "passed": true,
+          "seconds": 5.07,
+          "outcome": "passed",
+          "expected": {
+            "case": "shared_into_iter_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/shared_into_iter_pass.rs",
+            "sha256": "d541432e286c2c3a18f57724dcd7816049b8c2dbcbf6d25951897d21216d6467",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "shared_loop_direct_pass",
+          "passed": true,
+          "seconds": 7.28,
+          "outcome": "passed",
+          "expected": {
+            "case": "shared_loop_direct_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/shared_loop_direct_pass.rs",
+            "sha256": "c6fb948274cf34dfa8171c6a3cc0ca02e4c79bbbb8d6fb77c68453bead823f16",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "shared_pass",
+          "passed": true,
+          "seconds": 8.73,
+          "outcome": "passed",
+          "expected": {
+            "case": "shared_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/shared_pass.rs",
+            "sha256": "2f32a44adbbf253d0a4c22a5b650435fedea391886cc7d4d6071579cf4f4c486",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "borrowed_direct_wrong_state",
+          "passed": true,
+          "seconds": 5.44,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "borrowed_direct_wrong_state",
+            "expected": "reject",
+            "annotations": [
+              [
+                7,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/borrowed_direct_wrong_state.rs",
+            "sha256": "d9b1f7549c00c9de05a052ef832b8ec92c2501d1ffdf69025845a7c6db5159b6",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "borrowed_wrong_state",
+          "passed": true,
+          "seconds": 5.64,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "borrowed_wrong_state",
+            "expected": "reject",
+            "annotations": [
+              [
+                8,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/borrowed_wrong_state.rs",
+            "sha256": "8db0f52459eeabad7196c682d2a8b1bde7e7939c3c2551c08d097387f2fb1865",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "early_break_wrong",
+          "passed": true,
+          "seconds": 7.32,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "early_break_wrong",
+            "expected": "reject",
+            "annotations": [
+              [
+                8,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/early_break_wrong.rs",
+            "sha256": "452e3189426926b0cb3a693bdee5d0c264ca236fdcb23b5e4cb941b308b63b47",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "exact_length_unmodeled",
+          "passed": true,
+          "seconds": 5.92,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "exact_length_unmodeled",
+            "expected": "reject",
+            "annotations": [
+              [
+                5,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/exact_length_unmodeled.rs",
+            "sha256": "4f1043ded5c7ca29cf4d4d940910454280291e70b44bd7883ec39f4ce17e0138",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "exact_length_wrong",
+          "passed": true,
+          "seconds": 7.69,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "exact_length_wrong",
+            "expected": "reject",
+            "annotations": [
+              [
+                7,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/exact_length_wrong.rs",
+            "sha256": "540f2c38808d721f9a42ed82161e42fc23a053fcac033c594dafc94509f39fed",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "iterator_unbounded",
+          "passed": true,
+          "seconds": 6.46,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "iterator_unbounded",
+            "expected": "reject",
+            "annotations": [
+              [
+                7,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/iterator_unbounded.rs",
+            "sha256": "c4e131a906f9e25dfdb7e507cfe28914084255d90b7bb31059f35599febc8169",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "loop_changed_reference",
+          "passed": true,
+          "seconds": 6.85,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "loop_changed_reference",
+            "expected": "reject",
+            "annotations": [
+              [
+                8,
+                "error",
+                "loop invariant might not be preserved"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/loop_changed_reference.rs",
+            "sha256": "bdc1b71f26c24809560bb7cd9c75c11903431f5dfba6dff4e2931585b5d69e4f",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] loop invariant might not be preserved"
+          ]
+        },
+        {
+          "case": "loop_wrong_mutation",
+          "passed": true,
+          "seconds": 6.02,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "loop_wrong_mutation",
+            "expected": "reject",
+            "annotations": [
+              [
+                6,
+                "error",
+                "loop invariant might not be preserved"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/loop_wrong_mutation.rs",
+            "sha256": "75163e98b543795c947ba5367cad39b0d79af69ef9519e3f1d4136858fed29d0",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] loop invariant might not be preserved"
+          ]
+        },
+        {
+          "case": "modeled_for_wrong_invariant",
+          "passed": true,
+          "seconds": 8.95,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "modeled_for_wrong_invariant",
+            "expected": "reject",
+            "annotations": [
+              [
+                7,
+                "error",
+                "loop invariant might not hold on entry"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/modeled_for_wrong_invariant.rs",
+            "sha256": "c601474d524ba716ec8f85f4df8699cac5ac6e0ccd0a5f10e4822df5f4b51142",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] loop invariant might not hold on entry"
+          ]
+        },
+        {
+          "case": "mut_wrong_none",
+          "passed": true,
+          "seconds": 5.48,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "mut_wrong_none",
+            "expected": "reject",
+            "annotations": [
+              [
+                9,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/mut_wrong_none.rs",
+            "sha256": "b9238c518ef93666afc7bb34d399e5b8cb17db82c09a306ce90dc131572dbd05",
+            "historical_61": false
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "mut_wrong_owner",
+          "passed": true,
+          "seconds": 5.06,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "mut_wrong_owner",
+            "expected": "reject",
+            "annotations": [
+              [
+                9,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/mut_wrong_owner.rs",
+            "sha256": "03381a1a7d1263e26ba0797cebb8c1b97e8516c17469f6f12c3ad44afa3dfa49",
+            "historical_61": false
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "mut_wrong_value",
+          "passed": true,
+          "seconds": 5.43,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "mut_wrong_value",
+            "expected": "reject",
+            "annotations": [
+              [
+                9,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/mut_wrong_value.rs",
+            "sha256": "cd7cacb94a07be07f30e72a348795de093093fb3500bf1709673761a8cee767b",
+            "historical_61": false
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "native_for_executable",
+          "passed": true,
+          "seconds": 3.92,
+          "outcome": "matched unsupported rejection",
+          "expected": {
+            "case": "native_for_executable",
+            "expected": "reject",
+            "annotations": [
+              [
+                4,
+                "unsupported",
+                "cannot encode method body `wrong`: `prusti_contracts` builtin Spec(ForIterator) cannot be used in executable code"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/native_for_executable.rs",
+            "sha256": "7d78ba3f30a134415b519bd83fbc2f87f9bd4fce1b194ef4337f8f9f792167bd",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: unsupported feature] cannot encode method body `wrong`: `prusti_contracts` builtin Spec(ForIterator) cannot be used in executable code"
+          ]
+        },
+        {
+          "case": "native_for_lifetime",
+          "passed": true,
+          "seconds": 4.75,
+          "outcome": "matched unsupported rejection",
+          "expected": {
+            "case": "native_for_lifetime",
+            "expected": "reject",
+            "annotations": [
+              [
+                5,
+                "unsupported",
+                "cannot encode method body `wrong`: for_iterator does not yet support iterator types containing lifetimes"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/native_for_lifetime.rs",
+            "sha256": "04ba1240e9a403e3d18b740cb21b0683a501bb1f78c119845bbb974fd245af74",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: unsupported feature] cannot encode method body `wrong`: for_iterator does not yet support iterator types containing lifetimes"
+          ]
+        },
+        {
+          "case": "native_for_nested_spec",
+          "passed": true,
+          "seconds": 5.59,
+          "outcome": "matched unsupported rejection",
+          "expected": {
+            "case": "native_for_nested_spec",
+            "expected": "reject",
+            "annotations": [
+              [
+                5,
+                "unsupported",
+                "cannot encode method body `wrong`: for_iterator cannot be used in nested or old-state specifications"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/native_for_nested_spec.rs",
+            "sha256": "d70221886f90111455660298bb0e050935d1fd72856a07601def2e4bc2f4ae51",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: unsupported feature] cannot encode method body `wrong`: for_iterator cannot be used in nested or old-state specifications"
+          ]
+        },
+        {
+          "case": "native_for_not_for",
+          "passed": true,
+          "seconds": 7.71,
+          "outcome": "matched unsupported rejection",
+          "expected": {
+            "case": "native_for_not_for",
+            "expected": "reject",
+            "annotations": [
+              [
+                8,
+                "unsupported",
+                "cannot encode method body `wrong`: for_iterator requires a unique matching iterator in the enclosing for loop"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/native_for_not_for.rs",
+            "sha256": "6e5535763c39d2e6ebfa3fdb0742051d0b5a3cd7750ec4f3ddd6b0f7b80dedee",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: unsupported feature] cannot encode method body `wrong`: for_iterator requires a unique matching iterator in the enclosing for loop"
+          ]
+        },
+        {
+          "case": "native_for_old",
+          "passed": true,
+          "seconds": 8.33,
+          "outcome": "matched unsupported rejection",
+          "expected": {
+            "case": "native_for_old",
+            "expected": "reject",
+            "annotations": [
+              [
+                5,
+                "unsupported",
+                "cannot encode method body `wrong`: for_iterator cannot be used in nested or old-state specifications"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/native_for_old.rs",
+            "sha256": "40faa30bc35d51d9f1fcec80fda3a5ff01e1f8fe57bc6a92200263ff1e9a55e0",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: unsupported feature] cannot encode method body `wrong`: for_iterator cannot be used in nested or old-state specifications"
+          ]
+        },
+        {
+          "case": "native_for_outside",
+          "passed": true,
+          "seconds": 6.92,
+          "outcome": "matched unsupported rejection",
+          "expected": {
+            "case": "native_for_outside",
+            "expected": "reject",
+            "annotations": [
+              [
+                4,
+                "unsupported",
+                "cannot encode method body `wrong`: for_iterator requires a unique matching iterator in the enclosing for loop"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/native_for_outside.rs",
+            "sha256": "d83335603312c24082dab440d72e11a90245d34df287cc17240452e3878987b5",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: unsupported feature] cannot encode method body `wrong`: for_iterator requires a unique matching iterator in the enclosing for loop"
+          ]
+        },
+        {
+          "case": "native_for_wrong_invariant",
+          "passed": true,
+          "seconds": 8.81,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "native_for_wrong_invariant",
+            "expected": "reject",
+            "annotations": [
+              [
+                7,
+                "error",
+                "loop invariant might not hold on entry"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/native_for_wrong_invariant.rs",
+            "sha256": "cd8a80cfa453457a74b21030c593c908d766102a2563d8c0d42febeec13e9cdd",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] loop invariant might not hold on entry"
+          ]
+        },
+        {
+          "case": "native_for_wrong_type",
+          "passed": true,
+          "seconds": 8.55,
+          "outcome": "matched unsupported rejection",
+          "expected": {
+            "case": "native_for_wrong_type",
+            "expected": "reject",
+            "annotations": [
+              [
+                5,
+                "unsupported",
+                "cannot encode method body `wrong`: for_iterator requires a unique matching iterator in the enclosing for loop"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/native_for_wrong_type.rs",
+            "sha256": "f425649cba573d83c65997041a4ab7a56b34515082538c9f79cc8d16bd60e873",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: unsupported feature] cannot encode method body `wrong`: for_iterator requires a unique matching iterator in the enclosing for loop"
+          ]
+        },
+        {
+          "case": "owned_wrong_none",
+          "passed": true,
+          "seconds": 8.23,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "owned_wrong_none",
+            "expected": "reject",
+            "annotations": [
+              [
+                7,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/owned_wrong_none.rs",
+            "sha256": "6e7600edec7c198a58128fa2dd33d6dee50ef417a3922bf3032881064091330b",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "owned_wrong_state",
+          "passed": true,
+          "seconds": 5.95,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "owned_wrong_state",
+            "expected": "reject",
+            "annotations": [
+              [
+                10,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/owned_wrong_state.rs",
+            "sha256": "d8a602f5a50d4c8a786e04c3f2e6ca8a19139d13f7390131899698c1ad55b1d9",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "owned_wrong_value",
+          "passed": true,
+          "seconds": 5.68,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "owned_wrong_value",
+            "expected": "reject",
+            "annotations": [
+              [
+                9,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/owned_wrong_value.rs",
+            "sha256": "5762ff2a6ff3bef5bd683e1902140afedec040654beabdaa221c6ba4f4c80953",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "shared_count_wrong",
+          "passed": true,
+          "seconds": 3.92,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "shared_count_wrong",
+            "expected": "reject",
+            "annotations": [
+              [
+                7,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/shared_count_wrong.rs",
+            "sha256": "29a0f6d9575e38703af07d92d14ab0f4eaf03099216b7760b631e287aae4fba5",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "shared_direct_wrong_value",
+          "passed": true,
+          "seconds": 5.27,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "shared_direct_wrong_value",
+            "expected": "reject",
+            "annotations": [
+              [
+                8,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/shared_direct_wrong_value.rs",
+            "sha256": "a6ace52099d45a632a9b54698c72bd7b9cbe18fd593c63e4bc80af76eb35e43f",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "shared_for_wrong_source",
+          "passed": true,
+          "seconds": 7.36,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "shared_for_wrong_source",
+            "expected": "reject",
+            "annotations": [
+              [
+                15,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/shared_for_wrong_source.rs",
+            "sha256": "47cd66b30f24d64dd587545d74fde8235ba13f7e5daf31b4c1526e6874ce4a69",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "shared_into_iter_wrong_length",
+          "passed": true,
+          "seconds": 5.65,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "shared_into_iter_wrong_length",
+            "expected": "reject",
+            "annotations": [
+              [
+                5,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/shared_into_iter_wrong_length.rs",
+            "sha256": "1a13798cb14227b3baa39a76c7e7ac3779497a3b2ca4b0521691b1f9a85b722b",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "shared_into_iter_wrong_value",
+          "passed": true,
+          "seconds": 7.92,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "shared_into_iter_wrong_value",
+            "expected": "reject",
+            "annotations": [
+              [
+                6,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/shared_into_iter_wrong_value.rs",
+            "sha256": "03804ad4296959f0cec26b6a5e711f87307238eedc157b0a1e2259da7f2389bb",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "shared_loop_direct_wrong_value",
+          "passed": true,
+          "seconds": 10.15,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "shared_loop_direct_wrong_value",
+            "expected": "reject",
+            "annotations": [
+              [
+                14,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/shared_loop_direct_wrong_value.rs",
+            "sha256": "1dc9dc1e2b0417a659411b95a5bc8b3688a421c200ed12dd0cc74650dd90d368",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "shared_loop_wrong_value",
+          "passed": true,
+          "seconds": 6.97,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "shared_loop_wrong_value",
+            "expected": "reject",
+            "annotations": [
+              [
+                9,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/shared_loop_wrong_value.rs",
+            "sha256": "5291f55501878bf4045eea09624749c88a839ac8ae235a308c18eaf0bcdf9065",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "shared_wrong_state",
+          "passed": true,
+          "seconds": 8.52,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "shared_wrong_state",
+            "expected": "reject",
+            "annotations": [
+              [
+                10,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/shared_wrong_state.rs",
+            "sha256": "d2411d15ca0f82a117bfdc26a3ebfc664802f92ad0fce53121c664ccc80db5cc",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "shared_wrong_value",
+          "passed": true,
+          "seconds": 9.03,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "shared_wrong_value",
+            "expected": "reject",
+            "annotations": [
+              [
+                8,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/shared_wrong_value.rs",
+            "sha256": "4c1d885067af5c32362a445e7fec2ea939eccfd92a876006da6b421aa489b560",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        }
+      ]
+    },
+    "borrow": {
+      "expected_count": 77,
+      "actual_count": 77,
+      "exact_coverage": true,
+      "matched": 77,
+      "outcomes": {
+        "passed": 56,
+        "matched rejection": 21
+      },
+      "seconds": 807.96,
+      "longest": {
+        "case": "range_vec_pass",
+        "passed": true,
+        "seconds": 45.02
+      },
+      "cases": [
+        {
+          "case": "rust-check",
+          "passed": true,
+          "seconds": 0.57,
+          "outcome": "passed",
+          "expected": {
+            "case": "rust-check",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "spec-library",
+          "passed": true,
+          "seconds": 29.22,
+          "outcome": "passed",
+          "expected": {
+            "case": "spec-library",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-frame_pass",
+          "passed": true,
+          "seconds": 0.15,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-frame_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-inclusive_exhausted_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-inclusive_exhausted_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-inclusive_missing_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-inclusive_missing_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-inclusive_slice_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-inclusive_slice_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-inclusive_vec_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-inclusive_vec_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-index_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-index_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-lookup_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-lookup_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-open_from_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-open_from_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-open_full_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-open_full_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-open_to_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-open_to_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-open_vec_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-open_vec_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-open_vec_to_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-open_vec_to_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-optional_pledge_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-optional_pledge_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-pledge_generic_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-pledge_generic_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-range_checked_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-range_checked_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-range_slice_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-range_slice_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-range_vec_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-range_vec_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-reference_option_return_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-reference_option_return_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-split_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-split_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-split_separate_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-split_separate_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-split_vec_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-split_vec_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-trait_borrow_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-trait_borrow_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-vec_lookup_inclusive_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-vec_lookup_inclusive_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-vec_lookup_owned_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-vec_lookup_owned_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-vec_lookup_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-vec_lookup_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-vec_lookup_range_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-vec_lookup_range_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "runtime-view_pass",
+          "passed": true,
+          "seconds": 0.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "runtime-view_pass",
+            "expected": "pass"
+          },
+          "errors": []
+        },
+        {
+          "case": "frame_pass",
+          "passed": true,
+          "seconds": 34.79,
+          "outcome": "passed",
+          "expected": {
+            "case": "frame_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/frame_pass.rs",
+            "sha256": "10a6d0b00f9617ebbb04a56d4cd4274adcbf4c8f3fc7330d78ed1c179c4e8298",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "inclusive_exhausted_pass",
+          "passed": true,
+          "seconds": 30.63,
+          "outcome": "passed",
+          "expected": {
+            "case": "inclusive_exhausted_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/inclusive_exhausted_pass.rs",
+            "sha256": "a4da8db282ac985722249b40dd7051a06fa78ef8779521a472f614fc32df4f36",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "inclusive_missing_pass",
+          "passed": true,
+          "seconds": 20.8,
+          "outcome": "passed",
+          "expected": {
+            "case": "inclusive_missing_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/inclusive_missing_pass.rs",
+            "sha256": "ccc6b1639c029fe5326bc75a49b51e2cb9d97abeeb6ef4c70ec7a3fd58d45b18",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "inclusive_slice_pass",
+          "passed": true,
+          "seconds": 27.44,
+          "outcome": "passed",
+          "expected": {
+            "case": "inclusive_slice_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/inclusive_slice_pass.rs",
+            "sha256": "e51c776214fbee3940f535f6a7f2080d5d9df06313e0caebc7c1fdd07cd1fa0d",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "inclusive_vec_pass",
+          "passed": true,
+          "seconds": 25.85,
+          "outcome": "passed",
+          "expected": {
+            "case": "inclusive_vec_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/inclusive_vec_pass.rs",
+            "sha256": "b99857e166decf51dcc8d19e8bc2c00ed0240e3e40e16f69206220a6ae160c51",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "index_pass",
+          "passed": true,
+          "seconds": 16.14,
+          "outcome": "passed",
+          "expected": {
+            "case": "index_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/index_pass.rs",
+            "sha256": "0e172e9bd98243c3c0989201e99a8c50582f4c4ce89b956e26ed61e829cdb3fb",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "lookup_pass",
+          "passed": true,
+          "seconds": 21.23,
+          "outcome": "passed",
+          "expected": {
+            "case": "lookup_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/lookup_pass.rs",
+            "sha256": "a078d189434e83cd033a126217796b4ebdeab1a873cf66ad881f59d54433a7d0",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "open_from_pass",
+          "passed": true,
+          "seconds": 24.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "open_from_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/open_from_pass.rs",
+            "sha256": "3d8bfa3562175ab483c9b60a2b60867b70782780da5dc9bfee0fa43d5920e35e",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "open_full_pass",
+          "passed": true,
+          "seconds": 20.0,
+          "outcome": "passed",
+          "expected": {
+            "case": "open_full_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/open_full_pass.rs",
+            "sha256": "d19b1d4f38735d39ad5774844f2afe3faeb2c40242e66713d7d49d4c42ef2210",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "open_to_pass",
+          "passed": true,
+          "seconds": 22.18,
+          "outcome": "passed",
+          "expected": {
+            "case": "open_to_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/open_to_pass.rs",
+            "sha256": "0967f99591a98f9e32a588b7b6128b778c3b52f37e1328b24869c025cfcf211c",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "open_vec_pass",
+          "passed": true,
+          "seconds": 18.02,
+          "outcome": "passed",
+          "expected": {
+            "case": "open_vec_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/open_vec_pass.rs",
+            "sha256": "7fcba2cf3be2d4e99d2a4254f9cc606bfaafed85d1b162bbb5d5cc4465982c74",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "open_vec_to_pass",
+          "passed": true,
+          "seconds": 22.1,
+          "outcome": "passed",
+          "expected": {
+            "case": "open_vec_to_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/open_vec_to_pass.rs",
+            "sha256": "27b2ee018a6b2331b7e8d51c2b9ac76dd07ff6e3e5ced91fa51bebefbb45b664",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "optional_pledge_pass",
+          "passed": true,
+          "seconds": 9.12,
+          "outcome": "passed",
+          "expected": {
+            "case": "optional_pledge_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/optional_pledge_pass.rs",
+            "sha256": "651d6c80b4baa9aaa1e815e512db40e78fac5d50ce3732ff63954ea78a030c20",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "pledge_generic_pass",
+          "passed": true,
+          "seconds": 7.4,
+          "outcome": "passed",
+          "expected": {
+            "case": "pledge_generic_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/pledge_generic_pass.rs",
+            "sha256": "ad5b016f3e8fbf953727961831f560da57a0fdec2190727633284ad02ce2341d",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "range_checked_pass",
+          "passed": true,
+          "seconds": 17.05,
+          "outcome": "passed",
+          "expected": {
+            "case": "range_checked_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/range_checked_pass.rs",
+            "sha256": "f476b078ac527738753a052b912fa6bf63727d005030b965deb5c71808d6658e",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "range_slice_pass",
+          "passed": true,
+          "seconds": 24.72,
+          "outcome": "passed",
+          "expected": {
+            "case": "range_slice_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/range_slice_pass.rs",
+            "sha256": "087d8733ed1c4be4240a6826c4037b50d0f8a6a6b6260357300e041e0f3c53fa",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "range_vec_pass",
+          "passed": true,
+          "seconds": 45.02,
+          "outcome": "passed",
+          "expected": {
+            "case": "range_vec_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/range_vec_pass.rs",
+            "sha256": "a4c9902b07686f47cacc8d936356e79742941ac88edfab2e9cf6b5f8c65bb57d",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "reference_option_return_pass",
+          "passed": true,
+          "seconds": 5.06,
+          "outcome": "passed",
+          "expected": {
+            "case": "reference_option_return_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/reference_option_return_pass.rs",
+            "sha256": "c78eacb697b0b02fc41b87e7aa6f0c1eac6824e4a713709d9b6b7b1384bb8cec",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "split_pass",
+          "passed": true,
+          "seconds": 9.42,
+          "outcome": "passed",
+          "expected": {
+            "case": "split_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/split_pass.rs",
+            "sha256": "7059318c6b2693619d6005eb0de5aec797aa03accdd93a534a9acdcc1448414e",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "split_separate_pass",
+          "passed": true,
+          "seconds": 7.15,
+          "outcome": "passed",
+          "expected": {
+            "case": "split_separate_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/split_separate_pass.rs",
+            "sha256": "5ad692ec215c1d5f4ae40c303b1f1d8f1938a379bb0c3f1ca96eb2aa2f9b3e33",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "split_vec_pass",
+          "passed": true,
+          "seconds": 13.5,
+          "outcome": "passed",
+          "expected": {
+            "case": "split_vec_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/split_vec_pass.rs",
+            "sha256": "58cba1083d4cb162d4bf9675c26fe04c6d382b8e6a2115949b5606ab0b31101c",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "trait_borrow_pass",
+          "passed": true,
+          "seconds": 7.51,
+          "outcome": "passed",
+          "expected": {
+            "case": "trait_borrow_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/trait_borrow_pass.rs",
+            "sha256": "c6367ceb82f3c617b93a0368e4ec9f4c72c5260b3355cc7ea0f8d7807c800668",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "vec_lookup_inclusive_pass",
+          "passed": true,
+          "seconds": 26.65,
+          "outcome": "passed",
+          "expected": {
+            "case": "vec_lookup_inclusive_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/vec_lookup_inclusive_pass.rs",
+            "sha256": "0f254999c1b5f19fd6708ee2f3cf9a8a9fcb61df94f14fc2aa28b277a626e1c1",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "vec_lookup_owned_pass",
+          "passed": true,
+          "seconds": 7.57,
+          "outcome": "passed",
+          "expected": {
+            "case": "vec_lookup_owned_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/vec_lookup_owned_pass.rs",
+            "sha256": "bca3a4f2e92b7001278b323b6ab0d1bbe7f452006465b234d85666b4f61d2797",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "vec_lookup_pass",
+          "passed": true,
+          "seconds": 21.14,
+          "outcome": "passed",
+          "expected": {
+            "case": "vec_lookup_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/vec_lookup_pass.rs",
+            "sha256": "dbadd87e21d623ee22181a6bfa11498fbb4e6bb51bafca5a76630e0179468ab1",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "vec_lookup_range_pass",
+          "passed": true,
+          "seconds": 30.17,
+          "outcome": "passed",
+          "expected": {
+            "case": "vec_lookup_range_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/vec_lookup_range_pass.rs",
+            "sha256": "d0874a0cf40b9e55d93f94109123bfb2f904ebd7ca762841744e44b983356db3",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "view_pass",
+          "passed": true,
+          "seconds": 14.7,
+          "outcome": "passed",
+          "expected": {
+            "case": "view_pass",
+            "expected": "pass",
+            "annotations": [],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/view_pass.rs",
+            "sha256": "dc4d201aec82575aeeeaafeb10b34b412b742728618bb0fbcdbe6c4a4cd24e1f",
+            "historical_61": true
+          },
+          "errors": []
+        },
+        {
+          "case": "inclusive_wrong_frame",
+          "passed": true,
+          "seconds": 21.46,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "inclusive_wrong_frame",
+            "expected": "reject",
+            "annotations": [
+              [
+                11,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/inclusive_wrong_frame.rs",
+            "sha256": "031d2ee7d5aa6d834f9787a0f01a9eac975234819910e1e1687e226efcc3d2eb",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "index_slice_wrong_value",
+          "passed": true,
+          "seconds": 4.04,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "index_slice_wrong_value",
+            "expected": "reject",
+            "annotations": [
+              [
+                6,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/index_slice_wrong_value.rs",
+            "sha256": "e166304ef9fa5372d95826b2db2489fd206d1557355cac7af24b3e2d0cf6144c",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "index_vec_out_of_bounds",
+          "passed": true,
+          "seconds": 6.99,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "index_vec_out_of_bounds",
+            "expected": "reject",
+            "annotations": [
+              [
+                6,
+                "error",
+                "precondition might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/index_vec_out_of_bounds.rs",
+            "sha256": "b815d7f4ffe14fb09765f7c7e58bd81bbdedc3006d03e9c79070d4422c0f5845",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] precondition might not hold"
+          ]
+        },
+        {
+          "case": "index_vec_wrong_value",
+          "passed": true,
+          "seconds": 16.19,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "index_vec_wrong_value",
+            "expected": "reject",
+            "annotations": [
+              [
+                8,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/index_vec_wrong_value.rs",
+            "sha256": "145b337843947fdc2865653ca7a35204cec48f009bc3f43e42c24e6e45bf3d8a",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "lookup_wrong_frame",
+          "passed": true,
+          "seconds": 29.09,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "lookup_wrong_frame",
+            "expected": "reject",
+            "annotations": [
+              [
+                11,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/lookup_wrong_frame.rs",
+            "sha256": "3c94602911187458860390cbceac64eda1c57a5fb8478411b857537d6b51cb59",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "lookup_wrong_value",
+          "passed": true,
+          "seconds": 22.42,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "lookup_wrong_value",
+            "expected": "reject",
+            "annotations": [
+              [
+                11,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/lookup_wrong_value.rs",
+            "sha256": "6db01b5ba236f439d41d32f4808fbe45fc1692d2a011f8df0c97060ad0f11a45",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "model_inclusive_wrong",
+          "passed": true,
+          "seconds": 14.68,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "model_inclusive_wrong",
+            "expected": "reject",
+            "annotations": [
+              [
+                12,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/model_inclusive_wrong.rs",
+            "sha256": "b20c7505ef8d7f0facc876173a3b89078ca903babd9ec1001e4ce9ffab6b8896",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "model_range_wrong",
+          "passed": true,
+          "seconds": 3.78,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "model_range_wrong",
+            "expected": "reject",
+            "annotations": [
+              [
+                5,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/model_range_wrong.rs",
+            "sha256": "c2d316b9e15df0091ff76ecb34b4c29f925bd66c87dcb358ddfaecc5b21a5ef4",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "model_scalar_wrong",
+          "passed": true,
+          "seconds": 4.18,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "model_scalar_wrong",
+            "expected": "reject",
+            "annotations": [
+              [
+                5,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/model_scalar_wrong.rs",
+            "sha256": "f0c563e93a8d79c9ebd9d49f38e8222350301c34be252a932c3df11d481fe8d0",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "open_wrong_frame",
+          "passed": true,
+          "seconds": 14.7,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "open_wrong_frame",
+            "expected": "reject",
+            "annotations": [
+              [
+                11,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/open_wrong_frame.rs",
+            "sha256": "0d22ad4b69bba9d1719b848f3b76bb4a887a8acff04cccae2a65bb864829391f",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "optional_wrong_none",
+          "passed": true,
+          "seconds": 9.9,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "optional_wrong_none",
+            "expected": "reject",
+            "annotations": [
+              [
+                10,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/optional_wrong_none.rs",
+            "sha256": "9352ba971ebc6382394f6efc1698a34bf6337afe058063537359ab845adc3901",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "optional_wrong_owner",
+          "passed": true,
+          "seconds": 8.58,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "optional_wrong_owner",
+            "expected": "reject",
+            "annotations": [
+              [
+                11,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/optional_wrong_owner.rs",
+            "sha256": "acebe0d381c4fb361c40adcc259b22bdc45a1346f94f355ca61dc8a432ffcd41",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "pledge_wrong_owner",
+          "passed": true,
+          "seconds": 7.31,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "pledge_wrong_owner",
+            "expected": "reject",
+            "annotations": [
+              [
+                7,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/pledge_wrong_owner.rs",
+            "sha256": "3b42d1fb4306164f7d38561bdd94da4f3664ceb939034901476c22ff072fd7bd",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "range_wrong_frame",
+          "passed": true,
+          "seconds": 23.54,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "range_wrong_frame",
+            "expected": "reject",
+            "annotations": [
+              [
+                11,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/range_wrong_frame.rs",
+            "sha256": "9dc0eb20da355656682f9b926aa2a34f9497671ad0c57836d06116e36c95e5c2",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "reference_return_wrong_owner",
+          "passed": true,
+          "seconds": 4.13,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "reference_return_wrong_owner",
+            "expected": "reject",
+            "annotations": [
+              [
+                13,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/reference_return_wrong_owner.rs",
+            "sha256": "d5f28db3871716023828a08fa35484f8fd733bbc05544db6a8f86b0e21985116",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "split_out_of_bounds",
+          "passed": true,
+          "seconds": 4.81,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "split_out_of_bounds",
+            "expected": "reject",
+            "annotations": [
+              [
+                5,
+                "error",
+                "precondition might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/split_out_of_bounds.rs",
+            "sha256": "1089c83b06ad20c66b6f7ac488b18ff06e02b16ff0b22bced757f0314f3b0e0f",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] precondition might not hold"
+          ]
+        },
+        {
+          "case": "split_separate_wrong",
+          "passed": true,
+          "seconds": 6.28,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "split_separate_wrong",
+            "expected": "reject",
+            "annotations": [
+              [
+                9,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/split_separate_wrong.rs",
+            "sha256": "9ccf744981c83bf2830e979b8db3527b4842dbc3731fe6021ae5780c78d4d21c",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "split_wrong_frame",
+          "passed": true,
+          "seconds": 6.05,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "split_wrong_frame",
+            "expected": "reject",
+            "annotations": [
+              [
+                9,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/split_wrong_frame.rs",
+            "sha256": "1936bfcd4b8556a222dbce609723f5ecc8dd1f02aa37b8bdb6ec34622c505d9a",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "split_wrong_value",
+          "passed": true,
+          "seconds": 6.05,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "split_wrong_value",
+            "expected": "reject",
+            "annotations": [
+              [
+                9,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/split_wrong_value.rs",
+            "sha256": "c2c6549a8fe4b3bca2142f33550d091b28f0fbd19c75278a53dd171f8f582c67",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "trait_borrow_abstract",
+          "passed": true,
+          "seconds": 5.54,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "trait_borrow_abstract",
+            "expected": "reject",
+            "annotations": [
+              [
+                7,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/trait_borrow_abstract.rs",
+            "sha256": "c43d7010e0c8033c16c2c96817d8426ff28ed650bff6e4d5d10a0b3700c63e51",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        },
+        {
+          "case": "vec_lookup_wrong_frame",
+          "passed": true,
+          "seconds": 26.24,
+          "outcome": "matched rejection",
+          "expected": {
+            "case": "vec_lookup_wrong_frame",
+            "expected": "reject",
+            "annotations": [
+              [
+                13,
+                "error",
+                "assertion might not hold"
+              ]
+            ],
+            "source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/vec_lookup_wrong_frame.rs",
+            "sha256": "993cde1269761f5ec19865947e53248020b19351eb925fbc4ce74480d17228f3",
+            "historical_61": true
+          },
+          "errors": [
+            "[Prusti: verification error] assertion might not hold"
+          ]
+        }
+      ]
+    }
+  },
+  "later_control_audit": {
+    "count": 15,
+    "matched": 3,
+    "outcomes": {
+      "verification failure": 1,
+      "unexpected acceptance": 2,
+      "internal error": 5,
+      "wrong diagnostic": 2,
+      "passed": 2,
+      "matched rejection": 1,
+      "unsupported": 2
+    },
+    "cases": [
+      {
+        "case": "quantified_old_mutation_pass",
+        "origin_commit": "bbb6b0520",
+        "origin_source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/quantified_old_mutation_pass.rs",
+        "sha256": "7df05fbc221100bf12291a0057a845d4c74442c1620925d3d6476b19a7a9fe63",
+        "expected": null,
+        "returncode": 101,
+        "outer_timeout": false,
+        "outcome": "verification failure",
+        "matched": false,
+        "errors": [
+          "[Prusti: verification error] postcondition might not hold"
+        ],
+        "seconds": 9.829209042000002
+      },
+      {
+        "case": "quantified_old_mutation_wrong",
+        "origin_commit": "bbb6b0520",
+        "origin_source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/quantified_old_mutation_wrong.rs",
+        "sha256": "1d27b72a31f97a47b1c76d231fc7fdc99e319c4bd6cbd96cdc649ba9780666f5",
+        "expected": {
+          "line": 4,
+          "kind": "error",
+          "message": "postcondition might not hold"
+        },
+        "returncode": 0,
+        "outer_timeout": false,
+        "outcome": "unexpected acceptance",
+        "matched": false,
+        "errors": [],
+        "seconds": 4.939518309998675
+      },
+      {
+        "case": "nested_inferred_lifetimes_pass",
+        "origin_commit": "e9dd7929c",
+        "origin_source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/nested_inferred_lifetimes_pass.rs",
+        "sha256": "a6c7f698e14d11a8a2522e7e6be0b2f6dbc2f27ae570d9333aaa491efe5a1990",
+        "expected": null,
+        "returncode": 101,
+        "outer_timeout": false,
+        "outcome": "internal error",
+        "matched": false,
+        "errors": [
+          "[Prusti: internal error] Prusti encountered an unexpected internal error"
+        ],
+        "seconds": 4.996665133992792
+      },
+      {
+        "case": "nested_inferred_lifetimes_wrong",
+        "origin_commit": "e9dd7929c",
+        "origin_source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/nested_inferred_lifetimes_wrong.rs",
+        "sha256": "a0aa21d20671130aef4627195bd906de9ac05b724964d49388f7c442957ea1ea",
+        "expected": {
+          "line": 13,
+          "kind": "error",
+          "message": "assertion might not hold"
+        },
+        "returncode": 101,
+        "outer_timeout": false,
+        "outcome": "internal error",
+        "matched": false,
+        "errors": [
+          "[Prusti: internal error] Prusti encountered an unexpected internal error"
+        ],
+        "seconds": 4.2399752529890975
+      },
+      {
+        "case": "before_expiry_pre_context",
+        "origin_commit": "c17aaa266",
+        "origin_source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/before_expiry_pre_context.rs",
+        "sha256": "f167ce37d6f798955e04edcb648a33ec49032ab83d9d767fc8fd046d9edd7788",
+        "expected": {
+          "line": 3,
+          "kind": "unsupported",
+          "message": "cannot encode precondition: before_expiry is only supported in expiry pledges"
+        },
+        "returncode": 101,
+        "outer_timeout": false,
+        "outcome": "internal error",
+        "matched": false,
+        "errors": [
+          "[Prusti: internal error] Prusti encountered an unexpected internal error"
+        ],
+        "seconds": 1.993373530000099
+      },
+      {
+        "case": "before_expiry_post_context",
+        "origin_commit": "c17aaa266",
+        "origin_source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/before_expiry_post_context.rs",
+        "sha256": "311e208ee689dee2097120032523a69b7761135d98b0a62d3a777bda13f48b1f",
+        "expected": {
+          "line": 3,
+          "kind": "unsupported",
+          "message": "cannot encode postcondition: before_expiry is only supported in expiry pledges"
+        },
+        "returncode": 101,
+        "outer_timeout": false,
+        "outcome": "internal error",
+        "matched": false,
+        "errors": [
+          "[Prusti: internal error] Prusti encountered an unexpected internal error"
+        ],
+        "seconds": 1.6984266450017458
+      },
+      {
+        "case": "before_expiry_invariant_context",
+        "origin_commit": "c17aaa266",
+        "origin_source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/before_expiry_invariant_context.rs",
+        "sha256": "688a52d21e9a3ecaf13b51b16f401738910fe95505870f168e455ea9a6765d04",
+        "expected": {
+          "line": 5,
+          "kind": "unsupported",
+          "message": "cannot encode method body `wrong`: before_expiry is only supported in expiry pledges"
+        },
+        "returncode": 101,
+        "outer_timeout": false,
+        "outcome": "wrong diagnostic",
+        "matched": false,
+        "errors": [
+          "[Prusti: verification error] loop invariant might not hold on entry"
+        ],
+        "seconds": 3.9270823580009164
+      },
+      {
+        "case": "before_expiry_quantified_invariant_context",
+        "origin_commit": "c17aaa266",
+        "origin_source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/before_expiry_quantified_invariant_context.rs",
+        "sha256": "544211b6ac3ba1ce0e301b2c0f08e94b5575cb944f919e41423d78693eb37ca3",
+        "expected": {
+          "line": 5,
+          "kind": "unsupported",
+          "message": "cannot encode method body `wrong`: before_expiry is only supported in expiry pledges"
+        },
+        "returncode": 101,
+        "outer_timeout": false,
+        "outcome": "wrong diagnostic",
+        "matched": false,
+        "errors": [
+          "[Prusti: verification error] loop invariant might not hold on entry"
+        ],
+        "seconds": 4.1256810129998485
+      },
+      {
+        "case": "before_expiry_quantified_post_context",
+        "origin_commit": "c17aaa266",
+        "origin_source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/before_expiry_quantified_post_context.rs",
+        "sha256": "81ee2ab1809d65391fa79d816164e97388559a287b0e3fb2015781b260a746be",
+        "expected": {
+          "line": 3,
+          "kind": "unsupported",
+          "message": "cannot encode postcondition: before_expiry is only supported in expiry pledges"
+        },
+        "returncode": 0,
+        "outer_timeout": false,
+        "outcome": "unexpected acceptance",
+        "matched": false,
+        "errors": [],
+        "seconds": 3.822402008998324
+      },
+      {
+        "case": "before_expiry_quantified_pledge_pass",
+        "origin_commit": "c17aaa266",
+        "origin_source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/before_expiry_quantified_pledge_pass.rs",
+        "sha256": "c2eae26f320cf99dd817eb04b5b7ef07c6a927b8123bb2c510c6aebdf9350bd5",
+        "expected": null,
+        "returncode": 0,
+        "outer_timeout": false,
+        "outcome": "passed",
+        "matched": true,
+        "errors": [],
+        "seconds": 4.554781447004643
+      },
+      {
+        "case": "before_expiry_no_permission",
+        "origin_commit": "dcf7fcc83",
+        "origin_source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/before_expiry_no_permission.rs",
+        "sha256": "873c045a8a835ee5e2723e7b083c4eb084e38c508bb02d22c4d44736465ecc14",
+        "expected": {
+          "line": 5,
+          "kind": "error",
+          "message": "insufficient permission to read through mutable reference"
+        },
+        "returncode": 101,
+        "outer_timeout": false,
+        "outcome": "internal error",
+        "matched": false,
+        "errors": [
+          "[Prusti: internal error] Prusti encountered an unexpected internal error"
+        ],
+        "seconds": 7.340353138002683
+      },
+      {
+        "case": "mut_drop_borrow_pass",
+        "origin_commit": "f9270bd87",
+        "origin_source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/mut_drop_borrow_pass.rs",
+        "sha256": "96cfcf75215742a897c849b0ecb67ccd5c69bd55b1ef3336006e7c58d1883fd4",
+        "expected": null,
+        "returncode": 0,
+        "outer_timeout": false,
+        "outcome": "passed",
+        "matched": true,
+        "errors": [],
+        "seconds": 7.005286737999995
+      },
+      {
+        "case": "mut_drop_borrow_false",
+        "origin_commit": "f9270bd87",
+        "origin_source": "prusti-tests/tests/cargo_verify/stdlib_iterator_spec/src/bin/mut_drop_borrow_false.rs",
+        "sha256": "747fd7897b0811f5e62d194f97a2ea994baa244fd032a2c0cbe8170355c90d35",
+        "expected": {
+          "line": 10,
+          "kind": "error",
+          "message": "assertion might not hold"
+        },
+        "returncode": 101,
+        "outer_timeout": false,
+        "outcome": "matched rejection",
+        "matched": true,
+        "errors": [
+          "[Prusti: verification error] assertion might not hold"
+        ],
+        "seconds": 7.239026202994864
+      },
+      {
+        "case": "quantified_expiry_heap_pass",
+        "origin_commit": "800d9350b",
+        "origin_source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/quantified_expiry_heap_pass.rs",
+        "sha256": "26803d2cd1042bef109a9e0fdb124b2732b4e37bb28ec8b08c9604becf29fb0e",
+        "expected": null,
+        "returncode": 101,
+        "outer_timeout": false,
+        "outcome": "unsupported",
+        "matched": false,
+        "errors": [
+          "[Prusti: unsupported feature] cannot encode pledge rhs: dereference of the mutable reference `&mut u32` in pure code",
+          "[Prusti: verification error] assertion might not hold"
+        ],
+        "seconds": 6.845435657000053
+      },
+      {
+        "case": "quantified_expiry_pledge_wrong",
+        "origin_commit": "800d9350b",
+        "origin_source": "prusti-tests/tests/cargo_verify/stdlib_borrow_spec/src/bin/quantified_expiry_pledge_wrong.rs",
+        "sha256": "c4bac855709c7240dd8f1fe60281e0838c330c41a592a57520adb20cbc6e7b5f",
+        "expected": {
+          "line": 6,
+          "kind": "error",
+          "message": "pledge postcondition might not hold"
+        },
+        "returncode": 101,
+        "outer_timeout": false,
+        "outcome": "unsupported",
+        "matched": false,
+        "errors": [
+          "[Prusti: unsupported feature] cannot encode pledge rhs: dereference of the mutable reference `&mut u32` in pure code"
+        ],
+        "seconds": 7.036329588998342
+      }
+    ]
+  },
+  "preservation": {
+    "source_unchanged": true,
+    "binary_unchanged": true,
+    "pending_main_unchanged": true
+  },
+  "later_change_inventory_count": 141,
+  "artifact_root": "../prusti-stdlib/target/stdlib-ownership-inference-20261114",
+  "artifact_manifest": [
+    {
+      "path": "source-before.json",
+      "sha256": "c50e0a4439e668ce307366c73b2cc5890a08476fc6943cd30076579568b6819b"
+    },
+    {
+      "path": "source-after.json",
+      "sha256": "baa37dbe09ba8b7021177ce7952cf479fc043ee7ee33f30e3b24caceb3b7b575"
+    },
+    {
+      "path": "binaries.json",
+      "sha256": "e7ba89a22b8e75e37d69e369f2b15c320c5ea86a57b54f0132ac5e7ab74fc404"
+    },
+    {
+      "path": "tools.json",
+      "sha256": "e7ce92231b8d623c5227f75dd4ba0f438b0d53ee1d08928f9411340c3f218c5a"
+    },
+    {
+      "path": "settings.json",
+      "sha256": "3cc3e29a46f3424c0d2b5031f2622e4fe43055208f6476bb35d3ec5cab069129"
+    },
+    {
+      "path": "preservation.json",
+      "sha256": "c834534c2d8d4c8c1aa63028c6f5daf6d6e55dc11fbabb16ba9a94ce183baca9"
+    },
+    {
+      "path": "expected-coverage.json",
+      "sha256": "9296e6aeb68a712fe6005dcb2e2361cdd0df52250d4a655a521b7b28dc714455"
+    },
+    {
+      "path": "summary.json",
+      "sha256": "990f7339522651ac0cc5a49c9fe0ebbc8608335db5a221bb0c68239b1dee2b9d"
+    },
+    {
+      "path": "later-change-inventory.json",
+      "sha256": "ce3f9a693d157a1be388b87d31231e9732260eb01cf0e79f766d7170309aaebc"
+    },
+    {
+      "path": "audit-cases.json",
+      "sha256": "8891abbc6ae1886406768af4de97e718174e9215d60cce98a9bbfd27c23e8beb"
+    },
+    {
+      "path": "audit/audited-results.json",
+      "sha256": "5f2f2a6717f7efb4fdb14041e709e1a51197bbe5639762a8a819025d897e968b"
+    },
+    {
+      "path": "run_r0.py",
+      "sha256": "ab900aa14b780a8860bb51933be78e30d19b8f3656e9081a07f7a3ee6cc895e9"
+    },
+    {
+      "path": "suite_wrapper.py",
+      "sha256": "557832c7676ec5f7ce67d72effdc5cf886ccc4b86c04b431d831b999131e1ae7"
+    },
+    {
+      "path": "run_audit.py",
+      "sha256": "fef90ed516b38ece92a87376ccb345a54baa871d0357999a07c9a0a82e6bd264"
+    },
+    {
+      "path": "preserved-current-runner.py",
+      "sha256": "fba3c18fc7bb44177671a6f5ab410aa193c0e35888af7529c6ee1b31b95a5459"
+    },
+    {
+      "path": "silicon-build-info.txt",
+      "sha256": "ab4943e55ceea68f2bfb7e1fe7b028b64d9a565c81bbfbb90d123b3d8c333df5"
+    },
+    {
+      "path": "dependency-locks.json",
+      "sha256": "ab8bb427f65f7e849bd0a3c179490eb51f5d31b424566a96d1b813b3eb5494ae"
+    },
+    {
+      "path": "summarize.py",
+      "sha256": "41ad5e2dd7d8fead15820be70196abbcaafa13590c92ecc2bf2fe004af31311c"
+    }
+  ],
+  "stopping_boundary": "Stop before R1; no adapter import, ownership redesign, inference implementation, D1-D6, or scheduled automation."
+}

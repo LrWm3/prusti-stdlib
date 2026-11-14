@@ -49,12 +49,30 @@ prove that a rewrite is necessary. Resource units are not calibrated millisecond
 | Phase | Work and acceptance | Status |
 |---|---|---|
 | R0: reproduce and audit M3 | Rebuild `be1364c7c` with PCG `e54bf675468d`, original Rust/Java/Viper/Z3 settings; run complete historical hash, extern, iterator and borrow gates, specification unit tests, and audit later correctness changes and controls. Freeze source, binaries, exact coverage, settings and results. | Reproduction/audit complete; adoption blocked by incorrect acceptance |
-| R1a: baseline correctness imports | Backport entry-state capture (`bbb6b0520`) and expiry-context guards (`c17aaa266`) separately, qualify their controls and affected historical families, and resolve or explicitly retain the remaining audit restrictions. | In progress: entry-state capture first, then expiry scope and remaining audit gaps |
+| R1a: baseline correctness imports | Backport entry-state capture (`bbb6b0520`) and expiry-context guards (`c17aaa266`) separately, qualify their controls and affected historical families, and resolve or explicitly retain the remaining audit restrictions. | Entry-state/trigger repair integrated at `70b825daa`: 364/364 affected checks, 4/4 controls, 36 unit tests; expiry scope next |
 | R1b: Ferrum compatibility | Import the adapter and necessary compatibility changes individually; pin the backend and printer correction; rebuild this branch and qualify the corrected baseline on both backends. Keep compatibility separate from ownership changes. | Not started |
 | R2: checked ownership and prophecy core | Specify and implement local transfer rules for scalar mutation, reborrowing, reference replacement and one selected element, with manually supplied value relations. Establish the soundness boundary and native positive/negative proofs. | Not started |
 | R3: original difficult proof | Verify unchanged `mut_native_resource_early_pass` and its exact false control, plus targeted wrong-prefix/wrong-suffix, replacement, generic/non-Copy and zero-sized controls. Compare old encoding and explicit summaries with the same value invariants. | Not started |
 | R4: bounded value inference | Add equality/bounds propagation and a small Houdini-style candidate language over immutable values; recheck inferred entry/preservation/use obligations. Add CHC/Spacer only for a concrete required relation the simpler layer cannot infer. | Not started |
 | R5: restore and qualify | Restore newer families incrementally against the unchanged 790-client/2,198-check inventory; freeze final source, rebuild and run complete Ferrum/Silicon matrices. Commit/push qualified changes and stop before D1-D6. | Not started |
+
+### R1 progress
+
+The entry-state and trigger-capture repair is integrated at `70b825daa`.
+The rebuilt isolated candidate passes 364/364 checks across all seven historical
+stdlib families, four focused native controls, and 36 specification unit tests.
+The first entry-only candidate exposed a trigger regression (362/363); frozen
+M3 passed the original sequence gate 21/21. The combined repair preserves the
+captured-trigger binding outside the quantifier and adds a negative control.
+Its sequence gate passes 22/22. No material timing increase was found using the
+recorded comparison (more than double and at least ten seconds slower).
+
+The qualified experimental and integrated source files match byte for byte;
+source, binary and pending-main preservation checks pass. Full evidence is in
+[the repair record](STDLIB_M3_REPAIR_EVIDENCE.json). The first checkpoint is still
+incomplete: expiry-scope, remaining audit gaps and final Ferrum/Silicon baseline
+qualification remain. The expiry-context repair is now being built and tested
+separately, without importing unrelated `after_call` machinery.
 
 ### R0 result: reproduced, but not qualified for adoption
 

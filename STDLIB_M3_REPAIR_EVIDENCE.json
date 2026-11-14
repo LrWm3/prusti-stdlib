@@ -1,0 +1,159 @@
+{
+  "schema": 1,
+  "repairs": [
+    {
+      "id": "entry-and-trigger-captures",
+      "integration_commit": "70b825daa",
+      "experiment_commit": "89002e67f",
+      "backports": [
+        "bbb6b0520",
+        "2299992a3"
+      ],
+      "status": "qualified repair; overall baseline checkpoint incomplete",
+      "backend": "Silicon",
+      "program_timeout_seconds": 90,
+      "focused_controls": {
+        "matched": 4,
+        "expected": 4
+      },
+      "suite_checks": {
+        "matched": 364,
+        "expected": 364
+      },
+      "specification_unit_tests": 36,
+      "gate": {
+        "suites": {
+          "borrow": {
+            "matched": 80,
+            "expected": 80,
+            "seconds": 844.45,
+            "longest": {
+              "case": "frame_pass",
+              "passed": true,
+              "seconds": 44.07
+            }
+          },
+          "extern": {
+            "matched": 97,
+            "expected": 97,
+            "seconds": 371.4,
+            "longest": {
+              "case": "traits_pass",
+              "passed": true,
+              "seconds": 11.47
+            }
+          },
+          "sequence": {
+            "matched": 22,
+            "expected": 22,
+            "seconds": 75.88,
+            "longest": {
+              "case": "spec-library",
+              "passed": true,
+              "seconds": 15.56
+            }
+          },
+          "vec": {
+            "matched": 21,
+            "expected": 21,
+            "seconds": 122.61,
+            "longest": {
+              "case": "spec-library",
+              "passed": true,
+              "seconds": 17.04
+            }
+          },
+          "collections": {
+            "matched": 27,
+            "expected": 27,
+            "seconds": 213.36,
+            "longest": {
+              "case": "boundaries_pass",
+              "passed": true,
+              "seconds": 30.14
+            }
+          },
+          "iterator": {
+            "matched": 66,
+            "expected": 66,
+            "seconds": 387.66,
+            "longest": {
+              "case": "spec-library",
+              "passed": true,
+              "seconds": 25.65
+            }
+          },
+          "hash": {
+            "matched": 51,
+            "expected": 51,
+            "seconds": 360.93,
+            "longest": {
+              "case": "spec-library",
+              "passed": true,
+              "seconds": 22.49
+            }
+          }
+        },
+        "material_timing_increases": []
+      },
+      "binary_sha256": {
+        "cargo-prusti": "992c11e18034b5d4305119aa913de42285de3f7e39e52a17ca301f76ae6025fb",
+        "prusti-driver": "1bcaaf757e571d1517cb87bc8d4cb480cf913b3280b4ac1c92c1b1c48f690d4b",
+        "prusti-rustc": "c2eb76fbf49521762cf2faf9b031585199ce453977be489e797e09aeec47657a",
+        "prusti-server": "fc273b04ac198ce1a9ec083913006123cf5dce2f9852a6a4f915a3c1b9226a68",
+        "prusti-server-driver": "fcc76ad5fc6d7023852b2ddb93f9663038404d989ce6820144aab005fa7f6c76",
+        "prusti-smt-solver": "0799c783005b612b440c6ebc5e2aa521d1d89b123500097ee5ddffa962356ee7"
+      },
+      "artifact_root": "../prusti-stdlib/target/stdlib-ownership-inference-20261114/repairs/01b-capture-and-triggers",
+      "artifact_manifest": [
+        {
+          "path": "source-before.json",
+          "sha256": "8b3df36eb4fabcaef425dac3ed5c3354d66db36443f7354ee33701cea987ee3d"
+        },
+        {
+          "path": "source-after.json",
+          "sha256": "bb4167be3e18c3976d6f12455ae5acb71766b62537c733e315a45c9fcf8ddd2e"
+        },
+        {
+          "path": "candidate.patch",
+          "sha256": "b66e28e790f3a8dc9bdf845d2b89a31883d5a488d2a5f678d7a662751a121247"
+        },
+        {
+          "path": "binaries.json",
+          "sha256": "d41a9df285218df8c19a9f448b7a252a4e98b2faea63823d3fa7a1e16fddf205"
+        },
+        {
+          "path": "tools.json",
+          "sha256": "6d4c00eb29139db981300458a4f835e702dd4cda4ae26e79a11510b05cb5ca2e"
+        },
+        {
+          "path": "settings.json",
+          "sha256": "7fc54739f3b3a6956746474bfc85940efd02b22c3932ba22f6e1d5b8066aa7ee"
+        },
+        {
+          "path": "expected-coverage.json",
+          "sha256": "68a6677d9bc0843ff37b609aa705fa0c9b04137f27d8adbc10ca4d33dc8f96ab"
+        },
+        {
+          "path": "gate-review.json",
+          "sha256": "1f31ae4abaffe51c2e0503a719325dbb05b84de9d621398a06a817a7bbc4f2b9"
+        },
+        {
+          "path": "integration.json",
+          "sha256": "9ad29586c3626ab09db9a815f553ce7e086917318cb1471451697723f347a3c5"
+        },
+        {
+          "path": "preservation.json",
+          "sha256": "c834534c2d8d4c8c1aa63028c6f5daf6d6e55dc11fbabb16ba9a94ce183baca9"
+        },
+        {
+          "path": "audit/results.json",
+          "sha256": "4da07c62693d3e89e7ecac450c28ce39960d98ed4fe0d9ba4d542a8e8ddedc78"
+        }
+      ],
+      "preceding_candidate": "01-entry-capture: 362/363; trigger regression not integrated",
+      "comparison": "Frozen M3 sequence: 21/21, original triggers_pass 4.96s; repaired combined sequence: 22/22"
+    }
+  ],
+  "checkpoint_complete": false
+}

@@ -9,9 +9,9 @@ Evidence root: `target/stdlib-matrix-20261031-1236/reconciliation-20261102/`.
   positive/negative tracing controls and prover tests passed; no full proof passed.
 - Cost summarization did not finish; parent process no longer exists. The trace
   is19GB and the current parser reads it all into memory. Exact termination cause
-  is unconfirmed. Raw trace is preserved. No active job.
-- Next use a streaming, bounded-memory summarizer and quantify tracer overhead
-  before interpreting costs. See `recovery-audit.json`.
+  is unconfirmed. The large trace was deleted at the user’s request. No active job.
+- The19GB `native/query-events.jsonl` was deleted at the user’s explicit request.
+  Other artifacts remain. See `trace-removal.json`; the deleted trace cannot be summarized.
 - Separate diagnostic Prusti/Ferrum worktrees from exact H1 plus printer931a2d5.
   Opt-in tracing at actual check-sat/read_sat records caller stack, nominal budget,
   elapsed time, resource counters and interrupted calls. Only statistic requests

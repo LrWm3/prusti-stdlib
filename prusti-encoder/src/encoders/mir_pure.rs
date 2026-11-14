@@ -65,6 +65,9 @@ pub struct MirPureEncOutput<'vir> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PureKind {
     Closure,
+    /// A closure in a contract. Its captured references may contain heap
+    /// reads that an `old` inside the closure must evaluate at contract entry.
+    SpecClosure,
     /// A closure inside a body assertion/invariant. Its captured snapshots
     /// describe the current heap, unlike the pinned inputs of a contract.
     SpecBlockClosure,
@@ -139,7 +142,7 @@ impl TaskEncoder for MirPureEnc {
             // instantiated with the arguments of the encoding.
             let identity = ty::GenericArgs::identity_for_item(vcx.tcx(), def_id);
             let body = match kind {
-                PureKind::Closure | PureKind::SpecBlockClosure => {
+                PureKind::Closure | PureKind::SpecClosure | PureKind::SpecBlockClosure => {
                     vcx.body_mut().get_closure_body(def_id, identity, None)
                 }
                 PureKind::Spec { context, .. } => {
@@ -293,6 +296,9 @@ struct Enc<'vir: 'enc, 'enc> {
     def_id: DefId,
     context: GParams<'vir>,
     spec_block: bool,
+    specification: bool,
+    spec_closure: bool,
+    inline_snapshots: bool,
     body: &'enc mir::Body<'vir>,
     rev_doms: rev_doms::ReverseDominators,
     /// The `ghost!` blocks of the body (the same detection the impure
@@ -391,12 +397,30 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
         deps: &'enc mut TaskEncoderDependencies<'vir, MirPureEnc>,
     ) -> Self {
         let rev_doms = rev_doms::ReverseDominators::new(&body.basic_blocks);
+        // A quantified contract can capture a shared view computed in the
+        // post-state. Keep its construction as an expression so an `old`
+        // inside the closure can select the entry heap before it is evaluated.
+        let has_closure = body.basic_blocks.iter().any(|block| {
+            block.statements.iter().any(|statement| matches!(
+                &statement.kind,
+                mir::StatementKind::Assign(box (_, mir::Rvalue::Aggregate(
+                    box mir::AggregateKind::Closure(..), _
+                )))
+            ))
+        });
         Self {
             vcx,
             encoding_depth,
             def_id,
             context: gargs.context(),
             spec_block: matches!(kind, PureKind::SpecBlock(_) | PureKind::SpecBlockClosure),
+            specification: matches!(
+                kind,
+                PureKind::Spec { .. } | PureKind::SpecClosure | PureKind::SpecBlock(_) | PureKind::SpecBlockClosure
+            ),
+            spec_closure: matches!(kind, PureKind::SpecClosure),
+            inline_snapshots: matches!(kind, PureKind::SpecBlock(_) | PureKind::SpecBlockClosure | PureKind::SpecClosure)
+                || (matches!(kind, PureKind::Spec { .. }) && has_closure),
             body,
             rev_doms,
             ghost: GhostBlocks::new(def_id, body),
@@ -438,7 +462,7 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
     }
 
     fn mk_local_ex(&mut self, _local: mir::Local, version: Version<'vir>) -> ExprRet<'vir> {
-        if self.spec_block {
+        if self.inline_snapshots {
             version.expression.unwrap()
         } else {
             self.vcx.mk_local_ex(version.initialised.unwrap())
@@ -458,7 +482,7 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
     ) -> ExprRet<'vir> {
         tuple_ref.mk_elem(
             self.vcx,
-            if self.spec_block {
+            if self.inline_snapshots {
                 phi_idx.expression.unwrap()
             } else {
                 self.vcx.mk_local_ex(phi_idx.initialised.unwrap())
@@ -527,10 +551,10 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
         update: Update<'vir>,
         expr: ExprRetAny<'vir, T>,
     ) -> ExprRetAny<'vir, T> {
-        // Inline body-spec temporaries before applying `old`: a let-bound
+        // Inline capture temporaries before applying `old`: a let-bound
         // capture computed in the current state cannot be recovered by putting
         // `old` around that local later. Contract inputs stay pinned as before.
-        if self.spec_block {
+        if self.inline_snapshots {
             return expr;
         }
         update.binds.iter().rfold(expr, |expr, bind| match bind {
@@ -951,7 +975,12 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                                         "operand-based builtin in the pure-only handler: {builtin:?}"
                                     )
                                 };
-                                self.encode_pure_only_builtin(builtin, arg_tys, args, &new_curr_ver)
+                                self.encode_pure_only_builtin(
+                                    builtin,
+                                    arg_tys,
+                                    args,
+                                    &new_curr_ver,
+                                )
                             }
                         }
                     } else if is_pure {
@@ -1350,7 +1379,7 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                 && matches!(place_ty.ty.kind(), TyKind::Ref(.., ty::Mutability::Mut));
             encoded_place = self.encode_place_element(curr_ver, place_ty, *elem, encoded_place)?;
             place_ty = place_ty.projection_ty(self.vcx.tcx(), *elem);
-            if heap_read && should_wrap && self.old_mode && !self.spec_block {
+            if heap_read && should_wrap && self.old_mode && !self.spec_block && !self.spec_closure {
                 let inner = encoded_place.snap;
                 encoded_place.snap = self.vcx.mk_lazy_expr(
                     "old_mode_wrap",
@@ -1369,10 +1398,10 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
         // Can we ever have the use of a projected place?
         assert!(place_ty.variant_index.is_none());
 
-        // Body-spec captures are read from the current heap. Delay `old` until
+        // Specification captures can be read from the current heap. Delay `old` until
         // after projecting the captured value, so unrelated captures (including
         // locals that did not exist at entry) are not read in the entry state.
-        if should_wrap && self.old_mode && self.spec_block {
+        if should_wrap && self.old_mode && (self.spec_block || self.spec_closure) {
             let inner = encoded_place.snap;
             encoded_place.snap = self.vcx.mk_lazy_expr(
                 "old_body_capture",
@@ -1442,6 +1471,8 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                 encoding_depth: self.encoding_depth + 1,
                 kind: if self.spec_block {
                     PureKind::SpecBlockClosure
+                } else if self.specification {
+                    PureKind::SpecClosure
                 } else {
                     PureKind::Closure
                 },
@@ -1546,12 +1577,30 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                 let (qvars, body) =
                     self.encode_spec_closure(name, arg_tys[2].expect_ty(), encoded_args[1])?;
                 let body = body.downcast_ty::<vir::Bool>();
-                let triggers =
-                    self.encode_trigger_sets(name, arg_tys[0].expect_ty(), encoded_args[0], qvars)?;
+                // Keep the trigger closures' captures outside the quantifier.
+                // If their tuple construction occurs only inside a trigger,
+                // the solver cannot reduce its projections before matching it
+                // against terms built from the captured values.
+                let trigger_snap = encoded_args[0];
+                let trigger_decl = self.vcx.mk_local_decl(
+                    vir::vir_format!(self.vcx, "_trigger_capture_{}", self.encoding_depth),
+                    trigger_snap.ty(),
+                );
+                let triggers = self.encode_trigger_sets(
+                    name,
+                    arg_tys[0].expect_ty(),
+                    self.vcx.mk_local_ex(trigger_decl).lift(),
+                    qvars,
+                )?;
                 let res = if builtin == SpecBuiltin::Forall {
                     self.vcx.mk_forall_expr(qvars, triggers, body)
                 } else {
                     self.vcx.mk_exists_expr(qvars, triggers, body)
+                };
+                let res = if triggers.is_empty() {
+                    res
+                } else {
+                    self.vcx.mk_let_expr(trigger_decl, trigger_snap, res)
                 };
                 mk_bool(res)
             }

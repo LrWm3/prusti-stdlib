@@ -34,6 +34,15 @@ fn framed(a: u32, b: u32) {
                           triggers = [(lookup(b, i), lookup(b, j))]));
 }
 
+/// Nested trigger captures must remain scoped to their own quantifier.
+#[requires(len(a) > 3 && len(b) > 3)]
+#[requires(forall(|i: usize| i < len(a) ==> forall(|j: usize| j < len(b) ==> lookup(a, i) <= lookup(b, j),
+                                                   triggers = [(lookup(b, j),)]),
+                  triggers = [(lookup(a, i),)]))]
+fn nested(a: u32, b: u32) {
+    prusti_assert!(lookup(a, 2) <= lookup(b, 2));
+}
+
 /// Triggers are also forwarded for `exists`.
 #[requires(exists(|i: usize| lookup(a, i) == 42, triggers = [(lookup(a, i),)]))]
 fn existential(a: u32) {}

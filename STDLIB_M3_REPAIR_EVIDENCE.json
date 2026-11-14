@@ -480,6 +480,261 @@
           "sha256": "84b70d811cbc1e707310e90140e4a08537760662b2db675f304d37e42018f63f"
         }
       ]
+    },
+    {
+      "id": "04c-retained-resource",
+      "experiment_commit": "fa1565afe09cac8e1fbd18233d07166f4e7d8169",
+      "integration_commit": "08e4138cbe3460662d555d9536f32b19109dcb86",
+      "non_documentation_source_matches": true,
+      "backports": [
+        "dcf7fcc83",
+        "65312bd57"
+      ],
+      "status": "qualified repair; overall baseline checkpoint incomplete",
+      "backend": "Silicon",
+      "program_timeout_seconds": 90,
+      "focused_controls": {
+        "matched": 15,
+        "expected": 15
+      },
+      "suite_checks": {
+        "matched": 378,
+        "expected": 378
+      },
+      "specification_unit_tests": 36,
+      "gate": {
+        "suites": {
+          "borrow": {
+            "matched": 94,
+            "expected": 94,
+            "seconds": 1012.56,
+            "longest": {
+              "case": "frame_pass",
+              "passed": true,
+              "seconds": 47.21
+            }
+          },
+          "collections": {
+            "matched": 27,
+            "expected": 27,
+            "seconds": 261.91,
+            "longest": {
+              "case": "slices_pass",
+              "passed": true,
+              "seconds": 32.65
+            }
+          },
+          "extern": {
+            "matched": 97,
+            "expected": 97,
+            "seconds": 701.57,
+            "longest": {
+              "case": "refinement_lifetime_pass",
+              "passed": true,
+              "seconds": 22.14
+            }
+          },
+          "hash": {
+            "matched": 51,
+            "expected": 51,
+            "seconds": 372.09,
+            "longest": {
+              "case": "collection_lookup_pass",
+              "passed": true,
+              "seconds": 18.38
+            }
+          },
+          "iterator": {
+            "matched": 66,
+            "expected": 66,
+            "seconds": 434.79,
+            "longest": {
+              "case": "spec-library",
+              "passed": true,
+              "seconds": 30.44
+            }
+          },
+          "sequence": {
+            "matched": 22,
+            "expected": 22,
+            "seconds": 89.82,
+            "longest": {
+              "case": "spec-library",
+              "passed": true,
+              "seconds": 17.07
+            }
+          },
+          "vec": {
+            "matched": 21,
+            "expected": 21,
+            "seconds": 131.65,
+            "longest": {
+              "case": "symbolic_pass",
+              "passed": true,
+              "seconds": 19.84
+            }
+          }
+        },
+        "material_timing_increases": [
+          {
+            "suite": "extern",
+            "case": "refinement_borrowed_pass",
+            "prior": 6.94,
+            "current": 22.06
+          },
+          {
+            "suite": "extern",
+            "case": "refinement_lifetime_pass",
+            "prior": 4.89,
+            "current": 22.14
+          },
+          {
+            "suite": "extern",
+            "case": "refinement_mutable_frame_pass",
+            "prior": 6.2,
+            "current": 22.04
+          },
+          {
+            "suite": "extern",
+            "case": "refinement_mutable_pass",
+            "prior": 6.36,
+            "current": 21.28
+          },
+          {
+            "suite": "extern",
+            "case": "conditional_expiry_wrong",
+            "prior": 5.03,
+            "current": 15.63
+          },
+          {
+            "suite": "extern",
+            "case": "conditional_generic_lifetime",
+            "prior": 3.52,
+            "current": 16.62
+          },
+          {
+            "suite": "extern",
+            "case": "conditional_nested_lifetime",
+            "prior": 5.88,
+            "current": 18.26
+          },
+          {
+            "suite": "extern",
+            "case": "conditional_poly_static",
+            "prior": 6.77,
+            "current": 17.6
+          },
+          {
+            "suite": "extern",
+            "case": "conditional_sized_static",
+            "prior": 6.07,
+            "current": 16.3
+          },
+          {
+            "suite": "extern",
+            "case": "conditional_unbound",
+            "prior": 4.14,
+            "current": 14.38
+          },
+          {
+            "suite": "extern",
+            "case": "cross_crate_wrong_value",
+            "prior": 3.87,
+            "current": 16.03
+          },
+          {
+            "suite": "extern",
+            "case": "refinement_borrowed_wrong",
+            "prior": 8.34,
+            "current": 19.62
+          },
+          {
+            "suite": "extern",
+            "case": "refinement_mutable_wrong_state",
+            "prior": 6.17,
+            "current": 18.98
+          },
+          {
+            "suite": "extern",
+            "case": "unwrap_none",
+            "prior": 4.18,
+            "current": 16.11
+          }
+        ],
+        "timing_followup": {
+          "repeats": 28,
+          "matched": 28,
+          "range_seconds": [
+            3.92,
+            8.45
+          ],
+          "persistent_material_increases": [],
+          "conclusion": "The 14 slow commands each matched twice with saved invocation/dependencies and unchanged binaries. The earlier slowdown did not persist; no specific runtime cause established."
+        }
+      },
+      "binary_sha256": {
+        "cargo-prusti": "992c11e18034b5d4305119aa913de42285de3f7e39e52a17ca301f76ae6025fb",
+        "prusti-driver": "ef3efa15415dd2feba31c8f18c8c027ad4b995340cf0fdd613958fef306c6e1c",
+        "prusti-rustc": "c2eb76fbf49521762cf2faf9b031585199ce453977be489e797e09aeec47657a",
+        "prusti-server": "fc273b04ac198ce1a9ec083913006123cf5dce2f9852a6a4f915a3c1b9226a68",
+        "prusti-server-driver": "1e4f4b6423e5bc00705a8092dfca82644b248e81a8c98965477eb7f56556ca11",
+        "prusti-smt-solver": "0799c783005b612b440c6ebc5e2aa521d1d89b123500097ee5ddffa962356ee7"
+      },
+      "artifact_root": "../prusti-stdlib/target/stdlib-ownership-inference-20261114/repairs/04c-retained-resource",
+      "artifact_manifest": [
+        {
+          "path": "source-before.json",
+          "sha256": "28c18e84ec9b91bb1f83e3763f139defd249f2a3dc0c93d4ce11a009e28b0822"
+        },
+        {
+          "path": "source-after.json",
+          "sha256": "6c6c3cffe00af122b02c5a2e733f0846b80b3529a575ea125a98089dd53c0514"
+        },
+        {
+          "path": "candidate.patch",
+          "sha256": "425f9ac8f22db7ae1e43df6fe87daab43a530354e11c4252c33ffb72c4fbd298"
+        },
+        {
+          "path": "binaries.json",
+          "sha256": "00d3f03e1352842f1c4214b08bc1e44ec60bee3e9cb71e4b28bc4259b154fbac"
+        },
+        {
+          "path": "tools.json",
+          "sha256": "b821fe5d63592bfdb8921b407c02a6d91f5f209bbb0e1ecd8487bd4cb06e88aa"
+        },
+        {
+          "path": "settings.json",
+          "sha256": "0657731dafc38e18ef48bea734f2975e99a847f2761a0f89c9f1987b6125b617"
+        },
+        {
+          "path": "expected-coverage.json",
+          "sha256": "2c941f5db5b7e3702765d987ce86962d0a7c2b56d274188ba12286f67b24d86f"
+        },
+        {
+          "path": "gate-review.json",
+          "sha256": "9e1ab916648feebbf0d3637b86eb37d1e7584ed6178b4937c6af53b7bc023e81"
+        },
+        {
+          "path": "integration.json",
+          "sha256": "75fa8ffd6995dff2a75d51682cbe027340ce679c4a1f46457ef84a78621095c4"
+        },
+        {
+          "path": "preservation.json",
+          "sha256": "c834534c2d8d4c8c1aa63028c6f5daf6d6e55dc11fbabb16ba9a94ce183baca9"
+        },
+        {
+          "path": "audit/results.json",
+          "sha256": "bcac741a332ae0056f2686697ef7a5cc02138ccd1fff179176c1d4bb48b171e7"
+        },
+        {
+          "path": "timing-repeat/results.json",
+          "sha256": "ad994cf8606fd78967e2af36d8082bfef5348101bbc0ee3246dd6009a25925b6"
+        }
+      ],
+      "preceding_candidates": [
+        "04-mutable-read-diagnostic: 12/13 focused; structural read precedes mapped error",
+        "04b-nested-footprint: 14/15 focused; new caller lacks retained resource"
+      ]
     }
   ],
   "checkpoint_complete": false

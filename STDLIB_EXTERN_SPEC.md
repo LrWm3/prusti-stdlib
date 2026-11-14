@@ -49,7 +49,7 @@ prove that a rewrite is necessary. Resource units are not calibrated millisecond
 | Phase | Work and acceptance | Status |
 |---|---|---|
 | R0: reproduce and audit M3 | Rebuild `be1364c7c` with PCG `e54bf675468d`, original Rust/Java/Viper/Z3 settings; run complete historical hash, extern, iterator and borrow gates, specification unit tests, and audit later correctness changes and controls. Freeze source, binaries, exact coverage, settings and results. | Reproduction/audit complete; adoption blocked by incorrect acceptance |
-| R1a: baseline correctness imports | Backport audited correctness repairs individually and qualify all fifteen controls and affected historical families. | Repairs integrated through `37dd94bdd`: latest gate 374/374 checks, 12/12 controls, 36 unit tests; mutable-read diagnostics and quantified expiry heaps remain |
+| R1a: baseline correctness imports | Backport audited correctness repairs individually and qualify all fifteen controls and affected historical families. | Repairs integrated through `08e4138cb`: latest gate 378/378 checks, 15/15 focused controls, 36 unit tests; quantified expiry heaps remain |
 | R1b: Ferrum compatibility | Import the adapter and necessary compatibility changes individually; pin the backend and printer correction; rebuild this branch and qualify the corrected baseline on both backends. Keep compatibility separate from ownership changes. | Not started |
 | R2: checked ownership and prophecy core | Specify and implement local transfer rules for scalar mutation, reborrowing, reference replacement and one selected element, with manually supplied value relations. Establish the soundness boundary and native positive/negative proofs. | Not started |
 | R3: original difficult proof | Verify unchanged `mut_native_resource_early_pass` and its exact false control, plus targeted wrong-prefix/wrong-suffix, replacement, generic/non-Copy and zero-sized controls. Compare old encoding and explicit summaries with the same value invariants. | Not started |
@@ -58,22 +58,27 @@ prove that a rewrite is necessary. Resource units are not calibrated millisecond
 
 ### R1 progress
 
-Three repairs are integrated: entry-state/trigger captures (`70b825daa`), expiry
-scope (`336776ddd`), and inferred lifetimes (`37dd94bdd`). The latest combined
-candidate passes 374/374 checks across seven historical stdlib families, 12/12
-focused native controls, and 36 specification unit tests on Silicon. Source,
-binary and pending-main preservation checks pass; the integrated compiler source
-matches the tested experiment byte for byte.
+Repairs integrated through `08e4138cb` cover entry-state/trigger captures, expiry
+scope, inferred lifetimes, and nested loan footprint capture/retained permissions.
+The latest combined candidate passes 378/378 checks across seven historical stdlib
+families, 15/15 cumulative focused controls, and 36 specification unit tests on
+Silicon. Source, binary and pending-main preservation checks pass; the integrated
+compiler source matches the tested experiment byte for byte.
 
-The entry-only attempt exposed a trigger regression, repaired and requalified
-before integration. The scope gate had one 19.15s iterator outlier; two native
-repeats passed in 7.64s and 8.06s with unchanged noncomment Viper text. The lifetime
-gate has no material timing increases against the preceding candidate.
+The diagnostic backport alone could not reach the intended permission error:
+removing its pledge still exposed an unpositioned structural heap read. Capturing
+nested targets at entry/post-call states fixed that read. A new caller negative
+then identified a missing retained-resource postcondition needed by restoration.
+The checked postcondition completes that repair; the false assertion now fails
+at its intended location. Failed candidates remain preserved and unintegrated.
 
+Fourteen slower external-specification commands each matched on two native
+repeats (28/28, 3.92–8.45s); none retained a material timing increase. This rules
+out a persistent increase in those repeats, without assigning a specific cause.
 [The repair record](STDLIB_M3_REPAIR_EVIDENCE.json) preserves exact coverage,
-provenance and timings. Missing-permission diagnostics and quantified expiry-heap
-selection remain. The first checkpoint also requires the separate Ferrum import
-and own-branch final qualification on both backends. R2 has not begun.
+provenance and timings. Quantified expiry-heap selection is the remaining audited
+repair. The first checkpoint also requires the separate Ferrum import and
+own-branch final qualification on both backends. R2 has not begun.
 
 ### R0 result: reproduced, but not qualified for adoption
 

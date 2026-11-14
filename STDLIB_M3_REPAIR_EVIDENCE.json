@@ -153,6 +153,181 @@
       ],
       "preceding_candidate": "01-entry-capture: 362/363; trigger regression not integrated",
       "comparison": "Frozen M3 sequence: 21/21, original triggers_pass 4.96s; repaired combined sequence: 22/22"
+    },
+    {
+      "id": "expiry-scope",
+      "experiment_commit": "6b617e7f70ce1126021e1251c65e8110edb0acba",
+      "integration_commit": "336776dddf7330189feb448e0e8daff98c727d6b",
+      "non_documentation_source_matches": true,
+      "backports": [
+        "c17aaa266"
+      ],
+      "status": "qualified repair; overall baseline checkpoint incomplete",
+      "backend": "Silicon",
+      "program_timeout_seconds": 90,
+      "focused_controls": {
+        "matched": 10,
+        "expected": 10
+      },
+      "suite_checks": {
+        "matched": 371,
+        "expected": 371
+      },
+      "specification_unit_tests": 36,
+      "gate": {
+        "suites": {
+          "borrow": {
+            "matched": 87,
+            "expected": 87,
+            "seconds": 907.52,
+            "longest": {
+              "case": "range_slice_pass",
+              "passed": true,
+              "seconds": 42.35
+            }
+          },
+          "collections": {
+            "matched": 27,
+            "expected": 27,
+            "seconds": 246.12,
+            "longest": {
+              "case": "boundaries_pass",
+              "passed": true,
+              "seconds": 39.05
+            }
+          },
+          "extern": {
+            "matched": 97,
+            "expected": 97,
+            "seconds": 404.26,
+            "longest": {
+              "case": "core-only",
+              "passed": true,
+              "seconds": 14.29
+            }
+          },
+          "hash": {
+            "matched": 51,
+            "expected": 51,
+            "seconds": 371.3,
+            "longest": {
+              "case": "collection_get_mut_expiry_pass",
+              "passed": true,
+              "seconds": 23.8
+            }
+          },
+          "iterator": {
+            "matched": 66,
+            "expected": 66,
+            "seconds": 451.33,
+            "longest": {
+              "case": "spec-library",
+              "passed": true,
+              "seconds": 22.56
+            }
+          },
+          "sequence": {
+            "matched": 22,
+            "expected": 22,
+            "seconds": 84.51,
+            "longest": {
+              "case": "spec-library",
+              "passed": true,
+              "seconds": 16.9
+            }
+          },
+          "vec": {
+            "matched": 21,
+            "expected": 21,
+            "seconds": 123.0,
+            "longest": {
+              "case": "symbolic_pass",
+              "passed": true,
+              "seconds": 15.97
+            }
+          }
+        },
+        "material_timing_increases": [
+          {
+            "suite": "iterator",
+            "case": "owned_pass",
+            "prior": 7.84,
+            "current": 19.15
+          }
+        ],
+        "timing_followup": {
+          "case": "iterator/owned_pass",
+          "native_repeats_seconds": [
+            7.64,
+            8.06
+          ],
+          "outcomes": [
+            "passed",
+            "passed"
+          ],
+          "same_noncomment_export_as_prior": true,
+          "conclusion": "The single 19.15s increase did not reproduce; native construction metadata was not independently canonicalized. No persistent timing regression established."
+        }
+      },
+      "binary_sha256": {
+        "cargo-prusti": "992c11e18034b5d4305119aa913de42285de3f7e39e52a17ca301f76ae6025fb",
+        "prusti-driver": "e65d8c92b412b424298019382bac0ae433bcf215e8c837aa5d806355366a6f0a",
+        "prusti-rustc": "c2eb76fbf49521762cf2faf9b031585199ce453977be489e797e09aeec47657a",
+        "prusti-server": "fc273b04ac198ce1a9ec083913006123cf5dce2f9852a6a4f915a3c1b9226a68",
+        "prusti-server-driver": "fa18c7bd43818f626cf87d4f7562261cf3df8b7b639c99ad76bbaf6693cfdaa4",
+        "prusti-smt-solver": "0799c783005b612b440c6ebc5e2aa521d1d89b123500097ee5ddffa962356ee7"
+      },
+      "artifact_root": "../prusti-stdlib/target/stdlib-ownership-inference-20261114/repairs/02-expiry-scope",
+      "artifact_manifest": [
+        {
+          "path": "source-before.json",
+          "sha256": "5e4e39f634298b406f48ab52fdc47e7df2504aaa8a7167e58e72c1aa31caf153"
+        },
+        {
+          "path": "source-after.json",
+          "sha256": "89202dfb6d9adf09b19f9a2dfbfc580d47147fdc3255c2524a3ba94fc216e46b"
+        },
+        {
+          "path": "candidate.patch",
+          "sha256": "503eb424c1a224c3a52c8e1e746c034f8f5dfc183fc3ced91280de19d85c7908"
+        },
+        {
+          "path": "binaries.json",
+          "sha256": "89e28e02056311c9da20ebd6d1367f3227cc878ae107697bddd2f4a7dba6f5d5"
+        },
+        {
+          "path": "tools.json",
+          "sha256": "c7c8d724a75c12f5adc4632645c658a34cce0a70fc981197ddf6132af36a8f33"
+        },
+        {
+          "path": "settings.json",
+          "sha256": "48740c78711bbfbc8f65e8ad99272b51cde494e6e9a6018a1c9e7f28eeb7e40c"
+        },
+        {
+          "path": "expected-coverage.json",
+          "sha256": "d1c086cb3b8099a612b45578cf776596a06bf1306fd6281b93cfe98744472910"
+        },
+        {
+          "path": "gate-review.json",
+          "sha256": "23bac86e3427b1d2448e15d786362d2faae23dc5ca6df1b2cfd989287eba1d5f"
+        },
+        {
+          "path": "integration.json",
+          "sha256": "fb30bb44fbb42bfb6b4a935bb1d8a5dace20c9e4e5738a283514029df2a5e890"
+        },
+        {
+          "path": "preservation.json",
+          "sha256": "c834534c2d8d4c8c1aa63028c6f5daf6d6e55dc11fbabb16ba9a94ce183baca9"
+        },
+        {
+          "path": "audit/results.json",
+          "sha256": "9553ad377fc6491787df94cb0e22cd5db1da09f8ce58716fec784735fca3f789"
+        },
+        {
+          "path": "timing-repeat/results.json",
+          "sha256": "c5c45aa331bc2ce4e4e3b70acdde09398e1a610c2ae11529ae62c71bc4d8c029"
+        }
+      ]
     }
   ],
   "checkpoint_complete": false

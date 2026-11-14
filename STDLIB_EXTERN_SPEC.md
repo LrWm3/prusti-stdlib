@@ -49,7 +49,7 @@ prove that a rewrite is necessary. Resource units are not calibrated millisecond
 | Phase | Work and acceptance | Status |
 |---|---|---|
 | R0: reproduce and audit M3 | Rebuild `be1364c7c` with PCG `e54bf675468d`, original Rust/Java/Viper/Z3 settings; run complete historical hash, extern, iterator and borrow gates, specification unit tests, and audit later correctness changes and controls. Freeze source, binaries, exact coverage, settings and results. | Reproduction/audit complete; adoption blocked by incorrect acceptance |
-| R1a: baseline correctness imports | Backport entry-state capture (`bbb6b0520`) and expiry-context guards (`c17aaa266`) separately, qualify their controls and affected historical families, and resolve or explicitly retain the remaining audit restrictions. | Entry-state/trigger repair integrated at `70b825daa`: 364/364 affected checks, 4/4 controls, 36 unit tests; expiry scope next |
+| R1a: baseline correctness imports | Backport entry-state capture (`bbb6b0520`) and expiry-context guards (`c17aaa266`) separately, qualify their controls and affected historical families, and resolve or explicitly retain the remaining audit restrictions. | Entry-state/trigger and expiry-scope repairs integrated through `336776ddd`: latest gate 371/371 checks, 10/10 controls, 36 unit tests; inferred lifetimes next |
 | R1b: Ferrum compatibility | Import the adapter and necessary compatibility changes individually; pin the backend and printer correction; rebuild this branch and qualify the corrected baseline on both backends. Keep compatibility separate from ownership changes. | Not started |
 | R2: checked ownership and prophecy core | Specify and implement local transfer rules for scalar mutation, reborrowing, reference replacement and one selected element, with manually supplied value relations. Establish the soundness boundary and native positive/negative proofs. | Not started |
 | R3: original difficult proof | Verify unchanged `mut_native_resource_early_pass` and its exact false control, plus targeted wrong-prefix/wrong-suffix, replacement, generic/non-Copy and zero-sized controls. Compare old encoding and explicit summaries with the same value invariants. | Not started |
@@ -71,8 +71,12 @@ The qualified experimental and integrated source files match byte for byte;
 source, binary and pending-main preservation checks pass. Full evidence is in
 [the repair record](STDLIB_M3_REPAIR_EVIDENCE.json). The first checkpoint is still
 incomplete: expiry-scope, remaining audit gaps and final Ferrum/Silicon baseline
-qualification remain. The expiry-context repair is now being built and tested
-separately, without importing unrelated `after_call` machinery.
+qualification remain. Expiry scope is integrated at `336776ddd`, with 371/371
+affected checks, 10/10 focused controls and 36 unit tests. It rejects invalid
+expiry contexts while preserving valid pledges; no unrelated `after_call`
+machinery was imported. One iterator timing increase (7.84s to 19.15s) did not
+repeat: two native checks passed in 7.64s and 8.06s with unchanged noncomment
+Viper text. Inferred lifetimes are the next isolated repair.
 
 ### R0 result: reproduced, but not qualified for adoption
 

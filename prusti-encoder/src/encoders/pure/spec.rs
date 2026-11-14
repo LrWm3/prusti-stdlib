@@ -439,6 +439,7 @@ impl MirSpecEnc {
             kind: PureKind::Spec {
                 context: ctx.context_def_id,
                 mode: ctx.enc_mode,
+                allow_before_expiry: matches!(type_, "pledge lhs" | "pledge rhs"),
             },
             parent_def_id: def_id,
             gargs: GArgs::new(

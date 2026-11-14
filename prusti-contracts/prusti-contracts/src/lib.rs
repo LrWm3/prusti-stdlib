@@ -50,6 +50,9 @@ pub use prusti_contracts_proc_macros::requires;
 pub use prusti_contracts_proc_macros::ensures;
 
 /// A macro for writing a pledge on a function.
+///
+/// `before_expiry(expr)` observes mutable-reference heap reads immediately
+/// before the borrow expires. It is available only in expiry pledges.
 pub use prusti_contracts_proc_macros::after_expiry;
 
 /// A macro for writing a two-state pledge on a function.

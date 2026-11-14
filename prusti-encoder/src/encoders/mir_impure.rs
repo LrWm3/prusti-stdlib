@@ -1790,6 +1790,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 kind: PureKind::Spec {
                     context: self.def_id,
                     mode: MirSpecEncMode::Impure,
+                    allow_before_expiry: true,
                 },
             })?;
             result.push(PledgeExpr::new(id, spec.expr.downcast_ty::<vir::Bool>()));
@@ -2980,6 +2981,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                                         // including bounds on associated types.
                                         context: self.def_id,
                                         mode: MirSpecEncMode::Impure,
+                                        allow_before_expiry: false,
                                     },
                                 })?;
                                 let expr = spec

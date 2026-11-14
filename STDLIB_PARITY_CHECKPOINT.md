@@ -2,7 +2,28 @@
 
 Evidence root: `target/stdlib-matrix-20261031-1236/reconciliation-20261102/`.
 
-## Latest gate: failed, no active job
+## Query profile stopped — reviewed2026-11-14
+
+- Runner: `parity-query-profile-20261110/run.py`; maximum4,800s including build.
+- Native proof finished with a600s whole-program timeout (610.35s command). Small
+  positive/negative tracing controls and prover tests passed; no full proof passed.
+- Cost summarization did not finish; parent process no longer exists. The trace
+  is19GB and the current parser reads it all into memory. Exact termination cause
+  is unconfirmed. Raw trace is preserved. No active job.
+- Next use a streaming, bounded-memory summarizer and quantify tracer overhead
+  before interpreting costs. See `recovery-audit.json`.
+- Separate diagnostic Prusti/Ferrum worktrees from exact H1 plus printer931a2d5.
+  Opt-in tracing at actual check-sat/read_sat records caller stack, nominal budget,
+  elapsed time, resource counters and interrupted calls. Only statistic requests
+  and logging are added; goals, contexts, budgets and ownership facts unchanged.
+- First validate existing prover tests with tracing off and tiny real-Z3 positive/
+  negative with tracing on; then build own Prusti and profile the original native
+  Rust positive once. Whole600s, outer720s, resource mode10000, one worker/branch false.
+- Read status/result/cost-summary JSON. Map dominant queries to actual callsites;
+  unresolved caller classifications stay explicit. Profiling overhead is excluded
+  from query timers but included in the whole-program limit. Diagnostic only.
+
+## Latest gate: failed
 
 `parity-full-rust-resource-20261110/` completed all four full checks in 2,448.27s:
 original Rust positive and exact negative, each native then CLI of its exact export.

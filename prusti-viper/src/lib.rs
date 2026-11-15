@@ -811,6 +811,17 @@ fn collect_declarations<'vir, 'v>(
 impl<'vir, 'v> ToViper<'vir, 'v> for vir::Method<'vir> {
     type Output = viper::Method<'v>;
     fn to_viper(&self, ctx: &ToViperContext<'vir, 'v>, _pos: Position) -> Self::Output {
+        let decreases = match &self.decreases {
+            vir::DecreasesGenData::Tuple(values, condition) => Some(ctx.ast.decreases_tuple(
+                &values.iter().map(|v| v.to_viper_no_pos(ctx)).collect::<Vec<_>>(),
+                condition.as_ref().map(|v| v.to_viper_no_pos(ctx)),
+            )),
+            vir::DecreasesGenData::Wildcard(condition) => Some(ctx.ast.decreases_wildcard(
+                condition.as_ref().map(|v| v.to_viper_no_pos(ctx)),
+            )),
+            vir::DecreasesGenData::Star => Some(ctx.ast.decreases_star()),
+            vir::DecreasesGenData::None => None,
+        };
         ctx.ast.method(
             self.name,
             &self
@@ -832,6 +843,7 @@ impl<'vir, 'v> ToViper<'vir, 'v> for vir::Method<'vir> {
                 .posts
                 .iter()
                 .map(|v| v.to_viper_no_pos(ctx))
+                .chain(decreases)
                 .collect::<Vec<_>>(),
             self.body.map(|body| {
                 let size_hint = body.blocks.iter().flat_map(|b| b.size_hint()).sum();

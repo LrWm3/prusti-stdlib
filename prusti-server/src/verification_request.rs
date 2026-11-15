@@ -130,11 +130,30 @@ pub struct VerificationRequest {
 }
 
 impl VerificationRequest {
+    /// Generated proof methods must retain their well-foundedness checks even
+    /// though ordinary Rust procedure verification uses partial correctness.
+    fn effective_backend_config(&self) -> ViperBackendConfig {
+        let mut config = self.backend_config.clone();
+        let has_method_measure = vir::with_vcx(|vcx| {
+            vcx.get_program(self.program)
+                .methods
+                .iter()
+                .any(|method| !matches!(method.decreases, vir::DecreasesGenData::None))
+        });
+        if has_method_measure {
+            config.verifier_args.retain(|arg| {
+                arg != "--disableTerminationPlugin"
+                    && !arg.starts_with("--disableTerminationPlugin=")
+            });
+        }
+        config
+    }
+
     pub(crate) fn get_hash(&self) -> u64 {
         use std::hash::{Hash, Hasher};
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         self.program.get_hash().hash(&mut hasher);
-        self.backend_config.hash(&mut hasher);
+        self.effective_backend_config().hash(&mut hasher);
         hasher.finish()
     }
 
@@ -159,7 +178,8 @@ impl VerificationRequest {
     }
 
     fn build_request(&self) -> ServerVerificationRequest {
-        match self.backend_config.backend {
+        let backend_config = self.effective_backend_config();
+        match backend_config.backend {
             VerificationBackend::Ferrum => {
                 #[cfg(feature = "ferrum")]
                 {
@@ -189,7 +209,7 @@ impl VerificationRequest {
                     });
                     ServerVerificationRequest::FerrumRequest(
                         program,
-                        self.backend_config.clone(),
+                        backend_config,
                         self.procedures.clone(),
                     )
                 }
@@ -240,7 +260,7 @@ impl VerificationRequest {
 
                     ServerVerificationRequest::JVMViperRequest(
                         viper_program_ref,
-                        self.backend_config.clone(),
+                        backend_config,
                         self.procedures.clone(),
                     )
                 })
@@ -428,6 +448,130 @@ pub fn dump_viper_program(
 #[cfg(all(test, feature = "ferrum"))]
 mod native_tests {
     use super::*;
+    use vir::CastType;
+
+    fn countdown_program(measure: Option<bool>) -> vir::ProgramRef {
+        vir::with_vcx(|vcx| {
+            let n_decl = vcx.mk_local_decl("n", vir::TYPE_INT);
+            let n = vcx.mk_local_ex(n_decl);
+            let id =
+                vir::MethodIdn::<vir::Int>::new(vir::ViperIdent::new("countdown"), vir::TYPE_INT);
+            let next = vcx
+                .mk_bin_op_expr(vir::BinOpKind::Sub, n, vcx.mk_int::<1>())
+                .downcast_ty::<vir::Int>();
+            let recursive_call = id(next).alloc();
+            let condition = vcx
+                .mk_bin_op_expr(vir::BinOpKind::CmpGt, n, vcx.mk_int::<0>())
+                .downcast_ty::<vir::Bool>();
+            let step = vcx.mk_if_stmt(condition, vcx.alloc_slice(&[recursive_call]), &[]);
+            let block = vcx.mk_cfg_block(
+                &vir::CfgBlockLabelData::End,
+                &[],
+                vcx.alloc_slice(&[step]),
+                &vir::TerminatorStmtData::Exit,
+            );
+            let pre = vcx
+                .mk_bin_op_expr(vir::BinOpKind::CmpGe, n, vcx.mk_int::<0>())
+                .downcast_ty::<vir::Bool>();
+            let mut method = vcx.mk_method_unchecked(
+                "countdown",
+                vcx.alloc_slice(&[n_decl.as_dyn()]),
+                &[],
+                vcx.alloc_slice(&[pre]),
+                &[],
+                Some(vcx.alloc_slice(&[block])),
+            );
+            if let Some(valid) = measure {
+                let value = if valid { n } else { vcx.mk_int::<0>() };
+                method = vcx.method_with_decreases(
+                    method,
+                    vcx.alloc(vir::DecreasesGenData::Tuple(
+                        vcx.alloc_slice(&[value.as_dyn()]),
+                        None,
+                    )),
+                );
+            }
+            vcx.mk_program(&[], &[], &[], &[], &[], vcx.alloc_slice(&[method]))
+                .to_ref()
+        })
+    }
+
+    #[test]
+    fn method_measures_enable_termination_and_affect_request_hash() {
+        vir::init_vcx(vir::VirCtxt::new_without_tcx());
+        let config = ViperBackendConfig {
+            backend: VerificationBackend::Ferrum,
+            verifier_args: vec!["--disableTerminationPlugin".into()],
+            verify_mode: VerifyMode::Verify,
+        };
+        let mut request = VerificationRequest {
+            program: countdown_program(None),
+            procedures: Default::default(),
+            backend_config: config.clone(),
+        };
+        assert_eq!(request.effective_backend_config(), config);
+        let partial_hash = request.get_hash();
+        request.program = countdown_program(Some(true));
+        assert!(request.effective_backend_config().verifier_args.is_empty());
+        assert_ne!(partial_hash, request.get_hash());
+        let checked_hash = request.get_hash();
+        request.backend_config.verifier_args.clear();
+        assert_eq!(checked_hash, request.get_hash());
+        request.program = countdown_program(Some(false));
+        assert_ne!(checked_hash, request.get_hash());
+    }
+
+    fn verify_method_measures(backend: VerificationBackend) {
+        std::env::var_os("Z3_EXE").expect("set Z3_EXE");
+        std::thread::Builder::new().stack_size(128 * 1024 * 1024).spawn(move || {
+            vir::init_vcx(vir::VirCtxt::new_without_tcx());
+            for valid in [true, false] {
+                let mut backend_config = ViperBackendConfig::new(backend, VerifyMode::Verify);
+                backend_config.verifier_args.extend([
+                    "--numberOfParallelVerifiers=1".into(), "--timeout=30".into(),
+                ]);
+                if backend == VerificationBackend::Ferrum {
+                    backend_config.verifier_args.push("--parallelizeBranches=false".into());
+                }
+                let request = VerificationRequest {
+                    program: countdown_program(Some(valid)),
+                    procedures: Default::default(), backend_config,
+                };
+                // Exercise the same serialization used by out-of-process
+                // requests, so neither the measure nor its prelude can vanish.
+                let wire = bincode::serialize(&request).unwrap();
+                let request: VerificationRequest = bincode::deserialize(&wire).unwrap();
+                let (tx, rx) = std::sync::mpsc::channel();
+                request.build_request().process(&tx);
+                let result = loop {
+                    if let ServerMessage::Termination(result) = rx.recv().unwrap() {
+                        break result.kind;
+                    }
+                };
+                if valid {
+                    assert!(matches!(result, VerificationResultKind::Success), "{result:?}");
+                } else {
+                    assert!(matches!(result, VerificationResultKind::Failure(ref errors)
+                        if errors.len() == 1 && errors[0].full_id == "termination.failed:tuple.false"),
+                        "{result:?}");
+                }
+            }
+        }).unwrap().join().unwrap();
+    }
+
+    #[test]
+    #[ignore = "requires real Z3; set Z3_EXE"]
+    fn ferrum_request_checks_method_measures() {
+        verify_method_measures(VerificationBackend::Ferrum);
+    }
+
+    #[cfg(feature = "jvm")]
+    #[test]
+    #[ignore = "requires real Silicon and Z3; set VIPER_HOME and Z3_EXE"]
+    fn silicon_request_checks_method_measures() {
+        verify_method_measures(VerificationBackend::Silicon);
+    }
+
     #[test]
     #[ignore = "requires real Z3; set Z3_EXE"]
     fn vir_request_uses_native_queue_and_returns_failure() {

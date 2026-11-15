@@ -1483,7 +1483,19 @@ impl<'tcx> VirCtxt<'tcx> {
             rets,
             pres,
             posts,
+            decreases: self.alloc(DecreasesGenData::None),
             body: blocks.map(|blocks| self.alloc(MethodBodyGenData { blocks })),
+        })
+    }
+
+    pub fn method_with_decreases<'vir, Curr, Next>(
+        &'vir self,
+        method: MethodGen<'vir, Curr, Next>,
+        decreases: DecreasesGen<'vir, Curr, Next>,
+    ) -> MethodGen<'vir, Curr, Next> {
+        self.alloc(MethodGenData {
+            decreases,
+            ..*method
         })
     }
 
@@ -1496,6 +1508,25 @@ impl<'tcx> VirCtxt<'tcx> {
         functions: &'vir [FunctionGen<'vir, Curr, Next>],
         methods: &'vir [MethodGen<'vir, Curr, Next>],
     ) -> ProgramGen<'vir, Curr, Next> {
+        let needs_integer_order = methods
+            .iter()
+            .map(|m| m.decreases)
+            .chain(functions.iter().map(|f| f.decreases))
+            .any(|measure| {
+                matches!(measure, DecreasesGenData::Tuple(tuple, _)
+                if tuple.iter().any(|e| matches!(e.ty().kind(), TypeKind::Int)))
+            });
+        let domains = if needs_integer_order {
+            let mut complete = domains.to_vec();
+            for domain in crate::termination::integer_termination_domains(self) {
+                if !complete.iter().any(|d| d.name == domain.name) {
+                    complete.push(domain);
+                }
+            }
+            self.alloc_slice(&complete)
+        } else {
+            domains
+        };
         self.alloc(ProgramGenData {
             fields,
             adts,

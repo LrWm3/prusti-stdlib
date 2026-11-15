@@ -713,6 +713,8 @@ pub struct MethodGenData<'vir, Curr, Next> {
     // TODO: pre/post - add a comment variant
     pub pres: &'vir [ExprGenBool<'vir, Curr, Next>],
     pub posts: &'vir [ExprGenBool<'vir, Curr, Next>],
+    /// Required well-foundedness of generated proof methods.
+    pub decreases: DecreasesGen<'vir, Curr, Next>,
     pub body: Option<MethodBodyGen<'vir, Curr, Next>>,
 }
 

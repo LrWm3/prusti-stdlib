@@ -22,6 +22,7 @@ mod viper_ident;
 mod r#type;
 mod visit;
 mod fold;
+mod termination;
 
 pub use callable::*;
 pub use context::*;

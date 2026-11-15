@@ -1970,11 +1970,28 @@ impl<'vir> TypeContext<'vir> {
             .iter()
             .map(|e| self.expression(e))
             .collect::<Result<_, _>>()?;
-        let posts = method
+        let mut posts = method
             .posts
             .iter()
             .map(|e| self.expression(e))
-            .collect::<Result<_, _>>()?;
+            .collect::<Result<Vec<_>, _>>()?;
+        use ferrum_silver::plugin::standard::termination::termination_ast_extension::{
+            DecreasesClause, DecreasesKind,
+        };
+        let decreases = match method.decreases {
+            vir::DecreasesGenData::None => None,
+            vir::DecreasesGenData::Tuple(values, condition) => Some(DecreasesKind::Tuple {
+                tuple: values.iter().map(|e| self.expression(e)).collect::<Result<_, _>>()?,
+                condition: condition.map(|e| self.expression(&e)).transpose()?,
+            }),
+            vir::DecreasesGenData::Wildcard(condition) => Some(DecreasesKind::Wildcard {
+                condition: condition.map(|e| self.expression(&e)).transpose()?,
+            }),
+            vir::DecreasesGenData::Star => Some(DecreasesKind::Star),
+        };
+        if let Some(kind) = decreases {
+            posts.push(DecreasesClause::new(kind, Metadata::default()).expression());
+        }
         let body = if let Some(body) = method.body {
             let mut stmts = Vec::new();
             let mut declarations = Vec::new();

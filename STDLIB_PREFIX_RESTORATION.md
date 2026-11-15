@@ -15,7 +15,7 @@ watchdog. Other cases retain their recorded 180/600-second schedule.
 | Current evidence | Result |
 |---|---|
 | Frozen R2 Ferrum / Silicon gates | Each 454/454; each 70/70 focused |
-| Current pointwise-state integration Ferrum gate | 519/519; 117/117 focused; 37 specification + 2 ownership/history tests |
+| Current method-termination integration Ferrum gate | 519/519; 117/117 focused; 37 specification + 2 ownership/history tests |
 | Original prefix positive on R2 | Compilation/specification failure |
 | Original exact false control on R2 | Wrong diagnostic |
 | Prefix proof, inference, full restoration | Unqualified |
@@ -249,3 +249,29 @@ per-case slowdown. See [pointwise qualification](STDLIB_SEQUENCE_OBSERVATION_EVI
 Source, binaries and the six pending main files remain preserved. The current-
 owner rule is opt-in and acyclic; whole-sequence resources, indexed slice ownership
 and iterator-prefix restoration remain separate, unqualified work.
+
+## Checked method termination prerequisite
+
+Integrated at `0a982850c5c9e3a8900307110978432dab807b55`. VIR now retains
+method termination measures through serialization, hashing, Ferrum and Silicon.
+Programs using integer measures include the same well-founded order declarations
+and implications supplied by the CLI's standard imports. Requests with method
+measures enable termination checking, and the request hash uses those effective
+settings. Ordinary method defaults remain unchanged.
+
+The positive countdown and its exact non-decreasing negative pass through serialized
+server requests on both backends; the negative requires
+`termination.failed:tuple.false`. Both experimental and own integration builds
+independently match 519/519 Ferrum checks, 117/117 focused controls, 37 specification
+and two ownership/history tests. Integration suite time is 824.57s, versus 742.66s
+previously; no case crosses the predeclared >2x and >10s regression threshold. No
+speedup is claimed. Seven adapter unit tests pass; twelve opt-in tests remain
+ignored in that unit run and are not counted as passes. See
+[termination qualification](STDLIB_METHOD_TERMINATION_EVIDENCE.json).
+
+The raw segment model remains diagnostic evidence. Next supply the missing inner
+referent ownership in native slices and invoke checked split/join rules, retaining
+the original mutation positive, exact false/stale controls, and observation
+diagnostics. The unfinished seven-case family and its plan are preserved in the
+recorded stash and artifact manifest. R3, inference and full restoration remain
+unqualified; stop before D1–D6.

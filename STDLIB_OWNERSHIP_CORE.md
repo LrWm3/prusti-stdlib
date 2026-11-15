@@ -225,6 +225,71 @@ assertions. Require the unchanged 18 native controls, missing-resource/value/fra
 rule controls and every affected existing family before integration. If this
 hypothesis fails, inspect its first failed obligation before proposing a second.
 
+The first implementation (`resource-view-focused-01`) matches only 7/18 and is
+not integrated. Bounded native error logging identifies a scalar's initial borrow
+as the first failure, before any call-restoration event: the selector tested
+`perm(C) == write` and entered the generic branch despite a concrete resource
+being available. Predicate permission can accumulate above `write`; different
+local addresses have not necessarily been proved distinct at that point. The
+correct availability condition is `write <= perm(C)`, preserving any extra
+permission as a frame. Add an adapter control with two predicate permissions,
+consume exactly one and prove that one remains; then rerun the unchanged native
+target. No physical-address disequality is added to make the selector succeed.
+
+`resource-view-focused-02` matches 15/18: all original 14 scalar/identity controls
+and the escaped wrong-target control match. The model review after these failed
+candidates identifies two specific remaining obligations. In local replacement,
+PCG weakens/exhales the dead outer slot, then emits a capability-regain bookkeeping
+event for it. Normalizing every such event incorrectly requests a resource that
+has already been discarded. In escaped replacement, the final current assertion
+on `right` requests `C(b)` while the last reference use left `G(b)`. Both diagnoses
+are confirmed by bounded native errors in `resource-view-diagnostic-02` and the
+unchanged generated programs. The next experiment normalizes actual current
+dereferences, operands and accessible current specification captures, plus the
+original checked loan discharges; bookkeeping regains remain no-ops. Keep saved
+heap reads and packages unchanged. This distinguishes use-site resource exposure
+from indiscriminate eager restoration; do not remove either final assertion.
+
+The third candidate (`resource-view-focused-03`) matches the unchanged **18/18**
+native targets without diagnostic logging. The extended `resource-view-controls-01`
+matches **23/23**, adding both reference-use orders, a still-live escaped reference,
+an untouched replacement target, and wrong-value/frame controls. The original
+escaped positive and exact negative remain byte-for-byte unchanged. Adapter
+tests also check zero, one and two predicate permissions, including rejection
+of access without a resource and preservation of the extra permission.
+These focused results precede full affected-family qualification; this candidate
+is not yet accepted into the integration branch. No Silicon feature sign-off or
+R2 completion is claimed.
+
+The first full gate (`resource-view-gate-01`) is **418/422**, with **44/45** focused
+controls and all 36 specification tests. All sources and binaries are preserved;
+there are no material timing increases. The four regressions are `frame_pass`,
+`index_pass`, `lookup_pass` and the exact negative `nested_footprint_wrong`.
+Do not integrate this candidate. The latter's generated continuation requires two
+generic resource units on a path where the returned reference can denote the
+holder's existing target. Its preceding dereference fold sees an already-held
+generic unit and skips converting the concrete unit. Destination availability is
+therefore insufficient to replace a structural transfer: it loses the required
+resource multiplicity. The collection failures report missing value relations;
+the next experiment tests whether the same skipped-transfer explanation applies.
+No distinct-address assumption repairs this model.
+
+Next discriminating experiment: distinguish **exposing a view for an access**
+from **performing a PCG-directed transfer**. Exposure keeps an already-available
+destination. A structural transfer instead consumes one available source unit
+and proves its current-value correspondence even when destination units also
+exist; only an absent source permits the checked destination identity alternative.
+This preserves framed destination units and the original transfer's quantity.
+Keep access preparation unchanged, since converting additional framed source
+units during every read would again steal continuation resources. Check the four
+native regressions, unchanged 23-case restoration controls, and then all families.
+
+`resource-view-controls-02` matches **27/27** without diagnostic instrumentation:
+all four regressions recover, including the exact nested-footprint assertion
+diagnostic, and all 23 restoration controls remain matched. This supports the
+resource-count/value-transfer explanation. Full affected-family qualification
+is required again on this revised source before integration.
+
 ### Second increment: persistent identities and deferred resolution
 
 Hypothesis: a loan keyed by its MIR reservation location can retain its target

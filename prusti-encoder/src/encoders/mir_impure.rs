@@ -48,7 +48,7 @@ use crate::encoders::{
     impure::{
         WandOldOuter,
         loan_state::{LoanState, LoanStates},
-        loan_transfer::{self, ScalarLoanTransfer},
+        loan_transfer::{self, ResourceView, ResourceViewAction, ScalarLoanTransfer},
     },
     mir_fn::{CallTaskDescription, RustSignature, SpecBlockKind, SpecBlocks},
     mir_shared::{EncodeResult, PureRvalueEnc, RustcIntrinsic},
@@ -373,6 +373,44 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         }
     }
 
+    fn has_local_resource_views(&self, ty: ty::Ty<'vir>) -> bool {
+        loan_transfer::enabled_for(ty) && self.loop_analysis().all_loops().next().is_none()
+    }
+
+    /// Only executable current-heap operations use these local views. Package
+    /// footprints and saved heap observations retain their original encoding.
+    fn normalize_local_resource(
+        &mut self,
+        ty: ty::Ty<'vir>,
+        target: vir::ExprRef<'vir>,
+        view: ResourceView,
+        action: ResourceViewAction,
+    ) {
+        if !self.has_local_resource_views(ty) {
+            return;
+        }
+        let ref_ty = ty::Ty::new_mut_ref(self.vcx.tcx(), self.vcx.tcx().lifetimes.re_erased, ty);
+        let rule = self.scalar_loan_transfer(ref_ty);
+        let stmts = rule.normalize(self.vcx, &mut self.tmp_ctr, target, view, action);
+        self.stmts(stmts);
+    }
+
+    fn prepare_current_place(&mut self, place: Place<'vir>) -> EncodeResult<'vir, (), E> {
+        let ty = place.ty(self.pcg_ctxt());
+        if self.has_local_resource_views(ty.ty) && !place.projects_shared_ref(self.pcg_ctxt()) {
+            let encoded = self.encode_place_inner(place, true)?;
+            if encoded.expr.snap.is_none() {
+                self.normalize_local_resource(
+                    ty.ty,
+                    encoded.expr.address,
+                    ResourceView::Concrete,
+                    ResourceViewAction::Expose,
+                );
+            }
+        }
+        Ok(())
+    }
+
     fn prepare_loan_states(&mut self) {
         // A creation location is a unique dynamic event in an acyclic body.
         // Backedges require a summary of live instances, not reused witnesses.
@@ -558,6 +596,12 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     let inner = p_rvalue_ty.expect_mutref();
                     let place_ref = place_expr.expr.expect_predicate();
                     if loan_transfer::enabled_for(*referent_ty) {
+                        self.normalize_local_resource(
+                            *referent_ty,
+                            place_ref,
+                            ResourceView::Concrete,
+                            ResourceViewAction::Expose,
+                        );
                         let rule = self.scalar_loan_transfer(rvalue_ty);
                         let (captured, stmts) = rule.capture_entry(self.vcx, &mut self.tmp_ctr, place_ref);
                         self.stmts(stmts);
@@ -715,6 +759,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         label: Option<&'vir str>,
     ) -> EncodeResult<'vir, Option<Vec<vir::ExprBool<'vir>>>, E> {
         let place = base.place();
+        let executable = label.is_none();
         let label = if let MaybeLabelledPlace::Labelled(snap) = base {
             Some(self.get_location_label(snap.at()))
         } else {
@@ -726,6 +771,9 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             return Ok(None);
         }
 
+        if executable && base.is_current() {
+            self.prepare_current_place(place)?;
+        }
         let ref_p = self.encode_place(place)?;
 
         let place_ty = ref_p.ty;
@@ -733,6 +781,19 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             .vcx
             .maybe_apply_label(ref_p.expr.expect_predicate(), label);
         let data = self.ty_use_impure(place_ty.ty);
+
+        if executable
+            && let TyKind::Ref(_, referent, ty::Mutability::Mut) = place_ty.ty.kind()
+            && self.has_local_resource_views(*referent)
+        {
+            let target = data.expect_mutref().deref(ref_p, label);
+            let view = match fold_or_unfold {
+                FoldOrUnfold::Unfold => ResourceView::Concrete,
+                FoldOrUnfold::Fold => ResourceView::Generic,
+            };
+            self.normalize_local_resource(*referent, target, view, ResourceViewAction::Transfer);
+            return Ok(Some(Vec::new()));
+        }
 
         let index = expansion
             .and_then(|expansion| expansion.guide())
@@ -853,6 +914,12 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     // The origin fixes the original target even if the current
                     // reference slot was moved or reassigned. Do not reread it.
                     self.stmts(state.require_live(self.vcx));
+                    self.normalize_local_resource(
+                        *referent_ty,
+                        state.target,
+                        ResourceView::Generic,
+                        ResourceViewAction::Expose,
+                    );
                     let rule = self.scalar_loan_transfer(ref_ty);
                     let (captured, stmts) = rule.capture_current(self.vcx, &mut self.tmp_ctr, state.target);
                     self.stmts(stmts);
@@ -869,6 +936,12 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     let owner = self.encode_place(borrow.blocked_place().place())?.expr.expect_predicate();
                     let rule = self.scalar_loan_transfer(ref_ty);
                     let target = rule.reference.deref(slot, None);
+                    self.normalize_local_resource(
+                        *referent_ty,
+                        target,
+                        ResourceView::Generic,
+                        ResourceViewAction::Expose,
+                    );
                     let (captured, stmts) = rule.capture_current(self.vcx, &mut self.tmp_ctr, target);
                     self.stmts(stmts);
                     self.stmts(captured.resolve(self.vcx, owner));
@@ -1238,7 +1311,8 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         for (next, action) in actions.iter().enumerate().skip(index + 1) {
             match action {
                 PcgAction::Owned(action)
-                    if matches!(action.kind(), RepackOp::RegainLoanedCapability(..)) => {}
+                    if matches!(action.kind(), RepackOp::RegainLoanedCapability(regained)
+                        if borrow.blocked_place() == MaybeLabelledPlace::Current(regained.place())) => {}
                 PcgAction::Borrow(action) => match action.kind() {
                     BorrowPcgActionKind::LabelLifetimeProjection(_)
                     | BorrowPcgActionKind::LabelPlace(_)
@@ -1430,6 +1504,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
 
         let place_ty_out = self.ty_use_impure(place_ty.ty);
 
+        self.prepare_current_place(place)?;
         let place_enc = self.encode_place(place)?;
         comment!(self, "exhale due to weaken to Write");
         self.stmt(self.vcx.mk_exhale_stmt(place_ty_out.ref_to_pred(
@@ -1538,6 +1613,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
     ) -> EncodeResult<'vir, vir::ExprSnap<'vir>, E> {
         match operand {
             &mir::Operand::Copy(place) | &mir::Operand::Move(place) => {
+                self.prepare_current_place(Place::from(place))?;
                 let (result, snap_val, _, ty_out) =
                     self.encode_place_with_snap(Place::from(place))?;
                 let tmp = self.new_tmp(ty_out.snapshot());
@@ -1592,6 +1668,14 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         &mut self,
         place: Place<'vir>,
     ) -> EncodeResult<'vir, EncodePlaceResult<'vir>, E> {
+        self.encode_place_inner(place, false)
+    }
+
+    fn encode_place_inner(
+        &mut self,
+        place: Place<'vir>,
+        prepare_current_derefs: bool,
+    ) -> EncodeResult<'vir, EncodePlaceResult<'vir>, E> {
         let mut place_ty = mir::PlaceTy::from_ty(self.local_decls[place.local].ty);
         let mut result = PlaceExpr {
             address: self.local_defs[place.local].local_ex,
@@ -1600,6 +1684,17 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         };
         // TODO: factor this out (duplication with pure encoder)?
         for (place, elem) in place.iter_projections() {
+            if prepare_current_derefs
+                && matches!(elem, mir::ProjectionElem::Deref)
+                && result.snap.is_none()
+            {
+                self.normalize_local_resource(
+                    place_ty.ty,
+                    result.address,
+                    ResourceView::Concrete,
+                    ResourceViewAction::Expose,
+                );
+            }
             result = self.encode_place_element(place.into(), elem, result)?;
             place_ty = place_ty.projection_ty(self.vcx.tcx(), elem);
         }
@@ -2504,6 +2599,11 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             return Ok(self.new_tmp(snapshot_ty));
         }
 
+        // This is an accessible current specification capture. Historical heap
+        // observations and loop invariant captures are not normalized here.
+        if place_capabilities.is_none() {
+            self.prepare_current_place(place)?;
+        }
         Ok(self.encode_place_with_snap(place)?.1)
     }
 

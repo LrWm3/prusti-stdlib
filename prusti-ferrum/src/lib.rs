@@ -692,17 +692,24 @@ mod tests {
                     });
                     let resource = vcx.mk_predicate_app_expr(app);
                     let held = vcx.mk_predicate_perm_expr(app);
-                    [true, false].map(|has_resource| {
-                        let expected = if has_resource {
-                            vcx.mk_full_perm()
-                        } else {
-                            vcx.mk_no_perm()
+                    [1, 0, 2].map(|count| {
+                        let expected = match count {
+                            0 => vcx.mk_no_perm(),
+                            1 => vcx.mk_full_perm(),
+                            2 => vcx.mk_bin_op_expr(
+                                vir::BinOpKind::PermAdd, vcx.mk_full_perm(), vcx.mk_full_perm(),
+                            ).downcast_ty(),
+                            _ => unreachable!(),
                         };
                         let mut stmts = vec![vcx.mk_assert_stmt(vcx.mk_eq_expr(held, expected))];
-                        if has_resource {
+                        if count > 0 {
+                            stmts.push(vcx.mk_assert_stmt(vcx.mk_bin_op_expr(
+                                vir::BinOpKind::CmpGe, held, vcx.mk_full_perm(),
+                            ).downcast_ty()));
                             stmts.push(vcx.mk_exhale_stmt(resource));
+                            let remaining = if count == 2 { vcx.mk_full_perm() } else { vcx.mk_no_perm() };
                             stmts.push(
-                                vcx.mk_assert_stmt(vcx.mk_eq_expr(held, vcx.mk_no_perm())),
+                                vcx.mk_assert_stmt(vcx.mk_eq_expr(held, remaining)),
                             );
                         } else {
                             // Querying the empty permission map cannot justify access.
@@ -714,11 +721,7 @@ mod tests {
                             vcx.alloc_slice(&stmts),
                             vcx.alloc(vir::TerminatorStmtData::Exit),
                         );
-                        let pre = if has_resource {
-                            vcx.alloc_slice(&[resource])
-                        } else {
-                            &[]
-                        };
+                        let pre = vcx.alloc_slice(&vec![resource; count]);
                         let method = vcx.mk_method_unchecked(
                             "test", args, &[], pre, &[], Some(vcx.alloc_slice(&[block])),
                         );
@@ -748,6 +751,9 @@ mod tests {
                     errors.iter().map(|e| e.full_id()).collect::<Vec<_>>(),
                     ["assert.failed:insufficient.permission"],
                 );
+                assert!(matches!(
+                    frontend.verify(&programs[2]).unwrap(), VerificationResult::Success
+                ));
                 frontend.stop().unwrap();
             })
             .unwrap()

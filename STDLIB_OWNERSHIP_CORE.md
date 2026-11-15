@@ -302,6 +302,46 @@ diagnostic, and all 23 restoration controls remain matched. This supports the
 resource-count/value-transfer explanation. Full affected-family qualification
 is required again on this revised source before integration.
 
+### Fifth increment: one selected array element (planned, not qualified)
+
+Start from `1ef39f2c2`, with its qualified local/escaped reference rules. First
+freeze native scalar, generic/non-`Copy`, zero-sized and reference-containing
+array controls with exact wrong-value/history/frame or non-vacuity negatives.
+Run them unchanged on this compiler before extending the encoding. Keep failed
+controls in the target; do not alter array contract selection to make them pass.
+
+The physical owner is the array predicate `A(a,T,N)`. Selection at logical index
+`i` transfers it into the element resource at `e = index_ref(a,i,T)` and the
+opaque remainder predicate `F(a,i,T,N)`. `F` identifies the owner and selected
+logical slot; it is not inferred from inequalities between element addresses.
+The existing array split/join methods are trusted representation contracts, not
+new proved lemmas. Keep their bounds obligations at the Rust access, and make
+the resource/value correspondence around each call explicit and checked.
+
+| Stage | Resource and immutable observations | Required check |
+|---|---|---|
+| Entry/split | Own `A`; freeze `a`, `i`, `e`, and array model `S0` before splitting | Owner permission, selected element equals `S0[i]`, and frame snapshot equals `S0` |
+| Element access/loan | Own the selected element plus `F`; existing loans govern exclusive access | Saved loan target remains `e`; no owner read from a value snapshot alone |
+| Post-call, if any | Existing callee summaries/wands track escaped references | Keep entry and post-call histories; never substitute the current reference slot for an old target |
+| Pre-join | Own the current element and its matching `F`; capture current element value `v` and frame model `Sf` | Both resources must be present; a different owner/index frame cannot discharge this obligation |
+| Join | Consume the element and matching frame through the existing fold | Recovered owner model has value `v` at `i` and `Sf[j]` for every other logical `j` |
+
+Introduce a selected-element transfer record that freezes the address/index/value
+inputs and emits these assertions. It creates a split obligation at expansion,
+preserves the explicit frame through the element lifetime, and discharges it at
+the checked join. The initial path is acyclic executable array expansion with
+one selected element. Packages, historical heap reads, loops and multiple live
+selected regions keep their existing rules until separately qualified. Capturing
+an address/index once per transition does not by itself prove it matches another
+transition: the same frame predicate and PCG expansion must supply that link.
+
+Hypothesis: explicit capture and checking makes generic one-element transfers
+compositional without address injectivity or new assumptions. The first experiment
+compares the baseline native controls and generated obligations; only diagnosed
+missing obligations justify further repairs. Require all affected existing families
+before integration. This increment does not claim nested-collection support or
+start D1–D6. Full prophecy/continuation summaries remain a separate R2 obligation.
+
 ### Second increment: persistent identities and deferred resolution
 
 Hypothesis: a loan keyed by its MIR reservation location can retain its target

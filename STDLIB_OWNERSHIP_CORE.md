@@ -6,21 +6,33 @@ Integration: `prusti-stdlib-ownership-inference`, `stdlib/ownership-inference-m3
 Artifacts: `../prusti-stdlib/target/stdlib-ownership-core-r2/`.
 The six pending main-tree files and all R1/H1 artifacts remain preserved.
 
-Current checkpoint: `7814eccc4ace40ad8ecee5c38a52b604f0e71b1c`. Its own integration
-rebuild matches **411/411 Ferrum suite checks**, **38/38 focused controls**, and
-all **36 specification tests**. Local reference-slot replacement now preserves
-both the displaced and replacement pointees; its exact wrong-target control
-rejects. The encoder schedules the existing dereference fold before loan
-resolution, without removing any transfer or assertion. Suite time is 601.54s;
-no case crosses the fixed material-slowdown threshold. See
-[reference-slot qualification](STDLIB_REFERENCE_SLOT_EVIDENCE.json).
+Current checkpoint: `1ef39f2c29364eab505773a0f9a4f5f9f75fc419`. Its own integration
+rebuild matches **422/422 Ferrum suite checks**, **48/48 focused controls**, and
+all **36 specification tests**. Escaped `mem::replace` references now restore both
+pointees, including reversed use order, a still-live displaced reference, and an
+untouched replacement target. Exact wrong-target, value and frame controls reject.
+Both original escaped-reference sources are unchanged. Access preparation exposes
+an available view; PCG-directed transitions preserve resource multiplicity and
+check value correspondence even when other destination units are already held.
+See [resource-view qualification](STDLIB_RESOURCE_VIEWS_EVIDENCE.json).
 
-The larger exploratory target matches 412/414, with both `mem::replace` escaped
-reference controls still failing with missing permissions. Those two sources
-remain in the frozen R2 acceptance fixture. The qualified integration gate covers
-the local repair; it does not establish escaped-call support or R2 completion.
-Next: isolate the first missing call-restoration obligation, then selected-element
-and continuation rules. Silicon remains reserved for R2 feature sign-off.
+The experimental and own integration builds independently match 422/422; their
+counts are not combined. Integration suite time is **684.01s**, versus 601.54s for
+the smaller previous gate. No integration case crosses the fixed >2x/+10s slowdown
+threshold. An experimental range-proof outlier at 19.74s is retained: controlled
+native replay with identical exported Viper takes 9.35s, and integration takes
+9.76s, versus an 8.80s baseline repeat. Proof text grows, and no speedup is claimed.
+No timeout, wrong diagnostic, skip or unresolved failure remains in these gates;
+17 intentionally unsupported clients match their required diagnostics.
+
+This completes the escaped-call increment, **not R2**. Selected-element rules,
+continuation/summary semantics and the R2 Silicon feature gate remain open.
+The original difficult prefix proof and inference remain R3/R4, and the complete
+790-client/2,198-check restoration target remains unqualified. Stop before D1–D6.
+
+Previous local-slot checkpoint `7814eccc4` matched 411/411 suite checks and 38/38
+focused controls; its saved exploratory 412/414 target exposed the two escaped
+failures repaired here. See [its evidence](STDLIB_REFERENCE_SLOT_EVIDENCE.json).
 
 Previous identity checkpoint: `d0b8b0ac95babfaea4fc618e67bb46fe606a4f2d`, with PCG
 `77e2a4a` (only the existing reservation-location getter was made public).
@@ -174,7 +186,7 @@ the previous 408-check gate plus its two native clients and one runtime check
 target fixture until their separate repair; excluding them from this increment's
 gate does not count them as passed or remove them from R2 acceptance.
 
-### Fourth increment: escaped-call resource views (unqualified)
+### Fourth increment: escaped-call resource views (qualified above)
 
 The unchanged escaped-reference positive still fails at the `make_concrete_u32`
 needed by `*stored = 9`. A bounded native diagnostic identifies its argument as

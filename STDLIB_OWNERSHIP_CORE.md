@@ -92,6 +92,72 @@ started.
 
 ## Ownership invariant, written before implementation
 
+### Third increment: reference-containing slots
+
+Hypothesis: the same checked representation transfer applies when the borrowed
+value is itself a reference. Its saved/deferred snapshot describes the reference
+slot's address and metadata, not an observation of the pointee's current value.
+The pointee is a separate physical owner with a separate loan identity and
+permission obligation. Replacing the slot must not change the old loan's target.
+No facts may be read from the arbitrary referent-value field of an impure reference
+snapshot. Preserve the existing indirect predicates, call postconditions and
+expiry wands; they still account for both the displaced and replacement pointees.
+
+First extend only to reference-typed values (including mutable references, which
+are non-Copy). Qualify local slot replacement and an escaped old reference returned
+by `mem::replace`, preserving exact wrong-original-target controls. This does not
+yet generalize the rule to arbitrary aggregates or select collection contracts.
+
+The first native experiment (`reference-focused-01`) matches 14/18 controls;
+both replacement positives and both negatives fail with missing permissions.
+The qualified compiler also matches 14/18. Merely admitting reference snapshots
+does not repair restoration. No failing negative counts as a successful control.
+
+For the smallest local case, let `r` be the outer reference slot, `s` the stored
+reference slot, and `a`/`b` the displaced/replacement scalar targets. Before the
+last assignment, the encoder owns `C(r)`, `C(s)` and `C(b)`, with the old value 7
+preserved by `G(a)`. After assigning 9 it folds `C(b)` into `G(b)`. The creation
+record for the outer loan still names `s`; its entry reference names `a`, whereas
+its current reference names `b`. These snapshots do not grant access to either
+scalar. There is no call or post-call history in this smallest case.
+
+The first missing obligation is `C(s) -> G(s)`: PCG schedules outer-loan removal
+before removing the place expansion `r -> *r`. Resolution consequently requests
+`G(s)` while `C(s)` is still available. The delayed fold also reads `r` after its
+permission has been weakened. This precedes restoration of the scalar owners.
+
+Second hypothesis: schedule that existing expansion fold before the corresponding
+loan resolution, retaining both conversions and all value assertions. Match the
+exact labelled reference place and identical edge guards; cross only encoder
+no-ops and weakening of that reference slot, never another resource transfer.
+The fold consumes `C(s)` and produces `G(s)`; resolution consumes it and publishes
+the checked current `C(s)` snapshot. It cannot discharge `a` or `b`; their original
+loan identities and generic scalar resources remain separate. A changed guard,
+historical epoch or intervening resource operation prevents this local reorder.
+Test the unchanged 18 native controls before broadening this rule. The escaped
+`mem::replace` case has additional call histories and remains separately unresolved
+unless its complete native proof and exact negative also pass.
+
+The first scheduling implementation (`reference-focused-02`) also matches 14/18,
+but emits zero reorders: it matched `BorrowPcgExpansion::Place`, whereas the
+reference dereference is a `Deref` edge. After the two unsuccessful experiments,
+the model review preserved a PCG visualization of the unchanged 12-line local
+reproducer. All three operations are in `bb0[21] PreOperands`: borrow removal at
+action 6, slot weakening at 9, and dereference folding at 12. This rejects a
+cross-phase explanation and identifies the missed edge variant. The next test
+matches that actual `Deref` edge under the same restrictions, requires a generated
+reorder, and reruns the native controls without visualization. Detailed evidence
+is in `reference-model-review.json`; no solver trace was enabled.
+
+`reference-focused-03` emits the required reorder and matches **16/18**: the local
+replacement positive passes and its exact wrong-target control rejects; all prior
+14 controls still match. Both escaped-call controls remain internal errors. Freeze
+this 18-case target in `reference-acceptance.json`. Qualify the local repair against
+the previous 408-check gate plus its two native clients and one runtime check
+(411), with 38 focused controls. Keep the two escaped-call sources in the frozen
+target fixture until their separate repair; excluding them from this increment's
+gate does not count them as passed or remove them from R2 acceptance.
+
 ### Second increment: persistent identities and deferred resolution
 
 Hypothesis: a loan keyed by its MIR reservation location can retain its target

@@ -17,11 +17,11 @@ pub(crate) fn enabled_for(ty: Ty<'_>) -> bool {
     prusti_utils::config::checked_scalar_loans()
         && matches!(
             ty.kind(),
-            TyKind::Bool | TyKind::Char | TyKind::Int(_) | TyKind::Uint(_)
+            TyKind::Bool | TyKind::Char | TyKind::Int(_) | TyKind::Uint(_) | TyKind::Ref(..)
         )
 }
 
-/// The resource correspondence for one scalar loan. The slot and target have
+/// The resource correspondence for one local loan. The slot and target have
 /// distinct roles; no assumption of address injectivity is needed.
 pub(crate) struct ScalarLoanTransfer<'vir> {
     pub concrete: TyUseImpure<'vir>,

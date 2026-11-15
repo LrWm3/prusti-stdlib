@@ -1197,13 +1197,74 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         actions: &PcgActions<'vir>,
         edge_to_loop: bool,
     ) -> EncodeResult<'vir, (), E> {
-        for action in actions.iter() {
+        let actions: Vec<_> = actions.iter().collect();
+        let mut emitted = vec![false; actions.len()];
+        for (index, action) in actions.iter().enumerate() {
+            if emitted[index] {
+                continue;
+            }
+            if let Some(fold) = self.loan_resolution_fold(&actions, index)
+                && !emitted[fold]
+            {
+                let PcgAction::Borrow(action) = actions[fold] else { unreachable!() };
+                comment!(self, "[loan-transfer] fold referent before resolving its loan");
+                self.borrow_action(pcg, action, edge_to_loop)?;
+                emitted[fold] = true;
+            }
             match action {
                 PcgAction::Borrow(action) => self.borrow_action(pcg, action, edge_to_loop)?,
                 PcgAction::Owned(action) => self.pcg_repack(action.kind())?,
             }
         }
         Ok(())
+    }
+
+    /// PCG's lifetime-edge order need not be the representation-transfer order.
+    /// A still-expanded reference must fold its referent before loan resolution
+    /// consumes that generic resource (and before its own slot is weakened).
+    /// Only move across known no-ops or weakening of this exact reference slot;
+    /// all other resource operations remain barriers. No action is dropped.
+    fn loan_resolution_fold(
+        &self,
+        actions: &[&PcgAction<'vir>],
+        index: usize,
+    ) -> Option<usize> {
+        let PcgAction::Borrow(action) = actions[index] else { return None };
+        let BorrowPcgActionKind::RemoveEdge(edge) = action.kind() else { return None };
+        let BorrowPcgEdgeKind::Borrow(borrow) = edge.kind() else { return None };
+        if !borrow.is_mut() || self.loan_states.get(borrow.reserve_location()).is_none() {
+            return None;
+        }
+        for (next, action) in actions.iter().enumerate().skip(index + 1) {
+            match action {
+                PcgAction::Owned(action)
+                    if matches!(action.kind(), RepackOp::RegainLoanedCapability(..)) => {}
+                PcgAction::Borrow(action) => match action.kind() {
+                    BorrowPcgActionKind::LabelLifetimeProjection(_)
+                    | BorrowPcgActionKind::LabelPlace(_)
+                    | BorrowPcgActionKind::Restore(_) => {}
+                    BorrowPcgActionKind::Weaken(weaken)
+                        if borrow.assigned_ref() == MaybeLabelledPlace::Current(weaken.place()) => {}
+                    BorrowPcgActionKind::RemoveEdge(candidate) => match candidate.kind() {
+                        BorrowPcgEdgeKind::Deref(deref)
+                            if deref.blocked_place() == borrow.assigned_ref()
+                                && candidate.conditions() == edge.conditions() => return Some(next),
+                        BorrowPcgEdgeKind::BorrowPcgExpansion(BorrowPcgExpansion::LifetimeProjection(_)) => {}
+                        BorrowPcgEdgeKind::BorrowFlow(flow) if !matches!(
+                            flow.kind(),
+                            BorrowFlowEdgeKind::Assignment(data)
+                                if matches!(data.cast_kind(), Some(mir::CastKind::PointerCoercion(
+                                    ty::adjustment::PointerCoercion::Unsize, _
+                                )))
+                        ) => {}
+                        _ => return None,
+                    },
+                    _ => return None,
+                },
+                _ => return None,
+            }
+        }
+        None
     }
 
     /// Emit the repacks of `phase` at `location`.

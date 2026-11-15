@@ -420,6 +420,52 @@ All original target sources are unchanged. The affected experimental gate and ow
 integration rebuild subsequently each match 437/437 suite checks, 58/58 focused
 controls and 36 specification tests at `f5037ccda`; no speedup is claimed.
 
+### Sixth increment: checked continuation summaries (planned)
+
+Start from the qualified `f5037ccda` implementation. A mutable-returning call
+already supplies a checked magic wand: the callee packages it and proves its
+pledge postcondition; the caller applies it only when the required returned and
+retained resources are available. Preserve that original package/apply proof,
+including asserting-pledge obligations and generic substitutions. The new layer
+must expose the call's entry/post-call histories and expiry transition explicitly.
+
+For a scalar owner `a`, the entry snapshot records its original value and the
+argument reference's target. The post-call snapshot fixes the returned reference
+and any retained argument resources. The owner cannot be read while the returned
+loan conflicts. At expiry, the current returned resource supplies its final value;
+the continuation consumes that resource and restores the original owner plus the
+callee's manually supplied value/frame guarantees. Reassigning a reference slot
+does not change the entry or post-call target. Child continuations discharge into
+their parent's current value without changing the parent's saved history.
+
+Use a `ContinuationSummary` containing the original wand and immutable call
+history labels. Future observations are the wand RHS's lexically bound
+`old[lhs](...)` terms (the existing `before_expiry` translation), not freely
+readable unresolved locals. Just before applying an executable continuation,
+save an expiry heap label. Keep the original application as the permission and
+expiry-obligation check. After it succeeds, assert the promised RHS again with
+only that wand's bound `old[lhs]` observations mapped to the saved expiry heap.
+Entry/post-call labels stay unchanged, and nested wand binders must remain opaque
+to this substitution. Export a resolved observation only after these checks.
+
+This translation is supported by the pinned backend's implementation:
+`magic_wand_supporter::apply_wand_after_consume` saves the state before
+consuming the LHS, and `prepare_wand_rhs` uses that evaluation heap for `lhs`.
+Its frontend permits `old[lhs]` only in a wand RHS. An outside expiry label is
+therefore a scoped observation of the application state, not a prophecy assumed
+at function entry. The extra assertion must establish the equivalence natively;
+do not weaken the original wand or bypass its resource consumption.
+
+First freeze native scalar, nested-call, retargeted-slot, guarded-owner and
+selected-element manual-summary positives with exact value/history/frame
+negatives and an incorrect callee-summary rejection. Test the qualified baseline
+before changing the encoder. Scope the first implementation to acyclic executable
+function-call restoration; packages, loop continuations and unresolved future
+facts in ordinary assertions keep their previous rules. Run all affected families
+before integration. Silicon is required at R2 feature sign-off. This supplies a
+finite checked continuation/future-observation core; arbitrary retained yields,
+loop-prefix summaries and inference remain subsequent work under the existing plan.
+
 ### Second increment: persistent identities and deferred resolution
 
 Hypothesis: a loan keyed by its MIR reservation location can retain its target

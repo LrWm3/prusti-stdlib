@@ -130,17 +130,20 @@ pub struct VerificationRequest {
 }
 
 impl VerificationRequest {
-    /// Generated proof methods must retain their well-foundedness checks even
+    /// Explicit proof measures must retain their well-foundedness checks even
     /// though ordinary Rust procedure verification uses partial correctness.
     fn effective_backend_config(&self) -> ViperBackendConfig {
         let mut config = self.backend_config.clone();
-        let has_method_measure = vir::with_vcx(|vcx| {
-            vcx.get_program(self.program)
+        let has_measure = vir::with_vcx(|vcx| {
+            let program = vcx.get_program(self.program);
+            program
                 .methods
                 .iter()
-                .any(|method| !matches!(method.decreases, vir::DecreasesGenData::None))
+                .map(|method| method.decreases)
+                .chain(program.functions.iter().map(|function| function.decreases))
+                .any(|measure| !matches!(measure, vir::DecreasesGenData::None))
         });
-        if has_method_measure {
+        if has_measure {
             config.verifier_args.retain(|arg| {
                 arg != "--disableTerminationPlugin"
                     && !arg.starts_with("--disableTerminationPlugin=")
@@ -519,9 +522,49 @@ mod native_tests {
         assert_eq!(checked_hash, request.get_hash());
         request.program = countdown_program(Some(false));
         assert_ne!(checked_hash, request.get_hash());
+        request.backend_config = config;
+        request.program = function_countdown_program(true);
+        assert!(request.effective_backend_config().verifier_args.is_empty());
+        let function_hash = request.get_hash();
+        request.backend_config.verifier_args.clear();
+        assert_eq!(function_hash, request.get_hash());
+        request.program = function_countdown_program(false);
+        assert_ne!(function_hash, request.get_hash());
     }
 
-    fn verify_method_measures(backend: VerificationBackend) {
+    fn function_countdown_program(valid: bool) -> vir::ProgramRef {
+        vir::with_vcx(|vcx| {
+            let input = vcx.mk_local_decl("n", vir::TYPE_INT);
+            let n = vcx.mk_local_ex(input);
+            let zero = vcx.mk_int::<0>();
+            let function = vir::FunctionIdn::<vir::Int, vir::Int>::new(
+                vir::ViperIdent::new("countdown_value"),
+                vir::TYPE_INT,
+                vir::TYPE_INT,
+            );
+            let next = vcx
+                .mk_bin_op_expr(vir::BinOpKind::Sub, n, vcx.mk_int::<1>())
+                .downcast_ty::<vir::Int>();
+            let body =
+                vcx.mk_ternary_expr(vir::expr! { (zero) < (n) }, function.call()(next), zero);
+            let measure = if valid { n } else { zero };
+            let definition = vcx.mk_function(
+                function,
+                (input,),
+                vcx.alloc_slice(&[vir::expr! { (zero) <= (n) }]),
+                &[],
+                Some(vcx.alloc(vir::DecreasesGenData::Tuple(
+                    vcx.alloc_slice(&[measure.as_dyn()]),
+                    None,
+                ))),
+                Some(body),
+            );
+            vcx.mk_program(&[], &[], &[], &[], vcx.alloc_slice(&[definition]), &[])
+                .to_ref()
+        })
+    }
+
+    fn verify_explicit_measures(backend: VerificationBackend, function: bool) {
         std::env::var_os("Z3_EXE").expect("set Z3_EXE");
         std::thread::Builder::new().stack_size(128 * 1024 * 1024).spawn(move || {
             vir::init_vcx(vir::VirCtxt::new_without_tcx());
@@ -533,8 +576,9 @@ mod native_tests {
                 if backend == VerificationBackend::Ferrum {
                     backend_config.verifier_args.push("--parallelizeBranches=false".into());
                 }
+                backend_config.verifier_args.push("--disableTerminationPlugin".into());
                 let request = VerificationRequest {
-                    program: countdown_program(Some(valid)),
+                    program: if function { function_countdown_program(valid) } else { countdown_program(Some(valid)) },
                     procedures: Default::default(), backend_config,
                 };
                 // Exercise the same serialization used by out-of-process
@@ -562,14 +606,27 @@ mod native_tests {
     #[test]
     #[ignore = "requires real Z3; set Z3_EXE"]
     fn ferrum_request_checks_method_measures() {
-        verify_method_measures(VerificationBackend::Ferrum);
+        verify_explicit_measures(VerificationBackend::Ferrum, false);
     }
 
     #[cfg(feature = "jvm")]
     #[test]
     #[ignore = "requires real Silicon and Z3; set VIPER_HOME and Z3_EXE"]
     fn silicon_request_checks_method_measures() {
-        verify_method_measures(VerificationBackend::Silicon);
+        verify_explicit_measures(VerificationBackend::Silicon, false);
+    }
+
+    #[test]
+    #[ignore = "requires real Z3; set Z3_EXE"]
+    fn ferrum_request_checks_function_measures() {
+        verify_explicit_measures(VerificationBackend::Ferrum, true);
+    }
+
+    #[cfg(feature = "jvm")]
+    #[test]
+    #[ignore = "requires real Silicon and Z3; set PRUSTI_VIPER_HOME and Z3_EXE"]
+    fn silicon_request_checks_function_measures() {
+        verify_explicit_measures(VerificationBackend::Silicon, true);
     }
 
     #[test]

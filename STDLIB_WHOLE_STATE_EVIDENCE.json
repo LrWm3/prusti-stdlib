@@ -1,0 +1,427 @@
+{
+  "step": "whole-sequence-states",
+  "accepted_implementation": "ef0752077eece23b6eaac737023839bcbc00dc7b",
+  "experimental": {
+    "artifact_root": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-01",
+    "source_revision": "36cd621c269cdbafb96118de90959af277cc998d",
+    "pcg_revision": "77e2a4a8e551086a85ae8b2cf74f7d4a25ec8c70",
+    "source_files": 2506,
+    "pcg_files": 1497,
+    "source": {
+      "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-01/source-before.json",
+      "sha256": "a9c07fc43df3bfe8f3e1f301991bbe2d6cb3f5db104328661def64cd17580ecc"
+    },
+    "binaries": [
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-m3-repair/target/debug/cargo-prusti",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-01/bin/cargo-prusti",
+        "sha256": "0c1724ff20a834d994ab5a49ffed3b55a4f0a76d612c7eaac6291375a8d2da82"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-m3-repair/target/debug/prusti-driver",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-01/bin/prusti-driver",
+        "sha256": "c4ef68b5eee8144f74e673b58b58e0ffd37127f082ddd1bcf5b9c85a0bddd484"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-m3-repair/target/debug/prusti-rustc",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-01/bin/prusti-rustc",
+        "sha256": "d283aedaae4d88cc1fe2919247d1eaf16f0473291c23d28abc145c784497493e"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-m3-repair/target/debug/prusti-server",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-01/bin/prusti-server",
+        "sha256": "2acc9bab4df96b2e2454862d14fd613b59770e476614db5f630e5e5a5333a52f"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-m3-repair/target/debug/prusti-server-driver",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-01/bin/prusti-server-driver",
+        "sha256": "62a2d4b90092be70ddbdb3144c7f85875c9b873c0cde8ab2a53f2d59300bb98d"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-m3-repair/target/debug/prusti-smt-solver",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-01/bin/prusti-smt-solver",
+        "sha256": "2fcc7fa36384de83e87b1dd8abcca0320d0a25b15a6b0c011ad5804d09d0e7ba"
+      }
+    ],
+    "tools": {
+      "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-01/tools.json",
+      "sha256": "cf01ffae341e4a08bf759dfb757e4f2104d0d424aafb6acc5d5b0ce365559006"
+    },
+    "settings": {
+      "case_program_limits": {
+        "mut_sequence_state_pass": 600,
+        "mut_sequence_state_false": 600,
+        "mut_sequence_state_stale": 600,
+        "mut_referent_observe_bounds": 180,
+        "mut_referent_observe_negative": 180,
+        "mut_referent_observe_no_permission": 180,
+        "mut_referent_observe_executable": 180,
+        "segment_observation_pass": 180,
+        "segment_observation_false": 180,
+        "segment_update_symbolic_pass": 180,
+        "segment_update_symbolic_wrong": 180,
+        "segment_frame_pass": 180,
+        "segment_frame_wrong": 180,
+        "mut_sequence_states_pass": 600,
+        "mut_sequence_states_wrong": 600,
+        "mut_sequence_states_stale": 600,
+        "mut_sequence_states_missing_permission": 600,
+        "mut_sequence_states_executable": 600,
+        "whole_states_empty_pass": 180,
+        "whole_states_frame_wrong": 180,
+        "whole_states_history_pass": 180,
+        "whole_states_history_wrong": 180,
+        "whole_states_missing_scalar_permission": 180,
+        "whole_states_primitive_pass": 180,
+        "whole_states_unit_pass": 180,
+        "whole_states_update_pass": 180
+      },
+      "backend": "Ferrum",
+      "workers": 1,
+      "program_timeout": 90,
+      "command_timeout": 300,
+      "cache": false,
+      "check_overflows": true,
+      "check_panics": true,
+      "resource_mode_override": false,
+      "checked_scalar_loans": true,
+      "branch_parallelism": false,
+      "environment": {
+        "RUSTUP_TOOLCHAIN": "nightly-2026-08-15",
+        "JAVA_HOME": "/home/will/.local/share/mise/installs/java/openjdk-21.0.2",
+        "VIPER_HOME": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-01/tools/backends",
+        "Z3_EXE": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-01/tools/z3/bin/z3",
+        "CARGO_BUILD_JOBS": "8"
+      }
+    },
+    "matched": 555,
+    "expected": 555,
+    "suites": {
+      "borrow": {
+        "matched": 208,
+        "expected": 208,
+        "seconds": 347.29029829101637,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-01/suite-logs/borrow/results.json",
+          "sha256": "0b5a2c6627ff01ef576c593f374936704a03ff9bf5bed1ad01bee5d19652335c"
+        }
+      },
+      "extern": {
+        "matched": 97,
+        "expected": 97,
+        "seconds": 74.38151303000632,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-01/suite-logs/extern/results.json",
+          "sha256": "9afa0cdf3f31da462341825382e66023133f5711fb51b00887ef9c00b28e96db"
+        }
+      },
+      "sequence": {
+        "matched": 22,
+        "expected": 22,
+        "seconds": 18.336185320018558,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-01/suite-logs/sequence/results.json",
+          "sha256": "44d0da875d9c240794d42c07a171dd3eafa3fd8f772e7db9d45c71497d0fc472"
+        }
+      },
+      "vec": {
+        "matched": 21,
+        "expected": 21,
+        "seconds": 28.681638130015926,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-01/suite-logs/vec/results.json",
+          "sha256": "c20ff31d77c9ba16c2116dbd255ecfc4117abae68bc4ded2c63d27d110c87326"
+        }
+      },
+      "collections": {
+        "matched": 27,
+        "expected": 27,
+        "seconds": 94.03836284999852,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-01/suite-logs/collections/results.json",
+          "sha256": "36d1ae27c46feade80465ca308d9dc2027d0a20cefe455828f0a9f45b8d9d9b7"
+        }
+      },
+      "iterator": {
+        "matched": 129,
+        "expected": 129,
+        "seconds": 161.1405833789904,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-01/suite-logs/iterator/results.json",
+          "sha256": "ca696cf069df37c90fb8fbc9946107434e2b4f7a38cb4ebaa78446d37acba32f"
+        }
+      },
+      "hash": {
+        "matched": 51,
+        "expected": 51,
+        "seconds": 78.77073892299086,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-01/suite-logs/hash/results.json",
+          "sha256": "271fcda1a5d4c6c7a23fb04ee13845b54e19d738b8782244a6622f583b208663"
+        }
+      }
+    },
+    "suite_seconds": 802.639319923037,
+    "focused": {
+      "matched": 143,
+      "expected": 143,
+      "expected_cases": {
+        "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-01/audit-cases.json",
+        "sha256": "fb48048cc72543e3a5310b36ef9e8c8a01ea55489375a355e7e00cd0ae84bdd4"
+      },
+      "results": {
+        "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-01/audit/results.json",
+        "sha256": "17c9c47a97e26005209284d4cc9ce9ba2c2ac6eaa3efe8b3ea9a3e4df7adfef7"
+      },
+      "subset_of_matrix": true
+    },
+    "specification_unit_tests": 37,
+    "preservation": {
+      "source_unchanged": true,
+      "binary_unchanged": true,
+      "pending_main_unchanged": true
+    },
+    "material_timing_increases": [],
+    "timing_comparison": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/segment-native-gate-02-integration",
+    "unresolved": {
+      "wrong_diagnostic": 0,
+      "verification_failure": 0,
+      "timeout": 0,
+      "skipped": 0,
+      "untested": 0,
+      "unexpected_acceptance": 0
+    },
+    "ownership_history_unit_tests": 2
+  },
+  "integration": {
+    "artifact_root": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-02-integration",
+    "source_revision": "ef0752077eece23b6eaac737023839bcbc00dc7b",
+    "pcg_revision": "77e2a4a8e551086a85ae8b2cf74f7d4a25ec8c70",
+    "source_files": 2506,
+    "pcg_files": 1497,
+    "source": {
+      "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-02-integration/source-before.json",
+      "sha256": "aa7b356a75777704364b223d311b1a32258a0504bd6644ff9e91f40b0d6fc3e0"
+    },
+    "binaries": [
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-ownership-inference/target/debug/cargo-prusti",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-02-integration/bin/cargo-prusti",
+        "sha256": "8f66df5ba7bb6b917af493c97795d6e3a7bdab946d1cfd5f6a9f388a3b1ca8db"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-ownership-inference/target/debug/prusti-driver",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-02-integration/bin/prusti-driver",
+        "sha256": "217af04a72af2c51c50804ac067c5e75a7f067f49184f5f77ce40648db48e1c6"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-ownership-inference/target/debug/prusti-rustc",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-02-integration/bin/prusti-rustc",
+        "sha256": "368698d003a25cec58124dd9a2dc7a9960652c907109446dff82fda213344f99"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-ownership-inference/target/debug/prusti-server",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-02-integration/bin/prusti-server",
+        "sha256": "84ed0e8a56f7281f9c7a7d56c5ebc982f9ae4f8f7ba9e49d328bc99d3028e45a"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-ownership-inference/target/debug/prusti-server-driver",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-02-integration/bin/prusti-server-driver",
+        "sha256": "9a455bd81aeddcb130a62d38af4a01538ee7e7b9a600ad03fe04c8eb9249c4fb"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-ownership-inference/target/debug/prusti-smt-solver",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-02-integration/bin/prusti-smt-solver",
+        "sha256": "05606fc6776049ec09a6ac292c6f5a245f88ff24a13c2b40b8003419d01a4d97"
+      }
+    ],
+    "tools": {
+      "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-02-integration/tools.json",
+      "sha256": "b272b0ed03eb21b5e2ab1242c419083b1a1303953697c6d8810d115688e434b3"
+    },
+    "settings": {
+      "case_program_limits": {
+        "mut_sequence_state_pass": 600,
+        "mut_sequence_state_false": 600,
+        "mut_sequence_state_stale": 600,
+        "mut_referent_observe_bounds": 180,
+        "mut_referent_observe_negative": 180,
+        "mut_referent_observe_no_permission": 180,
+        "mut_referent_observe_executable": 180,
+        "segment_observation_pass": 180,
+        "segment_observation_false": 180,
+        "segment_update_symbolic_pass": 180,
+        "segment_update_symbolic_wrong": 180,
+        "segment_frame_pass": 180,
+        "segment_frame_wrong": 180,
+        "mut_sequence_states_pass": 600,
+        "mut_sequence_states_wrong": 600,
+        "mut_sequence_states_stale": 600,
+        "mut_sequence_states_missing_permission": 600,
+        "mut_sequence_states_executable": 600,
+        "whole_states_empty_pass": 180,
+        "whole_states_frame_wrong": 180,
+        "whole_states_history_pass": 180,
+        "whole_states_history_wrong": 180,
+        "whole_states_missing_scalar_permission": 180,
+        "whole_states_primitive_pass": 180,
+        "whole_states_unit_pass": 180,
+        "whole_states_update_pass": 180
+      },
+      "backend": "Ferrum",
+      "workers": 1,
+      "program_timeout": 90,
+      "command_timeout": 300,
+      "cache": false,
+      "check_overflows": true,
+      "check_panics": true,
+      "resource_mode_override": false,
+      "checked_scalar_loans": true,
+      "branch_parallelism": false,
+      "environment": {
+        "RUSTUP_TOOLCHAIN": "nightly-2026-08-15",
+        "JAVA_HOME": "/home/will/.local/share/mise/installs/java/openjdk-21.0.2",
+        "VIPER_HOME": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-02-integration/tools/backends",
+        "Z3_EXE": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-02-integration/tools/z3/bin/z3",
+        "CARGO_BUILD_JOBS": "8"
+      }
+    },
+    "matched": 555,
+    "expected": 555,
+    "suites": {
+      "borrow": {
+        "matched": 208,
+        "expected": 208,
+        "seconds": 357.14131413502037,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-02-integration/suite-logs/borrow/results.json",
+          "sha256": "1dbda21714e416ab36d14cd60da3a3f4dee89765160d317b8b1e5a3d3165f24b"
+        }
+      },
+      "extern": {
+        "matched": 97,
+        "expected": 97,
+        "seconds": 67.6924948609958,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-02-integration/suite-logs/extern/results.json",
+          "sha256": "d24ef72fd6391b4f9cd7190d9d9385378c682f05deb02764696ad983a0b5bed0"
+        }
+      },
+      "sequence": {
+        "matched": 22,
+        "expected": 22,
+        "seconds": 21.76653349600383,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-02-integration/suite-logs/sequence/results.json",
+          "sha256": "dcfc0574908e7ec6c297bb50f58e679742638e701c959a9d7a42bd10319f3024"
+        }
+      },
+      "vec": {
+        "matched": 21,
+        "expected": 21,
+        "seconds": 31.09372190097929,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-02-integration/suite-logs/vec/results.json",
+          "sha256": "00b0bf49e5a8b9f365992c6467b48abefa0af230e32abd62deb82fb5d88df859"
+        }
+      },
+      "collections": {
+        "matched": 27,
+        "expected": 27,
+        "seconds": 94.08894370100461,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-02-integration/suite-logs/collections/results.json",
+          "sha256": "cc3d657edfcd91365be8d016e18e98166dde45936d18e2cb6f357d8ab2ce5824"
+        }
+      },
+      "iterator": {
+        "matched": 129,
+        "expected": 129,
+        "seconds": 162.86943790499936,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-02-integration/suite-logs/iterator/results.json",
+          "sha256": "5d7fe6a2e27abe057c5770720594a926fda990983336ebcc6d73ada74ad46666"
+        }
+      },
+      "hash": {
+        "matched": 51,
+        "expected": 51,
+        "seconds": 73.29965965499287,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-02-integration/suite-logs/hash/results.json",
+          "sha256": "dcc5aee499cf1af6ab6480c0969ea9549e12d2d648e4e4733398c8fe054e5aca"
+        }
+      }
+    },
+    "suite_seconds": 807.9521056539961,
+    "focused": {
+      "matched": 143,
+      "expected": 143,
+      "expected_cases": {
+        "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-02-integration/audit-cases.json",
+        "sha256": "fb48048cc72543e3a5310b36ef9e8c8a01ea55489375a355e7e00cd0ae84bdd4"
+      },
+      "results": {
+        "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-02-integration/audit/results.json",
+        "sha256": "d8cc7974505cb6ba0ab6544bc59c40094c23191bdd6e8fa070f9f3b0c52677e3"
+      },
+      "subset_of_matrix": true
+    },
+    "specification_unit_tests": 37,
+    "preservation": {
+      "source_unchanged": true,
+      "binary_unchanged": true,
+      "pending_main_unchanged": true
+    },
+    "material_timing_increases": [],
+    "timing_comparison": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-gate-01",
+    "unresolved": {
+      "wrong_diagnostic": 0,
+      "verification_failure": 0,
+      "timeout": 0,
+      "skipped": 0,
+      "untested": 0,
+      "unexpected_acceptance": 0
+    },
+    "ownership_history_unit_tests": 2
+  },
+  "r2_complete": true,
+  "r3_complete": false,
+  "feature_flag": "PRUSTI_CHECKED_SCALAR_LOANS=true",
+  "enabled_by_default": false,
+  "silicon": {
+    "scope": "All 13 whole-state feature controls, not the complete matrix.",
+    "matched": 13,
+    "expected": 13,
+    "artifacts": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-silicon-01",
+    "results_sha256": "01c0b0ff2759b71e7f1da1d1e18706b5c7c6cedcbc9ec1a8eb6d5eb3c65afe5c",
+    "same_source_and_six_binaries_evidence": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-structure.json"
+  },
+  "original_restoration_inventory": "790 clients / 2198 checks remains unqualified",
+  "stop_before": "D1-D6",
+  "scheduled_automation": false,
+  "function_termination": {
+    "implementation": "186d3f397",
+    "native_serialized_tests": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/function-measure-tests-02",
+    "passed": 5,
+    "includes": "Ferrum/Silicon method and function positive and exact non-decreasing rejection; effective configuration and hash checks",
+    "baseline": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/function-measure-baseline-02",
+    "baseline_result": "Invalid function measure was unexpectedly accepted with termination disabled.",
+    "effective_settings": "Any explicit function or method measure enables termination checking; unmeasured procedure defaults stay unchanged."
+  },
+  "scope": [
+    "Whole-sequence capture of mutable primitive-reference states requires the existing checked segment.",
+    "Recursive pure maps prove length and every indexed result with checked decreasing measures; their outputs grant no permissions.",
+    "Saved states remain immutable across updates. Current-vs-entry postconditions require a proved unchanged-reference-slot frame.",
+    "Resource-free scalar/unit sequences map to empty state. Unknown generic/structural state requires an opaque capability which this increment never grants.",
+    "Generic reference-containing values, reference replacement, iterator/loop summaries and the original difficult prefix pair remain unqualified."
+  ],
+  "new_native_controls": {
+    "original": 5,
+    "additional": 8,
+    "acceptance": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-acceptance-03.json",
+    "structure": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-structure.json",
+    "history_review": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/whole-states-history-review.json"
+  },
+  "performance_note": "Integration suite time 807.95s versus 863.97s on the previous integrated source; no material individual regressions. No controlled speedup claim. The original full prefix proof remains unqualified."
+}

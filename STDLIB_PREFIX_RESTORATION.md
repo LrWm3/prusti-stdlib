@@ -15,8 +15,9 @@ watchdog. Other cases retain their recorded 180/600-second schedule.
 | Current evidence | Result |
 |---|---|
 | Frozen R2 Ferrum / Silicon gates | Each 454/454; each 70/70 focused |
-| Current scalar slice segment integration Ferrum gate | 536/536; 130/130 focused; 37 specification + 2 ownership/history tests |
+| Current whole-state integration Ferrum gate | 555/555; 143/143 focused; 37 specification + 2 ownership/history tests |
 | Native scalar slice segment feature controls | 13/13 Ferrum and 13/13 Silicon; same experimental source and binaries |
+| Whole-state feature controls | 13/13 Ferrum and 13/13 Silicon; same experimental source and binaries |
 | Original prefix positive on R2 | Compilation/specification failure |
 | Original exact false control on R2 | Wrong diagnostic |
 | Prefix proof, inference, full restoration | Unqualified |
@@ -380,3 +381,18 @@ The slot-frame addition repairs both new history contracts without changing
 the encoder or original clients. The serialized native method/function measure
 tests match all five checks on Ferrum/Silicon, including exact invalid-measure
 rejections. Affected-family and feature qualification remain pending.
+
+Whole-state capture is integrated at `ef0752077eece23b6eaac737023839bcbc00dc7b`,
+after the separate function-termination fix `186d3f397`. Experimental and own
+integration builds independently match 555/555 Ferrum checks and 143/143 focused
+controls, plus 37 specification and two ownership/history tests. All 13 new
+controls match on Silicon with the same experimental source and six binaries.
+The five serialized native termination tests also pass on final source. Exact
+diagnostics and recorded limits are retained. Integration suite time is 807.95s
+with no material per-case regression. Source, binaries and six pending main files
+remain preserved. See [whole-state qualification](STDLIB_WHOLE_STATE_EVIDENCE.json).
+
+R3 remains open. Next restore explicit call-return snapshot capture for expiry
+pledges, then the minimal native mutable-iterator model and checked prefix summary.
+The original difficult prefix pair, generic restoration, inference and full
+790-client/2198-check matrix remain unqualified. Stop before D1–D6.

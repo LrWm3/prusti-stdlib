@@ -137,6 +137,17 @@ pub fn for_iterator<I>() -> I {
     panic!("for_iterator is a specification-only marker")
 }
 
+/// Observe the logical tail reference of a mutable slice iterator in a
+/// specification. This snapshot grants no permission to read its elements;
+/// `mut_slice_contents` checks that permission separately. The reference is
+/// a verification identity, not an observation of a physical pointer address.
+/// Use `mut_slice_contents(&*mut_iter_tail(iterator))` to read the tail with
+/// permission, or `mut_slice_len(&*mut_iter_tail(iterator))` for its length.
+/// The marker is unavailable in executable code and ordinary pure functions.
+pub fn mut_iter_tail<'a, T>(_iterator: &core::slice::IterMut<'a, T>) -> Ghost<&'a mut [T]> {
+    panic!("mut_iter_tail is a specification-only marker")
+}
+
 /// Traverse an `IntoIterator` while giving its iterator a name for specifications.
 ///
 /// `prusti_for!(iter, for item in values => { ... })` expands to a `match` and

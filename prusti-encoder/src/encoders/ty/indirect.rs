@@ -289,7 +289,11 @@ impl TaskEncoder for IndirectPredicatesEnc {
                         })
                         .collect::<Result<Vec<_>, _>>()?;
 
-                    if variant_preds.is_empty() {
+                    // No variant owns indirect resources (for example,
+                    // Option<&T>). Do not manufacture a conditional true/true
+                    // permission: that would make an empty loop edge appear
+                    // to require a packaged wand and an enum snapshot read.
+                    if variant_preds.iter().all(|(_, fields)| fields.is_empty()) {
                         return Ok(((), IndirectPredicatesEncOutputRef::new(vec![])));
                     }
 

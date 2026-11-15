@@ -24,6 +24,13 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         }
         let mut old_outer = WandOldOuter::Label(label);
         let (wand, rhs) = self.coupled_wand(edge, &mut old_outer)?;
+        // A shared-only loop edge can have no indirect resources on either
+        // side. It carries no pledge/value assertion. The loop invariant omits
+        // this tautology, so omit its footprint and apply/package as well.
+        // Never use this rule for a nonempty permission or value obligation.
+        if empty_resource_wand(wand) {
+            return Ok(());
+        }
         if !package {
             if let Some(footprint) = footprint {
                 footprint.parts.push(self.vcx.mk_wand_expr(wand));
@@ -72,4 +79,10 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         );
         Ok((wand, rhs))
     }
+}
+
+/// Syntactic check only: do not erase implications that merely look provable.
+pub(super) fn empty_resource_wand(wand: vir::Wand<'_>) -> bool {
+    matches!(wand.lhs.kind, &vir::ExprKindData::Const(&vir::ConstData::Bool(true)))
+        && matches!(wand.rhs.kind, &vir::ExprKindData::Const(&vir::ConstData::Bool(true)))
 }

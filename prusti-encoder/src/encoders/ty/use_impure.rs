@@ -599,7 +599,7 @@ impl<'vir> TyUseImpureArray<'vir> {
     }
 
     /// The predicate of the array without its element at `index`.
-    fn ref_to_index_frame_pred(
+    pub(crate) fn ref_to_index_frame_pred(
         &self,
         self_ref: vir::ExprRef<'vir>,
         index: vir::ExprInt<'vir>,
@@ -611,6 +611,20 @@ impl<'vir> TyUseImpureArray<'vir> {
             self.args.get_const(),
         )(None);
         vir::with_vcx(|vcx| vcx.mk_predicate_app_expr(pred_app))
+    }
+
+    /// Immutable observation protected by the selected element's frame.
+    pub(crate) fn ref_to_index_frame_snap(
+        &self,
+        self_ref: vir::ExprRef<'vir>,
+        index: vir::ExprInt<'vir>,
+    ) -> vir::ExprCSnap<'vir> {
+        self.data.impure.index_frame.call()(
+            self_ref,
+            index,
+            self.args.get_ty(),
+            self.args.get_const(),
+        )
     }
 }
 

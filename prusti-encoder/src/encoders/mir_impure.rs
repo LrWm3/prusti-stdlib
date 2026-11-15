@@ -47,6 +47,7 @@ use crate::encoders::{
     PrustiBuiltin, PureKind, TyUseImpureEnc, WandEnc, WandEncTask,
     impure::{
         WandOldOuter,
+        element_transfer::SelectedElementTransfer,
         loan_state::{LoanState, LoanStates},
         loan_transfer::{self, ResourceView, ResourceViewAction, ScalarLoanTransfer},
     },
@@ -409,6 +410,34 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             }
         }
         Ok(())
+    }
+
+    /// Both owned-place repacks and borrow-graph expansions use this rule.
+    /// Historical/package callers must keep their existing encoding.
+    fn checked_array_transfer(
+        &mut self,
+        ty: ty::Ty<'vir>,
+        owner: vir::ExprRef<'vir>,
+        index: Option<vir::ExprInt<'vir>>,
+        action: &FoldOrUnfold,
+    ) -> bool {
+        if !config::checked_scalar_loans() || self.loop_analysis().all_loops().next().is_some() {
+            return false;
+        }
+        let (TyKind::Array(element, _), Some(index)) = (ty.kind(), index) else {
+            return false;
+        };
+        let transfer = SelectedElementTransfer {
+            owner: self.ty_use_impure(ty),
+            element: self.ty_use_impure(*element),
+            model: self.ty_use_pure(ty),
+        };
+        let stmts = match action {
+            FoldOrUnfold::Unfold => transfer.split(self.vcx, &mut self.tmp_ctr, owner, index),
+            FoldOrUnfold::Fold => transfer.join(self.vcx, &mut self.tmp_ctr, owner, index),
+        };
+        self.stmts(stmts);
+        true
     }
 
     fn prepare_loan_states(&mut self) {
@@ -798,6 +827,17 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         let index = expansion
             .and_then(|expansion| expansion.guide())
             .and_then(|guide| self.expansion_index(guide));
+
+        if executable
+            && base.is_current()
+            && self.checked_array_transfer(place_ty.ty, ref_p, index, &fold_or_unfold)
+        {
+            let frame = match fold_or_unfold {
+                FoldOrUnfold::Unfold => Vec::new(),
+                FoldOrUnfold::Fold => data.fold_frame(place_ty.variant_index, ref_p, index),
+            };
+            return Ok(Some(frame));
+        }
 
         let (stmts, frame) = match fold_or_unfold {
             FoldOrUnfold::Unfold => (
@@ -1446,12 +1486,21 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     _ => None,
                 };
                 let index = guide.and_then(|guide| self.expansion_index(guide));
-                if matches!(repack_op, pcg::free_pcs::RepackOp::Expand(..)) {
-                    self.stmts(data.unfold(place_ty.variant_index, place_enc, index, None, None));
-                } else if matches!(repack_op, pcg::free_pcs::RepackOp::Collapse(..)) {
-                    self.stmts(data.fold(place_ty.variant_index, place_enc, index, None, None));
+                let action = if matches!(repack_op, RepackOp::Expand(..)) {
+                    FoldOrUnfold::Unfold
                 } else {
-                    unreachable!()
+                    FoldOrUnfold::Fold
+                };
+                if !self.checked_array_transfer(place_ty.ty, place_enc, index, &action) {
+                    let stmts = match action {
+                        FoldOrUnfold::Unfold => {
+                            data.unfold(place_ty.variant_index, place_enc, index, None, None)
+                        }
+                        FoldOrUnfold::Fold => {
+                            data.fold(place_ty.variant_index, place_enc, index, None, None)
+                        }
+                    };
+                    self.stmts(stmts);
                 }
                 Ok(())
             }

@@ -263,7 +263,7 @@ impl<'vir> CapturedTransfer<'vir> {
     }
 }
 
-fn capture<'vir, T: CompType>(
+pub(super) fn capture<'vir, T: CompType>(
     vcx: &'vir vir::VirCtxt<'vir>,
     counter: &mut usize,
     role: &str,

@@ -318,7 +318,7 @@ diagnostic, and all 23 restoration controls remain matched. This supports the
 resource-count/value-transfer explanation. Full affected-family qualification
 is required again on this revised source before integration.
 
-### Fifth increment: one selected array element (planned, not qualified)
+### Fifth increment: one selected array element (qualification pending)
 
 Start from `1ef39f2c2`, with its qualified local/escaped reference rules. First
 freeze native scalar, generic/non-`Copy`, zero-sized and reference-containing
@@ -383,6 +383,25 @@ the value equality, permission obligations and user assertions are preserved.
 The complete affected gate and own integration rebuild subsequently each match
 437/437 suite checks, 58/58 focused controls and 36 specification tests. The
 prerequisite is qualified at `c2e9b885b`; the transfer record below is still open.
+
+The initial `SelectedElementTransfer` implementation captures owner/index/target
+and entry, current-element and frame values around the existing split/join calls.
+It asserts source/destination permissions, the selected value relation, and the
+quantified untouched-frame relation. No permission or value fact is inhaled.
+Both borrow-graph expansions and owned-place PCG repacks use the same rule;
+packages, historical endpoints and cyclic bodies retain their previous paths.
+The original opaque array split/join contracts remain trusted and unchanged.
+
+After correcting two constructor API build errors, `selected-transfer-focused-02`
+matches 10/10 but structural inspection shows only the generic pair reaches the
+new rule. `selected-transfer-focused-03` additionally covers the owned-place path:
+**10/10 match and every client contains checked split and join operations**, with
+two of each in the reference-replacement pair. This includes generic/non-`Copy`,
+zero-sized, saved-index, reborrow and wrong-history/value/frame controls. The
+accidentally launched `selected-transfer-focused-01` used stale binaries after
+a failed build; it is explicitly invalidated and supplies no candidate evidence.
+All original target sources are unchanged. Full affected-family qualification is
+still required before integrating this transfer record; no speedup is claimed.
 
 ### Second increment: persistent identities and deferred resolution
 

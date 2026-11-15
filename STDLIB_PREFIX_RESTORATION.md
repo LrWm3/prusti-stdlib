@@ -14,7 +14,8 @@ watchdog. Other cases retain their recorded 180/600-second schedule.
 
 | Current evidence | Result |
 |---|---|
-| R2 Ferrum / Silicon gates | Each 454/454; each 70/70 focused |
+| Frozen R2 Ferrum / Silicon gates | Each 454/454; each 70/70 focused |
+| Parser prerequisite, own integration Ferrum gate | 457/457; 72/72 focused; 37 specification + 1 binder test |
 | Original prefix positive on R2 | Compilation/specification failure |
 | Original exact false control on R2 | Wrong diagnostic |
 | Prefix proof, inference, full restoration | Unqualified |
@@ -91,3 +92,11 @@ annotation, not an encoder inference result or weakened obligation. The original
 unannotated source/results and both diagnostic variants remain preserved. The
 original prefix sources and 29-case target are untouched. Automatic witness
 selection remains outside this parser repair and may be considered in R4.
+
+The parser prerequisite is integrated at `e3db7a3185ca5fa2f4bef2f262aaaf647a17e36b`.
+Its own integration rebuild matches 457/457 Ferrum suite checks and 72/72 focused
+controls, plus 37 specification and one binder-scope test. Suite time is 696.54s;
+no case crosses the fixed material-slowdown threshold. Source, binaries and the
+six pending main files are preserved. See
+[parser qualification](STDLIB_PREFIX_QUANTIFIER_EVIDENCE.json). R3 remains open;
+next restore permission-checked resource observations and iterator summaries.

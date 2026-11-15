@@ -2,6 +2,7 @@
 
 Baseline: `56716a5ef`, whose compiler source is the qualified `2c5484c00`.
 Worktree/branch: `prusti-stdlib-m3-repair`, `stdlib/ownership-core-r2`.
+Integration: `prusti-stdlib-ownership-inference`, `stdlib/ownership-inference-m3`.
 Artifacts: `../prusti-stdlib/target/stdlib-ownership-core-r2/`.
 The six pending main-tree files and all R1/H1 artifacts remain preserved.
 
@@ -19,6 +20,54 @@ This first increment establishes a checked local rule and its immutable witnesse
 It does not implement an unresolved prophecy variable, eliminate the heap encoding,
 claim faster verification, or complete R2. Keep it behind
 `PRUSTI_CHECKED_SCALAR_LOANS=true` while qualifying the supported scope.
+
+## First increment qualified (2026-11-15)
+
+Implementation `f559ae610dcad2f71338b773d79b2f03af4d8d48` is integrated and rebuilt
+from the integration branch. Ferrum matches **399/399 suite checks** and **30/30
+focused controls**; all 36 specification unit tests pass. Exact matrix coverage is
+293 native clients (88 positive, 188 intended rejections and 17 expected unsupported
+diagnostics), eight library verifications, eight compilation checks, 88 runtime
+checks and two structural trigger checks. The focused controls are a subset of
+those clients, not extra unique coverage. No timeout, skipped case, unexpected
+acceptance, wrong diagnostic or unresolved verification failure occurred.
+
+The eight new native controls also match separately on the frozen qualified R1
+compiler and the experimental compiler with the option both disabled and enabled.
+Generated programs confirm acquire and resolve obligations actually execute,
+including all three levels of nested reborrowing. Each target/value witness has
+one assignment per dynamic transfer, and the new rules emit no inhales. The
+retargeting control also exercises the existing historical-endpoint fallback;
+it does not qualify a new rule for reference-containing replacement.
+
+The experiment and own integration rebuild each independently match 399/399;
+their counts are not combined. Source manifests cover 2,373 Prusti files and
+1,497 PCG files. Six compiler binaries and the source remain unchanged during
+each gate; the main tree's six pending files remain intact. PCG stays at
+`e54bf675468d`, Ferrum at `931a2d5`, and the R1 toolchain/settings remain pinned.
+Detailed expectations, diagnostics, per-case timings, source/binary hashes and
+artifact references are in [the evidence record](STDLIB_OWNERSHIP_CORE_EVIDENCE.json).
+
+The integration suites take **551.88 seconds** with one worker, branch parallelism
+off, cache disabled, overflow/panic checks enabled, and the original 90/300-second
+M3 limits. No case exceeds the predeclared material-slowdown threshold (both 2x
+and +10s) against the experimental gate; the experimental gate has none against
+R1. Different coverage and ordinary timing variability prevent treating this as
+a demonstrated speedup. Silicon is reserved for the completed R2 feature sign-off.
+
+The implementation is opt-in. For example, after building this branch:
+
+```sh
+./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite borrow --backend Ferrum --checked-scalar-loans
+```
+
+**R2 remains incomplete.** Next, introduce persistent loan identities and a
+deferred-value representation with explicit child/parent composition. This must
+keep unresolved values unavailable to ordinary assertions until a checked
+continuation or resolution rule justifies their use. Then qualify
+reference-containing replacement and one selected element, with exact value and
+frame negatives, before the R2 Silicon gate. The difficult prefix proof and
+inference remain R3/R4; no D1–D6 work or automation is started.
 
 ## Ownership invariant, written before implementation
 

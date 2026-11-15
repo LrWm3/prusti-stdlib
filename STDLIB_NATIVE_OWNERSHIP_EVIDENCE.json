@@ -1,0 +1,132 @@
+{
+  "status": "Ferrum-qualified native ownership prerequisites; bounded functional summary and combined final qualification incomplete",
+  "source_revision": "6fcef55c898bdbdedadd4d1c1f7d95f91d00de0e",
+  "repairs": [
+    "Resolve established region unifications in normalized call signatures",
+    "Keep historical post-call projection labels when moved argument storage expires",
+    "Expose native IterMut logical tail and preserve its identity on exhausted next",
+    "Omit resource-free enum dispatch and handle empty loop wands consistently",
+    "Retain singleton loop restoration edges and independently owned source reference slots",
+    "Use PCG projection histories instead of the current post-next tail",
+    "Import checked continuation antecedents before nested application so expiry observations have their resources"
+  ],
+  "pcg_revision": "78884fddbccc28bd674f77297201a26df497c304",
+  "ferrum_revision": "931a2d55831ca3dffc34444e8ff0f88750f20bbc",
+  "gate": "/home/will/wk/exp/prusti-stdlib/target/stdlib-inference-summary-20261115/o1-native-gate-02",
+  "source_manifest_sha256": "70eca1872bc100d5441a00ab937d5c1e63d12a9210d0b924d627f48d5abc4c72",
+  "binary_manifest_sha256": "584b2591406191ec85cfceca06aa18021007db22a999c7d2a54e6cb3c52c4276",
+  "build_provenance": "Own experiment worktree build from the complete captured source and PCG manifests. Source was committed afterward without compiler-file changes; base revision plus captured patches identify the tested binary. Final integration must rebuild from its own accepted revision.",
+  "ferrum": {
+    "matched": 596,
+    "expected": 596,
+    "coverage": "exact",
+    "libraries_verified": 7,
+    "focused_matched": 172,
+    "focused_expected": 172,
+    "focused_not_additive": true,
+    "suites": {
+      "borrow": {
+        "matched": 224,
+        "expected": 224,
+        "seconds": 374.24,
+        "longest": {
+          "case": "frame_pass",
+          "passed": true,
+          "seconds": 23.74
+        }
+      },
+      "collections": {
+        "matched": 27,
+        "expected": 27,
+        "seconds": 94.91,
+        "longest": {
+          "case": "boundaries_pass",
+          "passed": true,
+          "seconds": 29.4
+        }
+      },
+      "extern": {
+        "matched": 97,
+        "expected": 97,
+        "seconds": 70.03,
+        "longest": {
+          "case": "core-only",
+          "passed": true,
+          "seconds": 5.55
+        }
+      },
+      "hash": {
+        "matched": 51,
+        "expected": 51,
+        "seconds": 72.56,
+        "longest": {
+          "case": "spec-library",
+          "passed": true,
+          "seconds": 8.81
+        }
+      },
+      "iterator": {
+        "matched": 154,
+        "expected": 154,
+        "seconds": 247.57,
+        "longest": {
+          "case": "spec-library",
+          "passed": true,
+          "seconds": 15.52
+        }
+      },
+      "sequence": {
+        "matched": 22,
+        "expected": 22,
+        "seconds": 21.27,
+        "longest": {
+          "case": "spec-library",
+          "passed": true,
+          "seconds": 7.82
+        }
+      },
+      "vec": {
+        "matched": 21,
+        "expected": 21,
+        "seconds": 29.62,
+        "longest": {
+          "case": "spec-library",
+          "passed": true,
+          "seconds": 6.17
+        }
+      }
+    }
+  },
+  "native_controls": {
+    "straight_line": 13,
+    "resource_only_loop": 3,
+    "exact_negatives": true
+  },
+  "silicon": "not run for these small repairs; required at the completed ownership-summary milestone and before integration qualification",
+  "material_timing_increases": [],
+  "settings": {
+    "workers": 1,
+    "branch_parallelism": false,
+    "cache": false,
+    "overflow_checks": true,
+    "panic_checks": true,
+    "native_control_limit_seconds": 180,
+    "inherited_600_second_limits_preserved": true
+  },
+  "preservation": {
+    "source_unchanged": true,
+    "binary_unchanged": true,
+    "pending_main_unchanged": true
+  },
+  "diagnostic_models": {
+    "loop_history": "/home/will/wk/exp/prusti-stdlib/target/stdlib-inference-summary-20261115/o1-loop-history-model-01",
+    "acceptance": "diagnostic models alone do not count; full Rust controls pass"
+  },
+  "remaining": [
+    "O1 manual bounded prefix/suffix value summary and proof-work measurements",
+    "C1 inferred collection value templates over the same ownership rules",
+    "H1 unchanged reference-containing positive/negative and repeatability",
+    "Full 790-client / 2198-check same-source Ferrum/Silicon qualification"
+  ],
+  "stop_before": "D1-D6; no automation"
+}

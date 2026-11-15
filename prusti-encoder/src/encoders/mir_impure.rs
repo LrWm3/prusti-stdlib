@@ -48,7 +48,7 @@ use crate::encoders::{
     impure::{
         WandOldOuter,
         continuation::ContinuationSummary,
-        element_transfer::SelectedElementTransfer,
+        element_transfer::{SelectedElementTransfer, SliceReferentTransfer},
         loan_state::{LoanState, LoanStates},
         loan_transfer::{self, ResourceView, ResourceViewAction, ScalarLoanTransfer},
     },
@@ -420,19 +420,58 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         ty: ty::Ty<'vir>,
         owner: vir::ExprRef<'vir>,
         index: Option<vir::ExprInt<'vir>>,
+        metadata: Option<vir::ExprSnap<'vir>>,
         action: &FoldOrUnfold,
     ) -> bool {
         if !config::checked_scalar_loans() || self.loop_analysis().all_loops().next().is_some() {
             return false;
         }
-        let (TyKind::Array(element, _), Some(index)) = (ty.kind(), index) else {
+        let Some(index) = index else {
             return false;
+        };
+        let element = match ty.kind() {
+            TyKind::Array(element, _) => *element,
+            TyKind::Slice(element)
+                if metadata.is_some()
+                    && matches!(element.kind(), TyKind::Ref(_, referent, ty::Mutability::Mut) if referent.is_primitive()) =>
+            {
+                *element
+            }
+            _ => return false,
         };
         let transfer = SelectedElementTransfer {
             owner: self.ty_use_impure(ty),
-            element: self.ty_use_impure(*element),
+            element: self.ty_use_impure(element),
             model: self.ty_use_pure(ty),
         };
+        if matches!(ty.kind(), TyKind::Slice(_)) {
+            let usize_ty = *self
+                .ty_use_pure(self.vcx.tcx().types.usize)
+                .expect_primitive();
+            let length = usize_ty
+                .snap_to_prim(metadata.unwrap().downcast_ty())
+                .downcast_ty();
+            let referents = self
+                .deps
+                .require_dep::<super::ty::collection_segment::CollectionSegmentEnc>(
+                    RustTyDecomposition::from_ty(element, self.def_id),
+                )
+                .unwrap();
+            let transfer = SliceReferentTransfer {
+                slots: transfer,
+                referents,
+            };
+            let stmts = match action {
+                FoldOrUnfold::Unfold => {
+                    transfer.split(self.vcx, &mut self.tmp_ctr, owner, index, length)
+                }
+                FoldOrUnfold::Fold => {
+                    transfer.join(self.vcx, &mut self.tmp_ctr, owner, index, length)
+                }
+            };
+            self.stmts(stmts);
+            return true;
+        }
         let stmts = match action {
             FoldOrUnfold::Unfold => transfer.split(self.vcx, &mut self.tmp_ctr, owner, index),
             FoldOrUnfold::Fold => transfer.join(self.vcx, &mut self.tmp_ctr, owner, index),
@@ -807,6 +846,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         let ref_p = self.encode_place(place)?;
 
         let place_ty = ref_p.ty;
+        let metadata = ref_p.expr.metadata;
         let ref_p = self
             .vcx
             .maybe_apply_label(ref_p.expr.expect_predicate(), label);
@@ -832,7 +872,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
 
         if executable
             && base.is_current()
-            && self.checked_array_transfer(place_ty.ty, ref_p, index, &fold_or_unfold)
+            && self.checked_array_transfer(place_ty.ty, ref_p, index, metadata, &fold_or_unfold)
         {
             let frame = match fold_or_unfold {
                 FoldOrUnfold::Unfold => Vec::new(),
@@ -1494,6 +1534,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 }
                 let place_enc = self.encode_place(place)?;
                 let place_ty = place_enc.ty;
+                let metadata = place_enc.expr.metadata;
                 let place_enc = place_enc.expr.expect_predicate();
                 let data = self.ty_use_impure(place_ty.ty);
                 // TODO: guide should be implemented on `RepackOp`
@@ -1508,7 +1549,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 } else {
                     FoldOrUnfold::Fold
                 };
-                if !self.checked_array_transfer(place_ty.ty, place_enc, index, &action) {
+                if !self.checked_array_transfer(place_ty.ty, place_enc, index, metadata, &action) {
                     let stmts = match action {
                         FoldOrUnfold::Unfold => {
                             data.unfold(place_ty.variant_index, place_enc, index, None, None)
@@ -2575,6 +2616,83 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         Ok(owners)
     }
 
+    fn current_collection_observation_owners(
+        &mut self,
+        pcg_state: &Pcg<'_, 'vir>,
+    ) -> EncodeResult<'vir, Vec<super::impure::resource_owner::CurrentCollectionOwner<'vir>>, E>
+    {
+        use super::{
+            impure::resource_owner::CurrentCollectionOwner,
+            ty::collection_segment::CollectionSegmentEnc,
+        };
+        if !config::checked_scalar_loans() || self.loop_analysis().all_loops().next().is_some() {
+            return Ok(Vec::new());
+        }
+        let mut owners = Vec::new();
+        for local in self.body.args_iter() {
+            let ty = self.local_decls[local].ty;
+            let TyKind::Ref(_, slice, ty::Mutability::Mut) = ty.kind() else {
+                continue;
+            };
+            let TyKind::Slice(element) = slice.kind() else {
+                continue;
+            };
+            let TyKind::Ref(_, referent, ty::Mutability::Mut) = element.kind() else {
+                continue;
+            };
+            if !referent.is_primitive() {
+                continue;
+            }
+            let root: Place<'vir> = local.into();
+            // PCG stores capabilities only for leaves of its current pack
+            // state. A packed exclusive reference has no separate pointee
+            // entry. These are candidates only: the observation still checks
+            // the actual slice and whole-segment permissions.
+            let pointee =
+                pcg_state.place_capability(root.project_deref(self.pcg_ctxt()), self.pcg_ctxt());
+            if pointee != Some(CapabilityKind::Exclusive)
+                && !(pointee.is_none()
+                    && pcg_state.place_capability(root, self.pcg_ctxt())
+                        == Some(CapabilityKind::Exclusive))
+            {
+                continue;
+            }
+            let (_, snapshot, _, _) = self.encode_place_with_snap(root)?;
+            let task = RustTyDecomposition::from_ty(ty, self.def_id);
+            let reference = self.ty_use_pure(ty).expect_mutref().clone();
+            let physical = self.deps.require_dep::<TyUseImpureEnc>(
+                task.ty
+                    .expect_mutref()
+                    .referent
+                    .decompose_context(task.ty.params, task.args),
+            )?;
+            let stored = physical.ref_to_snap(reference.deref_access(snapshot.downcast_ty()));
+            let contents = reference.cast_to_caller_ctx(stored.downcast_ty());
+            let usize_ty = *self
+                .ty_use_pure(self.vcx.tcx().types.usize)
+                .expect_primitive();
+            let length = usize_ty
+                .snap_to_prim(
+                    reference
+                        .metadata_access(snapshot.downcast_ty())
+                        .downcast_ty(),
+                )
+                .downcast_ty();
+            let sequence = self
+                .ty_use_pure(*slice)
+                .expect_array()
+                .to_seq(contents.downcast_ty(), length);
+            let segment =
+                self.deps
+                    .require_dep::<CollectionSegmentEnc>(RustTyDecomposition::from_ty(
+                        *element,
+                        self.def_id,
+                    ))?;
+            owners.push(CurrentCollectionOwner { sequence, segment });
+        }
+        Ok(owners)
+    }
+
     fn encode_spec_block(
         &mut self,
         spec_block: mir::BasicBlock,
@@ -2625,8 +2743,9 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             && super::impure::resource_owner::has_current_observation(expr.as_dyn())
         {
             let owners = self.current_resource_observation_owners(pcg_state)?;
+            let collections = self.current_collection_observation_owners(pcg_state)?;
             expr.fold_with(&mut super::impure::resource_owner::CurrentResourceObservations {
-                vcx: self.vcx, owners: &owners,
+                vcx: self.vcx, owners: &owners, collections: &collections,
             }).unwrap_or(expr)
         } else {
             expr
@@ -3617,10 +3736,12 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 let current_fpcs = self.current_fpcs.take().unwrap();
                 let state = &current_fpcs.statements.last().unwrap().states[EvalStmtPhase::PreMain];
                 let owners = self.current_resource_observation_owners(state);
+                let collections = self.current_collection_observation_owners(state);
                 self.current_fpcs = Some(current_fpcs);
                 let owners = owners?;
+                let collections = collections?;
                 expr.fold_with(&mut super::impure::resource_owner::CurrentResourceObservations {
-                    vcx: self.vcx, owners: &owners,
+                    vcx: self.vcx, owners: &owners, collections: &collections,
                 }).unwrap_or(expr)
             } else {
                 expr

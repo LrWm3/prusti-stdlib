@@ -31,9 +31,15 @@ pub(crate) struct CurrentResourceOwner<'vir> {
     pub value: vir::ExprPSnap<'vir>,
 }
 
+pub(crate) struct CurrentCollectionOwner<'vir> {
+    pub sequence: vir::ExprSeq<'vir>,
+    pub segment: super::super::ty::collection_segment::CollectionSegment<'vir>,
+}
+
 pub(crate) struct CurrentResourceObservations<'a, 'vir> {
     pub vcx: &'vir vir::VirCtxt<'vir>,
     pub owners: &'a [CurrentResourceOwner<'vir>],
+    pub collections: &'a [CurrentCollectionOwner<'vir>],
 }
 
 impl<'vir> Folder<'vir, (), !> for CurrentResourceObservations<'_, 'vir> {
@@ -47,7 +53,9 @@ impl<'vir> Folder<'vir, (), !> for CurrentResourceObservations<'_, 'vir> {
         let vir::ExprKindData::FuncApp(state) = current.kind else {
             return folded;
         };
-        if state.target != "ResourceReference" || self.owners.is_empty() {
+        if state.target != "ResourceReference"
+            || (self.owners.is_empty() && self.collections.is_empty())
+        {
             return folded;
         }
         let vir::ExprKindData::FuncApp(read) = state.args[0].kind else {
@@ -57,6 +65,46 @@ impl<'vir> Folder<'vir, (), !> for CurrentResourceObservations<'_, 'vir> {
             return folded;
         }
         let mut value = state.args[0].downcast_ty::<vir::PSnap>();
+        // A sequence selection supplies a candidate logical index, never a
+        // proof of physical separation. Check sequence, address and type
+        // correspondence before reading the owner's actual segment resource.
+        struct Selection<'vir>(Option<(vir::ExprSeq<'vir>, vir::ExprInt<'vir>)>);
+        impl<'vir> Folder<'vir, (), !> for Selection<'vir> {
+            fn fold_expr(&mut self, expr: vir::ExprDyn<'vir>) -> Option<vir::ExprDyn<'vir>> {
+                if let vir::ExprKindData::CollectionBinOp(op) = expr.kind
+                    && op.kind == vir::CollectionBinOpKind::Index
+                    && matches!(op.lhs.ty().kind(), vir::TypeKind::Seq(_))
+                {
+                    self.0 = Some((op.lhs.downcast_ty(), op.rhs.downcast_ty()));
+                    return None;
+                }
+                expr.super_fold_with(self)
+            }
+        }
+        let mut selection = Selection(None);
+        read.args[0].fold_with(&mut selection);
+        if let Some((observed, index)) = selection.0 {
+            for owner in self.collections.iter().rev() {
+                let vcx = self.vcx;
+                let length = vcx.mk_collection_len_expr(owner.sequence);
+                let same = vcx.mk_conj(&[
+                    vcx.mk_bin_op_expr(vir::BinOpKind::CmpLe, vcx.mk_int::<0>(), index)
+                        .downcast_ty(),
+                    vcx.mk_bin_op_expr(vir::BinOpKind::CmpLt, index, length)
+                        .downcast_ty(),
+                    vcx.mk_eq_expr(observed, owner.sequence),
+                    vcx.mk_eq_expr(
+                        read.args[0],
+                        owner.segment.address(owner.sequence, index).as_dyn(),
+                    ),
+                    vcx.mk_eq_expr(read.args[1], owner.segment.referent_type.as_dyn()),
+                ]);
+                let current = vcx
+                    .mk_seq_index_expr(owner.segment.observe(owner.sequence), index)
+                    .downcast_ty();
+                value = vcx.mk_ternary_expr(same, current, value);
+            }
+        }
         for owner in self.owners.iter().rev() {
             let same = self.vcx.mk_conj(&[
                 self.vcx.mk_eq_expr(read.args[0], owner.address.as_dyn()),
@@ -111,6 +159,7 @@ mod tests {
             let mut folder = CurrentResourceObservations {
                 vcx,
                 owners: &owners,
+                collections: &[],
             };
             assert!(has_current_observation(state.as_dyn()));
             assert!(!has_current_observation(vcx.mk_old_expr(state).as_dyn()));

@@ -45,6 +45,8 @@ pub(crate) type SnapshotBindings<'vir> =
 #[derive(Clone, Copy)]
 pub(crate) struct ExprInput<'vir> {
     pub snap: vir::ExprSnap<'vir>,
+    /// Slice extent supplied by the enclosing reference's pointer metadata.
+    pub extent: Option<vir::ExprInt<'vir>>,
     pub heap_label: Option<vir::OldLabel<'vir>>,
     pub bindings: Option<&'vir SnapshotBindings<'vir>>,
     pub guard: Option<vir::ExprBool<'vir>>,
@@ -54,6 +56,7 @@ impl<'vir> ExprInput<'vir> {
     pub fn current(snap: vir::ExprSnap<'vir>) -> Self {
         Self {
             snap,
+            extent: None,
             heap_label: None,
             bindings: None,
             guard: None,
@@ -149,7 +152,27 @@ impl TaskEncoder for IndirectPredicatesEnc {
                 // Here, `T` could be instantiated as `&'a mut i32` in which
                 // case we would want a wand with `i32(result) --* opaque_behind_a(x)`.
                 // This is why we should return `opaque_behind_a(x)` here.
-                TySpecifics::Param(_) | TySpecifics::Opaque(_) | TySpecifics::ArrayLike(_) => (),
+                TySpecifics::Param(_) | TySpecifics::Opaque(_) => (),
+                TySpecifics::ArrayLike(data) => {
+                    let element = data.0.decompose_normalize(ty.args);
+                    if prusti_utils::config::checked_scalar_loans() && data.slice
+                        && let TySpecifics::MutRef(reference) = &element.ty.specifics
+                        && PcgRegion::from(element.args.args()[0].expect_region()) == task_region
+                        && matches!(reference.referent.decompose_normalize(element.args).ty.specifics,
+                            TySpecifics::Primitive(_))
+                    {
+                        let segment = deps.require_dep::<super::collection_segment::CollectionSegmentEnc>(element)?;
+                        let array = deps.require_dep::<TyUsePureEnc>(ty)?.expect_array();
+                        predicate_applications.push(vcx.mk_lazy_expr(
+                            "slice_referent_segment", vir::TYPE_BOOL,
+                            Box::new(move |_, input: ExprInput<'vir>| {
+                                let length = input.extent.expect("slice resources require pointer metadata");
+                                let elements = array.to_seq(input.snap.downcast_ty(), length);
+                                segment.whole(elements).kind
+                            }),
+                        ));
+                    }
+                }
                 TySpecifics::MutRef((data, ref_domain)) => {
                     let inner_ty = data.referent.decompose_context(ty.ty.params, ty.args);
                     let inner_impure = deps.require_dep::<TyUseImpureEnc>(inner_ty)?;
@@ -167,6 +190,13 @@ impl TaskEncoder for IndirectPredicatesEnc {
                     // Collect the indirect predicates of the referent itself
                     // (e.g. of the inner reference in `&'a mut &'b mut i32`).
                     let referent_ty = data.referent.decompose_normalize(ty.args);
+                    let slice_length = if matches!(&referent_ty.ty.specifics,
+                        TySpecifics::ArrayLike(array) if array.slice)
+                    {
+                        Some(*deps.require_dep::<TyUsePureEnc>(
+                            super::RustTyDecomposition::from_ty(vcx.tcx().types.usize, ty.args.context()),
+                        )?.expect_primitive())
+                    } else { None };
                     if let Some(new_projection) =
                         LifetimeProjection::new(referent_ty, task_region, None, PrustiPcgCtxt)
                     {
@@ -213,6 +243,10 @@ impl TaskEncoder for IndirectPredicatesEnc {
                                             ExprInput {
                                                 snap: ref_domain
                                                     .cast_to_caller_ctx(inner_snap.downcast_ty()),
+                                                extent: slice_length.map(|usize_ty| {
+                                                    usize_ty.snap_to_prim(ref_domain.metadata_access(input.snap.downcast_ty()).downcast_ty())
+                                                        .downcast_ty()
+                                                }),
                                                 ..input
                                             },
                                         )

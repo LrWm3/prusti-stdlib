@@ -140,6 +140,7 @@ pub enum PrustiBuiltin {
     SnapClone,
     MutSliceLen,
     MutSliceContents,
+    MutSliceReferentValue,
     ResourceState,
     SequenceResourceState,
     Seq(SeqOp),
@@ -159,7 +160,7 @@ impl PrustiBuiltin {
     pub fn reads_heap(self) -> bool {
         matches!(
             self,
-            Self::MutSliceContents | Self::ResourceState | Self::SequenceResourceState
+            Self::MutSliceContents | Self::MutSliceReferentValue | Self::ResourceState | Self::SequenceResourceState
         )
     }
 
@@ -251,6 +252,7 @@ impl PrustiBuiltin {
                     "ghost_erased" => Self::Ghost(GhostOp::Erased),
                     "mut_slice_len" => Self::MutSliceLen,
                     "mut_slice_contents" => Self::MutSliceContents,
+                    "mut_slice_referent_value" => Self::MutSliceReferentValue,
                     "resource_state" => Self::ResourceState,
                     "sequence_resource_state" => Self::SequenceResourceState,
                     "old_start" => Self::Spec(SpecBuiltin::ModeStart(Mode::Old)),
@@ -319,7 +321,7 @@ impl PrustiBuiltin {
     /// These are forbidden in impure code, and should return an error.
     pub fn is_spec_only(&self) -> bool {
         match self {
-            Self::Spec(_) | Self::SnapEq | Self::SnapNe | Self::ResourceState | Self::SequenceResourceState => true,
+            Self::Spec(_) | Self::SnapEq | Self::SnapNe | Self::ResourceState | Self::SequenceResourceState | Self::MutSliceReferentValue => true,
             // `Call`/`Erased` are legitimate only inside a `ghost!` block's
             // dead arm, which is exempt from the spec-only rejection: a stray
             // executable `ghost_call` (i.e. not from a `ghost!` block) would
@@ -634,7 +636,7 @@ impl PrustiBuiltinEnc {
                     .metadata_access(slice)
                     .upcast_ty()
             }
-            PrustiBuiltin::MutSliceContents => {
+            PrustiBuiltin::MutSliceContents | PrustiBuiltin::MutSliceReferentValue => {
                 if let Some(span) = ctxt.span {
                     ctxt.handle_partial_op_error(
                         "application.precondition:insufficient.permission",
@@ -665,10 +667,43 @@ impl PrustiBuiltinEnc {
                 let impure = ctxt.deps.require_dep::<TyUseImpureEnc>(referent)?;
                 let contents =
                     ref_domain.cast_to_caller_ctx(impure.ref_to_snap(address).downcast_ty());
-                ctxt.encode_ty(slice_ty)?
-                    .expect_array()
-                    .to_seq(contents.downcast_ty(), len)
-                    .upcast_ty()
+                let array = ctxt.encode_ty(slice_ty)?.expect_array();
+                if builtin == PrustiBuiltin::MutSliceContents {
+                    array.to_seq(contents.downcast_ty(), len).upcast_ty()
+                } else {
+                    if let Some(span) = ctxt.span {
+                        for kind in ["call.failed:seq.index.length", "call.failed:seq.index.negative"] {
+                            ctxt.handle_partial_op_error(
+                                kind, "the referent observation index may be out of bounds", span,
+                            );
+                        }
+                    }
+                    let index = ctxt.index_to_int(ctxt.operands[1], ctxt.sig.inputs()[1])?;
+                    let selected = array.checked_index(contents.downcast_ty(), len, index);
+                    let ty::TyKind::Slice(element_ty) = slice_ty.kind() else { unreachable!() };
+                    let element_ty = RustTyDecomposition::from_ty(*element_ty, ctxt.args.context());
+                    let element_pure = ctxt.deps.require_dep::<TyUsePureEnc>(element_ty)?;
+                    let TySpecifics::MutRef((data, reference)) = element_ty.ty.zip(element_pure).specifics
+                    else { unreachable!() };
+                    let referent = data.referent.decompose_context(element_ty.ty.params, element_ty.args);
+                    let physical = ctxt.deps.require_dep::<TyUseImpureEnc>(referent)?;
+                    let address = reference.deref_access(selected.downcast_ty());
+                    let stored = if prusti_utils::config::checked_scalar_loans()
+                        && matches!(data.referent.decompose_normalize(element_ty.args).ty.specifics,
+                            TySpecifics::Primitive(_))
+                    {
+                        let segment = ctxt.deps.require_dep::<crate::encoders::ty::collection_segment::CollectionSegmentEnc>(element_ty)?;
+                        let sequence = array.to_seq(contents.downcast_ty(), len);
+                        // Index the checked immutable observation, retaining
+                        // both bounds and the segment permission requirement.
+                        ctxt.vcx.mk_seq_index_expr(segment.observe_lazy(sequence), index)
+                            .downcast_ty::<vir::PSnap>()
+                    } else {
+                        physical.ref_to_snap(address).downcast_ty()
+                    };
+                    let value = reference.cast_to_caller_ctx(stored);
+                    ctxt.e_output()?.expect_structlike().field_snaps_to_snap(vec![value]).upcast_ty()
+                }
             }
             PrustiBuiltin::Seq(op) => ctxt.encode_seq(op)?,
             PrustiBuiltin::AnySet { multiset, op } => ctxt.encode_any_set(multiset, op)?,

@@ -561,6 +561,19 @@ impl<'vir> TyUsePureArray<'vir> {
         self.caster.cast_to_caller_ctx(res.upcast_ty())
     }
 
+    /// Select through the sequence view so Viper checks both index bounds.
+    pub(crate) fn checked_index<Curr, Next>(
+        &self,
+        snap: vir::ExprGenCSnap<'vir, Curr, Next>,
+        len: vir::ExprGenInt<'vir, Curr, Next>,
+        index: vir::ExprGenInt<'vir, Curr, Next>,
+    ) -> vir::ExprGenSnap<'vir, Curr, Next> {
+        vir::with_vcx(|vcx| {
+            let selected = vcx.mk_seq_index_expr(self.to_seq(snap, len), index);
+            self.caster.cast_to_caller_ctx(selected.downcast_ty::<vir::PSnap>().upcast_ty())
+        })
+    }
+
     /// The element snapshot at `index` in its generic (`p_Param`) form, i.e.
     /// without applying the element caster. Use when relating two array-likes
     /// that share the same generic element type, where the concrete conversion

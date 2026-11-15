@@ -5,7 +5,117 @@
 use vir::CastType;
 
 use super::loan_transfer::capture;
-use crate::encoders::ty::{use_impure::TyUseImpure, use_pure::TyUsePure};
+use crate::encoders::ty::{
+    collection_segment::CollectionSegment, use_impure::TyUseImpure, use_pure::TyUsePure,
+};
+
+pub(crate) struct SliceReferentTransfer<'vir> {
+    pub slots: SelectedElementTransfer<'vir>,
+    pub referents: CollectionSegment<'vir>,
+}
+
+impl<'vir> SliceReferentTransfer<'vir> {
+    pub fn split(
+        self,
+        vcx: &'vir vir::VirCtxt<'vir>,
+        counter: &mut usize,
+        owner: vir::ExprRef<'vir>,
+        index: vir::ExprInt<'vir>,
+        length: vir::ExprInt<'vir>,
+    ) -> Vec<vir::Stmt<'vir>> {
+        let mut stmts =
+            vec![vcx.mk_comment_stmt(
+                "[referent-transfer] split actual referents and retain both regions",
+            )];
+        let owner = capture(vcx, counter, "referent_owner", owner, &mut stmts);
+        let index = capture(vcx, counter, "referent_index", index, &mut stmts);
+        let length = capture(vcx, counter, "referent_length", length, &mut stmts);
+        let entry = self.slots.owner.ref_to_snap(owner).downcast_ty();
+        let elements = capture(
+            vcx,
+            counter,
+            "referent_elements",
+            self.slots.model.expect_array().to_seq(entry, length),
+            &mut stmts,
+        );
+        stmts.push(
+            (self.referents.split)(
+                elements,
+                vcx.mk_int::<0>(),
+                index,
+                length,
+                self.referents.params.ty_exprs(),
+                self.referents.params.const_exprs(),
+            )
+            .alloc(),
+        );
+        stmts.extend(self.slots.split(vcx, counter, owner, index));
+        stmts
+    }
+
+    pub fn join(
+        self,
+        vcx: &'vir vir::VirCtxt<'vir>,
+        counter: &mut usize,
+        owner: vir::ExprRef<'vir>,
+        index: vir::ExprInt<'vir>,
+        length: vir::ExprInt<'vir>,
+    ) -> Vec<vir::Stmt<'vir>> {
+        let mut stmts =
+            vec![vcx.mk_comment_stmt(
+                "[referent-transfer] join current referent with preserved regions",
+            )];
+        let owner = capture(vcx, counter, "referent_owner", owner, &mut stmts);
+        let index = capture(vcx, counter, "referent_index", index, &mut stmts);
+        let length = capture(vcx, counter, "referent_length", length, &mut stmts);
+        let array = self.slots.owner.expect_array();
+        let model = self.slots.model.expect_array();
+        let frame = capture(
+            vcx,
+            counter,
+            "referent_frame",
+            array.ref_to_index_frame_snap(owner, index),
+            &mut stmts,
+        );
+        let elements = capture(
+            vcx,
+            counter,
+            "referent_elements",
+            model.to_seq(frame, length),
+            &mut stmts,
+        );
+        // This rule restores scalar updates through an unchanged reference
+        // slot. Reference replacement needs a separate old/new target rule.
+        stmts.push(
+            vcx.mk_assert_stmt(
+                vcx.mk_eq_expr(
+                    self.slots
+                        .element
+                        .ref_to_snap(array.ref_to_index_ref(owner, index)),
+                    model.index(frame, index),
+                ),
+            ),
+        );
+        stmts.push(
+            (self.referents.join)(
+                elements,
+                vcx.mk_int::<0>(),
+                index,
+                length,
+                self.referents.params.ty_exprs(),
+                self.referents.params.const_exprs(),
+            )
+            .alloc(),
+        );
+        let whole = self.slots.owner;
+        stmts.extend(self.slots.join(vcx, counter, owner, index));
+        stmts.push(vcx.mk_assert_stmt(vcx.mk_eq_expr(
+            model.to_seq(whole.ref_to_snap(owner).downcast_ty(), length),
+            elements,
+        )));
+        stmts
+    }
+}
 
 pub(crate) struct SelectedElementTransfer<'vir> {
     pub owner: TyUseImpure<'vir>,

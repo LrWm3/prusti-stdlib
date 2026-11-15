@@ -16,6 +16,7 @@ watchdog. Other cases retain their recorded 180/600-second schedule.
 |---|---|
 | Frozen R2 Ferrum / Silicon gates | Each 454/454; each 70/70 focused |
 | Current method-termination integration Ferrum gate | 519/519; 117/117 focused; 37 specification + 2 ownership/history tests |
+| Native scalar slice segment candidate | 13/13 focused Ferrum; affected-family qualification pending |
 | Original prefix positive on R2 | Compilation/specification failure |
 | Original exact false control on R2 | Wrong diagnostic |
 | Prefix proof, inference, full restoration | Unqualified |
@@ -275,3 +276,45 @@ the original mutation positive, exact false/stale controls, and observation
 diagnostics. The unfinished seven-case family and its plan are preserved in the
 recorded stash and artifact manifest. R3, inference and full restoration remain
 unqualified; stop before D1–D6.
+
+## Native scalar slice segments: current repair
+
+The fixed seven-case target is the unchanged original `mut_sequence_state_pass`,
+its exact false/stale controls and four `mut_referent_observe_*` diagnostics from
+`c2631cfb0`. It retains its original 600/180-second limits. Six added controls cover
+read-only observations, symbolic selection, exact whole-slice value framing and
+wrong values. `segment-native-extended-01` matches all 13 on Ferrum, including the
+original positive in 8.5s and new symbolic/framing positives in approximately 1.3s
+(the earlier nine-case run supplies the original timing). This is focused evidence,
+not full integration qualification.
+
+The invariant separates slot ownership from referent ownership. An immutable slot
+sequence identifies the actual targets. An inductive segment owns their actual
+generic predicates, without declaring distinct logical indices physically distinct.
+Entry observations require that segment and capture its current values in an
+immutable sequence. The checked, terminating split consumes the whole segment and
+returns the selected target plus both regions, preserving the exact old concatenated
+value sequence. MIR performs the scalar update, then the checked join consumes those
+resources and restores the whole segment with its current selected value and the
+framed remainder. The slot frame supplies the historical target sequence at join.
+This first rule explicitly checks that the selected reference slot is unchanged;
+reference replacement needs a separate correspondence rule.
+
+Current sequence-state observations use a segment only after checking sequence,
+physical target, type and bounds correspondence. Their reads still require actual
+permissions. Historical observations and wand binders remain separate. PCG owner
+candidates include packed exclusive roots, because the tracked map only records
+leaves; this selection grants no permissions. Primitive helper identities are
+canonical across specification-closure lifetimes; region ownership remains selected
+by the indirect encoder. Recursive methods and the value observer retain checked
+termination. The existing abstract generic snapshot accessor is already total as a
+logical contract; only that abstract dependency receives an empty termination tuple.
+Defined functions cannot use this shortcut.
+
+The scope is incoming slices of mutable primitive references under
+`PRUSTI_CHECKED_SCALAR_LOANS=true`, in acyclic bodies. Generic/non-Copy referents,
+owned-array construction, reference replacement, loop summaries and iterator
+restoration remain unqualified. The next gate reruns every currently passing family
+affected by indirect ownership, observation resolution and array repacking. Detailed
+failed probes, the invariant and immutable binary/source captures remain in
+`target/stdlib-ownership-prefix-r3/` in the preserved main worktree.

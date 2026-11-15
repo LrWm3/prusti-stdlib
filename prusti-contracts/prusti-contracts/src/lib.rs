@@ -105,6 +105,13 @@ pub fn sequence_resource_state<T>(_values: &Seq<T>, _index: Int) -> ResourceStat
     panic!("sequence_resource_state is a specification-only observation")
 }
 
+/// Observe one mutable slice element's current referent value. The index and
+/// permissions to both the slice and referent are checked independently.
+#[pure]
+pub fn mut_slice_referent_value<T>(_slice: &&mut [&mut T], _index: Int) -> Ghost<T> {
+    panic!("mut_slice_referent_value is a specification-only observation")
+}
+
 /// Observe the iterator of the enclosing `for` loop in a body invariant.
 ///
 /// This is a specification-only marker. `I` must be the concrete iterator

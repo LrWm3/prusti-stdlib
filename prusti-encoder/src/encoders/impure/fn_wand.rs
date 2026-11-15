@@ -213,6 +213,7 @@ impl<'vir> WandEncOutput<'vir> {
                             vcx,
                             ExprInput {
                                 snap: local_snap,
+                                extent: None,
                                 heap_label,
                                 bindings,
                                 guard: None,

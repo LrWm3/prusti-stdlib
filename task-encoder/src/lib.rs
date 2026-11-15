@@ -77,6 +77,29 @@ impl<'vir> Program<'vir> {
         self.functions.push(function);
     }
 
+    /// An abstract logical accessor is already total in its trusted contract.
+    /// Expose that fact to checked recursive helpers without marking any
+    /// defined function (which needs its own termination proof) as total.
+    pub fn require_total_abstract_function(&mut self, name: &str) {
+        let function = self
+            .functions
+            .iter_mut()
+            .find(|f| f.name == name)
+            .expect("required abstract function must already be emitted");
+        assert!(
+            function.expr.is_none(),
+            "defined functions need a termination proof"
+        );
+        if matches!(function.decreases, vir::DecreasesGenData::None) {
+            vir::with_vcx(|vcx| {
+                *function = vcx.alloc(vir::FunctionGenData {
+                    decreases: vcx.alloc(vir::DecreasesGenData::Tuple(&[], None)),
+                    ..**function
+                });
+            });
+        }
+    }
+
     pub fn add_method(&mut self, method: vir::Method<'vir>) {
         self.code.push(CodeItem::Method(self.methods.len()));
         self.methods.push(method);

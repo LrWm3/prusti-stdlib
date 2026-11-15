@@ -32,8 +32,10 @@ implementation, or unsafe internals of the standard library.
 
 **Phase boundary.** R1a and R1b are complete on `stdlib/ownership-inference-m3`.
 The accepted source is `2c5484c004ba5051ab7856f2c5938c33b05081e0`; the final
-own-branch rebuild and both backend gates use that exact revision. Work is stopped
-before R2, at the user's requested first checkpoint. No automation is scheduled.
+own-branch rebuild and both backend gates use that exact revision. The user has
+authorized R2. Experiments use `stdlib/ownership-core-r2` in the isolated
+`prusti-stdlib-m3-repair` worktree; the qualified integration tree stays stable.
+No automation is scheduled.
 The original M3 reproduction remains a frozen comparison, and the main tree's six
 pending encoder files, frozen H1 compiler and proof inputs remain preserved.
 
@@ -48,7 +50,7 @@ prove that a rewrite is necessary. Resource units are not calibrated millisecond
 | R0: reproduce and audit M3 | Rebuild `be1364c7c` with PCG `e54bf675468d`, original Rust/Java/Viper/Z3 settings; run complete historical hash, extern, iterator and borrow gates, specification unit tests, and audit later correctness changes and controls. Freeze source, binaries, exact coverage, settings and results. | Reproduction/audit complete; adoption blocked by incorrect acceptance |
 | R1a: baseline correctness imports | Backport audited correctness repairs individually and qualify all fifteen controls and affected historical families. | Complete at `844b93b71`: 387/387 suite checks, 22/22 focused controls including the original audit 15/15, 36 unit tests |
 | R1b: Ferrum compatibility | Import the adapter and necessary compatibility changes individually; pin the backend and printer correction; rebuild this branch and qualify the corrected baseline on both backends. | Complete at `2c5484c00`: Ferrum and Silicon each match 387/387 checks and 22/22 focused controls; source and six compiler binary hashes identical |
-| R2: checked ownership and prophecy core | Specify and implement local transfer rules for scalar mutation, reborrowing, reference replacement and one selected element, with manually supplied value relations. Establish the soundness boundary and native positive/negative proofs. | Not started |
+| R2: checked ownership and prophecy core | Specify and implement local transfer rules for scalar mutation, reborrowing, reference replacement and one selected element, with manually supplied value relations. Establish the soundness boundary and native positive/negative proofs. | In progress: [local transfer invariant and staged acceptance](STDLIB_OWNERSHIP_CORE.md); first implement checked scalar acquire/resolve, without premature future-value assumptions |
 | R3: original difficult proof | Verify unchanged `mut_native_resource_early_pass` and its exact false control, plus targeted wrong-prefix/wrong-suffix, replacement, generic/non-Copy and zero-sized controls. Compare old encoding and explicit summaries with the same value invariants. | Not started |
 | R4: bounded value inference | Add equality/bounds propagation and a small Houdini-style candidate language over immutable values; recheck inferred entry/preservation/use obligations. Add CHC/Spacer only for a concrete required relation the simpler layer cannot infer. | Not started |
 | R5: restore and qualify | Restore newer families incrementally against the unchanged 790-client/2,198-check inventory; freeze final source, rebuild and run complete Ferrum/Silicon matrices. Commit/push qualified changes and stop before D1-D6. | Not started |
@@ -107,7 +109,8 @@ item `3b9208f05` has no established standalone reproducer in this gate and remai
 explicit for later migration. Trusted external implementations and reviewed hash
 model laws remain assumptions. The 790-client/2,198-check restoration target is
 still unqualified. R2 ownership/prophecy work, difficult-prefix proofs and inference
-have not begun. **Stop here before R2 and D1–D6; do not schedule automation.**
+were not part of this qualification. R2 is now authorized separately; the stopping
+boundary before D1–D6 and prohibition on scheduled automation remain in force.
 
 ### R0 result: reproduced, but not qualified for adoption
 

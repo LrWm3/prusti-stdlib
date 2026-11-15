@@ -1,0 +1,83 @@
+{
+  "compiler_revision": "b30c4156f32c32158e27811dc98bfe4459a60fbd",
+  "source_unchanged": true,
+  "binaries_unchanged": true,
+  "experiment_and_integration_source_match": true,
+  "suites": {
+    "iterator": {
+      "matched": 142,
+      "expected": 142,
+      "historical_coverage": 129,
+      "material_slowdowns": [],
+      "seconds": 183.17,
+      "library_verified": true
+    },
+    "borrow": {
+      "matched": 208,
+      "expected": 208,
+      "historical_coverage": 208,
+      "material_slowdowns": [],
+      "seconds": 371.35,
+      "library_verified": true
+    },
+    "extern": {
+      "matched": 97,
+      "expected": 97,
+      "historical_coverage": 97,
+      "material_slowdowns": [],
+      "seconds": 73.63,
+      "library_verified": true
+    },
+    "sequence": {
+      "matched": 22,
+      "expected": 22,
+      "historical_coverage": 22,
+      "material_slowdowns": [],
+      "seconds": 23.62,
+      "library_verified": true
+    },
+    "vec": {
+      "matched": 21,
+      "expected": 21,
+      "historical_coverage": 21,
+      "material_slowdowns": [],
+      "seconds": 31.24,
+      "library_verified": true
+    },
+    "collections": {
+      "matched": 27,
+      "expected": 27,
+      "historical_coverage": 27,
+      "material_slowdowns": [],
+      "seconds": 97.21,
+      "library_verified": true
+    },
+    "hash": {
+      "matched": 51,
+      "expected": 51,
+      "historical_coverage": 51,
+      "material_slowdowns": [],
+      "seconds": 67.52,
+      "library_verified": true
+    }
+  },
+  "Ferrum_focused": {
+    "matched": 10,
+    "expected": 10,
+    "timeouts": 0,
+    "wrong_diagnostics": 0
+  },
+  "Silicon_focused": {
+    "matched": 10,
+    "expected": 10,
+    "timeouts": 0,
+    "wrong_diagnostics": 0
+  },
+  "total_Ferrum_suite_checks": 568,
+  "source_manifest_sha256": "afa5f829fa4fad64241e6d7f36e45459592b983d261edb0ecac4216d880573c2",
+  "binary_manifest_sha256": "bc6da2b30944a06aea79a2fc8e962a9c9116aa9bf740572833f1cc8fcdf93a3d",
+  "artifacts": "/home/will/wk/exp/prusti-stdlib/target/stdlib-inference-summary-20261115/count-integration-qualification-01",
+  "experiment_artifacts": "/home/will/wk/exp/prusti-stdlib/target/stdlib-inference-summary-20261115/count-qualification-01",
+  "scope": "I1 shared-slice count inference only; final combined 790-client/2198-check matrix is not qualified.",
+  "measurement": "Same-contract manual invariants: 3 -> 0. Local inference 39 candidates/88 queries, ~27ms in initial native example. Backend solver counters not collected; no solver speedup claim."
+}

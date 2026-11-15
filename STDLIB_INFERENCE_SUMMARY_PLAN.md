@@ -8,7 +8,7 @@ the final 790-client / 2198-check inventory. Stop before D1–D6; no automation.
 
 | Deliverable | Current status | Required result |
 |---|---|---|
-| I1: count-loop inference | Native Ferrum 10/10 focused; feature qualification pending | Contract-only generic count; overflow checked; wrong variants rejected |
+| I1: count-loop inference | Qualified b30c4156f: 568/568 Ferrum; 10/10 focused both backends | Contract-only generic count; overflow checked; wrong variants rejected |
 | O1: bounded mutable-loop ownership | Native tail prerequisite exposed premature next restoration; investigation | Manual value invariants; checked split/update/join/drop; bounded backedge state |
 | C1: combine inference and summary | Not started | Infer value invariants with identical ownership obligations |
 | H1: original difficult prefix | Unqualified | Original assertions and exact negative; repeated native/CLI measurements |
@@ -155,7 +155,7 @@ assertion, renamed locals, non-Copy elements and ZSTs. The first arithmetic
 projection generated 39 candidates, made 88 local queries and retained a
 conservation equality plus two bounds in about 27 ms. A checked shared-reference
 frame preserves entry length metadata. Overflow and ordinary permission checks
-remain enabled. This is not yet the final feature qualification.
+remain enabled. Subsequent feature qualification on both the experiment and integration builds passed: 568/568 Ferrum suite checks, successful library verification, and 10/10 exact focused controls on each backend. See `STDLIB_COUNT_INFERENCE_EVIDENCE.json`. The full combined matrix remains pending.
 
 Scope: one direct core shared-slice iterator, one Some/None loop, a returned usize
 counter and a zero initialization. The finite-step lowering is specific to the
@@ -173,3 +173,9 @@ identity edge, while the applied wand also consumes the yielded result. The exac
 cause in call-shape construction/selection is still under investigation. Preserve
 all seven initial failures and the three isolation results; no bounded mutable
 summary or performance improvement is claimed.
+
+The integration worktree rebuilt compiler `b30c4156f` independently, retained the
+same complete source manifest as the experiment, and repeated exact suite coverage
+and the dual-backend focused gate. All historical cases passed without a material
+per-case slowdown (>2x and +10s). I1 is accepted; O1, C1, H1 and final combined
+qualification remain incomplete. No D1–D6 work or automation is scheduled.

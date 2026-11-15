@@ -6,6 +6,21 @@ main or of the 790-client restoration inventory. The selected compiler is
 The independently rebuilt source and binary records are preserved alongside this
 report. Historical evidence is kept separately from the new results.
 
+## R1a update
+
+The repaired baseline through `844b93b71` passes every unchanged original audit
+control (15/15), plus seven focused controls added during repair (22/22 total).
+Its complete seven-family gate passes 387/387, with 36 specification unit tests.
+See [the repair evidence](STDLIB_M3_REPAIR_EVIDENCE.json). The R0 results below
+remain historical evidence for rejecting M3 unchanged; they are not current failures.
+The later no-glue drop implementation was unnecessary for its passing controls.
+
+The failed-call propagation change `3b9208f05` remains an explicit migration audit
+item: no standalone reproducer or demonstrated failure in the fixed baseline gate
+has been established. Broader restoration and unsupported features remain outside
+this checkpoint. Ferrum compatibility and final dual-backend qualification remain
+required before calling the first baseline checkpoint complete.
+
 ## Scope
 
 The later-change inventory captures 141 commits through `e06edd300` affecting

@@ -735,6 +735,157 @@
         "04-mutable-read-diagnostic: 12/13 focused; structural read precedes mapped error",
         "04b-nested-footprint: 14/15 focused; new caller lacks retained resource"
       ]
+    },
+    {
+      "id": "05-quantified-expiry",
+      "experiment_commit": "c543656f5b56340bc46bd86b073d7e09867a2879",
+      "integration_commit": "844b93b7194e83ab81c41c76cb4efb85eaddfa47",
+      "non_documentation_source_matches": true,
+      "backports": [
+        "800d9350b"
+      ],
+      "status": "qualified repair; overall baseline checkpoint incomplete",
+      "backend": "Silicon",
+      "program_timeout_seconds": 90,
+      "focused_controls": {
+        "matched": 22,
+        "expected": 22
+      },
+      "suite_checks": {
+        "matched": 387,
+        "expected": 387
+      },
+      "specification_unit_tests": 36,
+      "gate": {
+        "suites": {
+          "borrow": {
+            "matched": 100,
+            "expected": 100,
+            "seconds": 947.24,
+            "longest": {
+              "case": "spec-library",
+              "passed": true,
+              "seconds": 51.22
+            }
+          },
+          "collections": {
+            "matched": 27,
+            "expected": 27,
+            "seconds": 230.08,
+            "longest": {
+              "case": "boundaries_pass",
+              "passed": true,
+              "seconds": 36.73
+            }
+          },
+          "extern": {
+            "matched": 97,
+            "expected": 97,
+            "seconds": 381.89,
+            "longest": {
+              "case": "core-only",
+              "passed": true,
+              "seconds": 14.09
+            }
+          },
+          "hash": {
+            "matched": 51,
+            "expected": 51,
+            "seconds": 328.95,
+            "longest": {
+              "case": "collection_get_mut_pass",
+              "passed": true,
+              "seconds": 17.84
+            }
+          },
+          "iterator": {
+            "matched": 69,
+            "expected": 69,
+            "seconds": 403.63,
+            "longest": {
+              "case": "spec-library",
+              "passed": true,
+              "seconds": 20.71
+            }
+          },
+          "sequence": {
+            "matched": 22,
+            "expected": 22,
+            "seconds": 76.92,
+            "longest": {
+              "case": "spec-library",
+              "passed": true,
+              "seconds": 9.85
+            }
+          },
+          "vec": {
+            "matched": 21,
+            "expected": 21,
+            "seconds": 105.36,
+            "longest": {
+              "case": "symbolic_pass",
+              "passed": true,
+              "seconds": 17.23
+            }
+          }
+        },
+        "material_timing_increases": []
+      },
+      "binary_sha256": {
+        "cargo-prusti": "992c11e18034b5d4305119aa913de42285de3f7e39e52a17ca301f76ae6025fb",
+        "prusti-driver": "1e50273c5801c3c7a58a4d07c599949b87936c53423c05701112b60a111901ba",
+        "prusti-rustc": "c2eb76fbf49521762cf2faf9b031585199ce453977be489e797e09aeec47657a",
+        "prusti-server": "fc273b04ac198ce1a9ec083913006123cf5dce2f9852a6a4f915a3c1b9226a68",
+        "prusti-server-driver": "cceb5349ba4cf4d57d5e49393fbacc0989707f8c353f283b5c124d729d1b1570",
+        "prusti-smt-solver": "0799c783005b612b440c6ebc5e2aa521d1d89b123500097ee5ddffa962356ee7"
+      },
+      "artifact_root": "../prusti-stdlib/target/stdlib-ownership-inference-20261114/repairs/05-quantified-expiry",
+      "artifact_manifest": [
+        {
+          "path": "source-before.json",
+          "sha256": "5d017f56835c7fa5e85d5d8ac0bd414763e855f9117824259ee954b6974532a3"
+        },
+        {
+          "path": "source-after.json",
+          "sha256": "7a932ad2da360a63f7e4ad875a8f9ffe96c5b223cf273ebdbbdf058fecab6461"
+        },
+        {
+          "path": "candidate.patch",
+          "sha256": "03fe3f0729a8fe318e0abc2aab130fbe92131c2cb566f496e2fbf8f8d8ed9ec4"
+        },
+        {
+          "path": "binaries.json",
+          "sha256": "20431ddca937d599d508fa8868697e7ab26a9718ab56b7e669fbb0bc0f5d1f11"
+        },
+        {
+          "path": "tools.json",
+          "sha256": "ab310380da735895985753c05bcd955f982af821ed349bda1e8b3737c2780969"
+        },
+        {
+          "path": "settings.json",
+          "sha256": "640bbc40bf711a9f9e0a548fa58e07f2d4d1caaa6cd797d8c45de6da200302ff"
+        },
+        {
+          "path": "expected-coverage.json",
+          "sha256": "0f64f54fbb1bec9db3524bb56c809b61fcab5bfe8a09d7511bc94892eb0df406"
+        },
+        {
+          "path": "gate-review.json",
+          "sha256": "ffa9bdc14d2aebe3a81c87c158d7d3f9242547321daa0d4049e1ab03c6fde982"
+        },
+        {
+          "path": "integration.json",
+          "sha256": "eb2ff01fc7f304143474e6109dec0c277fef667cafeb53a061d91e49678073dc"
+        },
+        {
+          "path": "preservation.json",
+          "sha256": "c834534c2d8d4c8c1aa63028c6f5daf6d6e55dc11fbabb16ba9a94ce183baca9"
+        },
+        {
+          "path": "audit/results.json",
+          "sha256": "854752984af513c5409ed3d308918233cd5e35f4743e7227c756fb55fe7e90ae"
+        }
+      ]
     }
   ],
   "checkpoint_complete": false

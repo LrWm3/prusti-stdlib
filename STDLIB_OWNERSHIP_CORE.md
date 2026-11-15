@@ -6,7 +6,23 @@ Integration: `prusti-stdlib-ownership-inference`, `stdlib/ownership-inference-m3
 Artifacts: `../prusti-stdlib/target/stdlib-ownership-core-r2/`.
 The six pending main-tree files and all R1/H1 artifacts remain preserved.
 
-Current checkpoint: `d0b8b0ac95babfaea4fc618e67bb46fe606a4f2d`, with PCG
+Current checkpoint: `7814eccc4ace40ad8ecee5c38a52b604f0e71b1c`. Its own integration
+rebuild matches **411/411 Ferrum suite checks**, **38/38 focused controls**, and
+all **36 specification tests**. Local reference-slot replacement now preserves
+both the displaced and replacement pointees; its exact wrong-target control
+rejects. The encoder schedules the existing dereference fold before loan
+resolution, without removing any transfer or assertion. Suite time is 601.54s;
+no case crosses the fixed material-slowdown threshold. See
+[reference-slot qualification](STDLIB_REFERENCE_SLOT_EVIDENCE.json).
+
+The larger exploratory target matches 412/414, with both `mem::replace` escaped
+reference controls still failing with missing permissions. Those two sources
+remain in the frozen R2 acceptance fixture. The qualified integration gate covers
+the local repair; it does not establish escaped-call support or R2 completion.
+Next: isolate the first missing call-restoration obligation, then selected-element
+and continuation rules. Silicon remains reserved for R2 feature sign-off.
+
+Previous identity checkpoint: `d0b8b0ac95babfaea4fc618e67bb46fe606a4f2d`, with PCG
 `77e2a4a` (only the existing reservation-location getter was made public).
 Both the isolated experiment and own integration rebuild independently match
 **408/408 Ferrum suite checks**, **36/36 focused controls**, and **36 specification
@@ -19,7 +35,7 @@ creation targets replace historical-slot rereads during local restoration.
 The native programs exercise three-level reborrowing, guarded parent links,
 successive children with intervening mutation, slot retargeting and early exits.
 Deferred values are assigned after checked restoration; they are never assumed
-while pending. Current support is acyclic scalar loans and direct PCG parent
+while pending. That checkpoint supports acyclic scalar loans and direct PCG parent
 edges. Loops, package/escaping continuations and non-scalar transfers retain the
 earlier encoder. See [identity qualification](STDLIB_OWNERSHIP_IDENTITIES_EVIDENCE.json)
 for exact compiler/source provenance, every suite result and preserved programs.

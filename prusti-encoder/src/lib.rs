@@ -115,6 +115,7 @@ pub fn test_entrypoint<'tcx>(
 
     program.header("snapshots");
     crate::encoders::ty::resource_observation::ResourceStateEnc::emit_outputs(&mut program);
+    crate::encoders::ty::state_sequence::StateSequenceEnc::emit_outputs(&mut program);
     crate::encoders::TyUsePureEnc::emit_outputs(&mut program);
     BitVecEnc::emit_outputs(&mut program);
     FloatBitVecConvEnc::emit_outputs(&mut program);

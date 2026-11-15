@@ -332,3 +332,51 @@ R3 remains open. Next capture whole-sequence resource states from the checked
 segment and validate immutable history against mutation. Generic ownership,
 iterator summaries, the original prefix pair, inference and full restoration
 remain unqualified. Stop before D1–D6.
+
+## Whole-sequence state capture: invariant before repair
+
+The fixed target is five unchanged original `mut_sequence_states_*` clients:
+scalar-reference pass, wrong length, stale value, generic missing permission and
+executable misuse. The generic positive remains separately unqualified. Keep the
+original limits and exact diagnostics.
+
+The input sequence contains immutable reference-slot snapshots and grants no
+permission. An existing scalar referent segment supplies current stored values.
+A checked, terminating pure map converts those values into `ResourceReference`
+states with empty nested state, then boxes them as the contracts sequence element
+type. Its length and each indexed result are proved from its recursive definition.
+This map neither changes ownership nor creates a loan or discharge obligation.
+Saved states stay immutable across updates; a new capture requires the current
+segment. Entry/expiry observations retain their explicit heap selection.
+
+Hypothesis: the existing checked segment plus this pure map suffices for full
+scalar-reference sequence capture. Resource-free element types map to empty
+states. Unknown structural/generic elements require an opaque observation
+capability which no operation grants in this increment. No address injectivity,
+quantified permission or future-value assumption is introduced. Exact stale and
+missing-permission controls test those boundaries.
+
+`whole-states-focused-01` matches all five original controls on Ferrum. Review
+identified that programs containing only pure helper functions could retain
+`--disableTerminationPlugin`. A native serialized countdown-function negative
+with a non-decreasing measure is unexpectedly accepted on that configuration
+(`function-measure-baseline-02`); the earlier baseline attempt is a compile error.
+Extend effective configuration to honor explicit function measures as well as
+method measures, preserving ordinary unmeasured procedure defaults. Add exact
+native positive/negative tests and retain hash/configuration checks. Whole-state
+qualification requires this correction and the affected regression gate.
+
+The expanded controls match 11/13. The two new history postconditions lack a
+slot correspondence needed for self-framing: returned ownership refers to entry
+slots, while the postcondition observes current slots. Add the unchanged-slots
+postcondition to both new contracts, as already present in the original hard
+prefix and symbolic segment control. This strengthens the contract and requires
+its proof; no state assertion is removed and no original client changes. Detailed
+generated contracts and the next discriminating experiment are recorded in
+`whole-states-history-review.json`. Reference replacement remains separate.
+
+`whole-states-extended-02` matches all 13 original and added native controls.
+The slot-frame addition repairs both new history contracts without changing
+the encoder or original clients. The serialized native method/function measure
+tests match all five checks on Ferrum/Silicon, including exact invalid-measure
+rejections. Affected-family and feature qualification remain pending.

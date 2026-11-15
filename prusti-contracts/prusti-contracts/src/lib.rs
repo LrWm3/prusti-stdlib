@@ -105,6 +105,14 @@ pub fn sequence_resource_state<T>(_values: &Seq<T>, _index: Int) -> ResourceStat
     panic!("sequence_resource_state is a specification-only observation")
 }
 
+/// Capture current referent states for all elements in a saved sequence.
+/// The sequence grants no permissions; observing reference elements requires
+/// their existing ownership. Captured states are immutable logical values.
+#[pure]
+pub fn sequence_resource_states<T>(_values: &Seq<T>) -> Seq<ResourceState> {
+    panic!("sequence_resource_states is a specification-only observation")
+}
+
 /// Observe one mutable slice element's current referent value. The index and
 /// permissions to both the slice and referent are checked independently.
 #[pure]

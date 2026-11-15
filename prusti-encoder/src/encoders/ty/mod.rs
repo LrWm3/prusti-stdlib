@@ -3,6 +3,7 @@ pub mod inhabited;
 pub mod indirect;
 pub(crate) mod resource_observation;
 pub(crate) mod collection_segment;
+pub(crate) mod state_sequence;
 pub mod impure;
 pub mod kinds;
 pub mod use_impure;

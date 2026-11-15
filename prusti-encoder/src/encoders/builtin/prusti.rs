@@ -143,6 +143,7 @@ pub enum PrustiBuiltin {
     MutSliceReferentValue,
     ResourceState,
     SequenceResourceState,
+    SequenceResourceStates,
     Seq(SeqOp),
     /// An operation on `Set` (`multiset: false`) or `Multiset` (`true`).
     AnySet {
@@ -160,7 +161,7 @@ impl PrustiBuiltin {
     pub fn reads_heap(self) -> bool {
         matches!(
             self,
-            Self::MutSliceContents | Self::MutSliceReferentValue | Self::ResourceState | Self::SequenceResourceState
+            Self::MutSliceContents | Self::MutSliceReferentValue | Self::ResourceState | Self::SequenceResourceState | Self::SequenceResourceStates
         )
     }
 
@@ -255,6 +256,7 @@ impl PrustiBuiltin {
                     "mut_slice_referent_value" => Self::MutSliceReferentValue,
                     "resource_state" => Self::ResourceState,
                     "sequence_resource_state" => Self::SequenceResourceState,
+                    "sequence_resource_states" => Self::SequenceResourceStates,
                     "old_start" => Self::Spec(SpecBuiltin::ModeStart(Mode::Old)),
                     "old_end" => Self::Spec(SpecBuiltin::ModeEnd(Mode::Old)),
                     "rel_start" => Self::Spec(SpecBuiltin::ModeStart(Mode::Rel(rel_index()))),
@@ -321,7 +323,7 @@ impl PrustiBuiltin {
     /// These are forbidden in impure code, and should return an error.
     pub fn is_spec_only(&self) -> bool {
         match self {
-            Self::Spec(_) | Self::SnapEq | Self::SnapNe | Self::ResourceState | Self::SequenceResourceState | Self::MutSliceReferentValue => true,
+            Self::Spec(_) | Self::SnapEq | Self::SnapNe | Self::ResourceState | Self::SequenceResourceState | Self::SequenceResourceStates | Self::MutSliceReferentValue => true,
             // `Call`/`Erased` are legitimate only inside a `ghost!` block's
             // dead arm, which is exempt from the spec-only rejection: a stray
             // executable `ghost_call` (i.e. not from a `ghost!` block) would
@@ -609,6 +611,55 @@ impl PrustiBuiltinEnc {
                     vcx.mk_collection_len_expr(sequence),
                 )
                 .upcast_ty()
+            }
+            PrustiBuiltin::SequenceResourceStates => {
+                use crate::encoders::ty::{
+                    collection_segment::CollectionSegmentEnc,
+                    generics::{GParams, TyExprEnc},
+                    state_sequence::StateSequenceEnc,
+                };
+                if let Some(span) = ctxt.span {
+                    ctxt.handle_partial_op_error(
+                        "application.precondition:insufficient.permission",
+                        "insufficient permission to observe sequence resource states",
+                        span,
+                    );
+                }
+                let sequence_ty = BuiltinCtxt::deref(ctxt.sig.inputs()[0]);
+                let element = RustTyDecomposition::from_ty(
+                    BuiltinCtxt::adt_type_arg(sequence_ty, 0),
+                    ctxt.args.context(),
+                );
+                // ResourceState is concrete and has no contextual parameters.
+                let state_ty = RustTyDecomposition::from_ty(
+                    BuiltinCtxt::adt_type_arg(ctxt.sig.output(), 0),
+                    GParams::empty(),
+                );
+                let map = ctxt.deps.require_dep::<StateSequenceEnc>(state_ty)?;
+                let sequence = ctxt.deref_operand::<vir::Seq>(0)?;
+                let primitive_reference = matches!(&element.ty.specifics, TySpecifics::MutRef(data)
+                    if matches!(data.referent.decompose_normalize(element.args).ty.specifics, TySpecifics::Primitive(_)));
+                if prusti_utils::config::checked_scalar_loans() && primitive_reference {
+                    let segment = ctxt.deps.require_dep::<CollectionSegmentEnc>(element)?;
+                    map.references.call()(segment.observe_lazy(sequence)).upcast_ty()
+                } else if matches!(
+                    &element.ty.specifics,
+                    TySpecifics::Primitive(_) | TySpecifics::ImmRef(_) | TySpecifics::Raw(_)
+                ) || matches!(&element.ty.specifics, TySpecifics::StructLike(data) if data.fields.is_empty())
+                    || matches!(
+                        &element.ty.specifics,
+                        TySpecifics::Builtin(
+                            crate::encoders::ty::RustBuiltinData::ResourceState
+                                | crate::encoders::ty::RustBuiltinData::Int
+                                | crate::encoders::ty::RustBuiltinData::Real
+                        )
+                    )
+                {
+                    map.empty.call()(sequence).upcast_ty()
+                } else {
+                    let ty = ctxt.deps.require_dep::<TyExprEnc>(element)?;
+                    map.unresolved.call()(sequence, ty.lazy()).upcast_ty()
+                }
             }
             PrustiBuiltin::ResourceState => {
                 if let Some(span) = ctxt.span {

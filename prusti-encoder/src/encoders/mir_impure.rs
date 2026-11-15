@@ -45,7 +45,10 @@ use vir::{CastType, CompType, Foldable, Folder, LocalDeclData, Reify};
 use crate::encoders::{
     self, FunctionCallEnc, MirBuiltinUseCastEnc, MirBuiltinUseCastTask, MirPureEnc, MirPureEncTask,
     PrustiBuiltin, PureKind, TyUseImpureEnc, WandEnc, WandEncTask,
-    impure::WandOldOuter,
+    impure::{
+        WandOldOuter,
+        loan_transfer::{self, ScalarLoanTransfer},
+    },
     mir_fn::{CallTaskDescription, RustSignature, SpecBlockKind, SpecBlocks},
     mir_shared::{EncodeResult, PureRvalueEnc, RustcIntrinsic},
     pure::spec::{MirSpecEncMode, PledgeExpr},
@@ -352,6 +355,22 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         self.deps.require_dep::<TyUseImpureEnc>(ty_task).unwrap()
     }
 
+    fn scalar_loan_transfer(&mut self, ref_ty: ty::Ty<'vir>) -> ScalarLoanTransfer<'vir> {
+        let TyKind::Ref(_, referent_ty, ty::Mutability::Mut) = ref_ty.kind() else {
+            unreachable!("local loan transfers require a mutable reference")
+        };
+        let task = RustTyDecomposition::from_ty(ref_ty, self.def_id);
+        // Keep the generic representation used inside &mut, with this concrete
+        // instantiation's arguments. Normalizing here would lose that resource.
+        let generic = task.ty.expect_mutref().referent.decompose_context(task.ty.params, task.args);
+        ScalarLoanTransfer {
+            concrete: self.ty_use_impure(*referent_ty),
+            generic: self.deps.require_dep::<TyUseImpureEnc>(generic).unwrap(),
+            reference: *self.ty_use_impure(ref_ty).expect_mutref(),
+            value_cast: self.ty_use_pure(ref_ty).expect_mutref().clone(),
+        }
+    }
+
     fn encode_rvalue(
         &mut self,
         rvalue: &mir::Rvalue<'vir>,
@@ -477,7 +496,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         .upcast_ty()
                         .into()
                 }
-                TyKind::Ref(.., ty::Mutability::Mut) => {
+                TyKind::Ref(_, referent_ty, ty::Mutability::Mut) => {
                     let p_rvalue_ty = self.ty_use_impure(rvalue_ty);
                     let place_expr = self.encode_place(Place::from(*place))?;
 
@@ -486,6 +505,16 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         metadata.unwrap_or_else(|| self.expect_thin_ptr_metadata(rvalue_ty));
                     let inner = p_rvalue_ty.expect_mutref();
                     let place_ref = place_expr.expr.expect_predicate();
+                    if loan_transfer::enabled_for(*referent_ty) {
+                        let rule = self.scalar_loan_transfer(rvalue_ty);
+                        let (captured, stmts) = rule.capture_entry(self.vcx, &mut self.tmp_ctr, place_ref);
+                        self.stmts(stmts);
+                        let vcx = self.vcx;
+                        return Ok(EncodedRvalue {
+                            expr: inner.prim_to_snap_assign(captured.target(), metadata).upcast_ty(),
+                            post_assign_folds: Some(Box::new(move |slot| captured.acquire(vcx, slot))),
+                        });
+                    }
                     EncodedRvalue {
                         expr: inner.prim_to_snap_assign(place_ref, metadata).upcast_ty(),
                         post_assign_folds: Some(Box::new(move |lhs_place| {
@@ -759,7 +788,23 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 // For a borrow e.g. let x = &mut y; the capability to `y` is
                 // folded into the Rvalue `&mut y` that is stored in `x`. This
                 // reverses that effect
-                self.unfold(borrow.assigned_ref(), label)?;
+                let ref_ty = borrow.assigned_ref().place().ty(self.pcg_ctxt()).ty;
+                let TyKind::Ref(_, referent_ty, _) = ref_ty.kind() else { unreachable!() };
+                if loan_transfer::enabled_for(*referent_ty)
+                    && footprint.is_none()
+                    && !matches!(borrow.assigned_ref(), MaybeLabelledPlace::Labelled(_))
+                    && !matches!(borrow.blocked_place(), MaybeLabelledPlace::Labelled(_))
+                {
+                    let slot = self.encode_place(borrow.assigned_ref().place())?.expr.expect_predicate();
+                    let owner = self.encode_place(borrow.blocked_place().place())?.expr.expect_predicate();
+                    let rule = self.scalar_loan_transfer(ref_ty);
+                    let target = rule.reference.deref(slot, None);
+                    let (captured, stmts) = rule.capture_current(self.vcx, &mut self.tmp_ctr, target);
+                    self.stmts(stmts);
+                    self.stmts(captured.resolve(self.vcx, owner));
+                } else {
+                    self.unfold(borrow.assigned_ref(), label)?;
+                }
             }
             BorrowPcgEdgeKind::BorrowFlow(borrow_flow)
                 if let BorrowFlowEdgeKind::Assignment(assignment_data) = borrow_flow.kind()

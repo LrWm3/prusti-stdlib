@@ -24,6 +24,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--release", action="store_true", help="use release Prusti binaries")
     parser.add_argument("--suite", choices=("extern", "sequence", "vec", "collections", "borrow", "iterator", "hash"), default="extern")
+    parser.add_argument("--backend", choices=("Ferrum", "Silicon"), default="Silicon")
+    parser.add_argument("--checked-scalar-loans", action="store_true",
+                        help="exercise the experimental checked local scalar transfers")
     args = parser.parse_args()
     root = Path(__file__).resolve().parent.parent
     sequence = args.suite == "sequence"
@@ -99,7 +102,11 @@ def main():
             "PRUSTI_CHECK_PANICS": "true",
             "PRUSTI_NO_VERIFY_DEPS": "true",
             "PRUSTI_ENABLE_CACHE": "false",
-            "PRUSTI_EXTRA_VERIFIER_ARGS": "--timeout=90",
+            "PRUSTI_VIPER_BACKEND": args.backend,
+            "PRUSTI_NUMBER_OF_PARALLEL_VERIFIERS": "1",
+            "PRUSTI_CHECKED_SCALAR_LOANS": str(args.checked_scalar_loans).lower(),
+            "PRUSTI_EXTRA_VERIFIER_ARGS": "--timeout=90" + (
+                " --parallelizeBranches=false" if args.backend == "Ferrum" else ""),
             "PRUSTI_LOG_DIR": str(log_dir / "verifier"),
         })
         compiled = run("rust-check", ["cargo", "check", "--bins"], env)
@@ -153,7 +160,10 @@ def main():
                     results.append({"case": "viper-trigger-" + quantifier, "passed": passed, "seconds": 0})
                     print("Viper {} trigger: {} ({})".format(quantifier, "PASS" if passed else "FAIL", program), flush=True)
 
-    (log_dir / "results.json").write_text(json.dumps({"toolchain": toolchain, "cases": results}, indent=2) + "\n")
+    (log_dir / "results.json").write_text(json.dumps({
+        "toolchain": toolchain, "backend": args.backend,
+        "checked_scalar_loans": args.checked_scalar_loans, "cases": results,
+    }, indent=2) + "\n")
     if not all(result["passed"] for result in results):
         raise SystemExit(1)
     print("All stdlib {} cases passed ({} checks).".format(args.suite, len(results)))

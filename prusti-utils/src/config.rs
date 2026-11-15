@@ -83,6 +83,7 @@ lazy_static::lazy_static! {
         settings.set_default("encode_unsigned_num_constraint", true).unwrap();
         settings.set_default("encode_bitvectors", false).unwrap();
         settings.set_default("simplify_encoding", true).unwrap();
+        settings.set_default("checked_scalar_loans", false).unwrap();
         settings.set_default("log", "").unwrap();
         settings.set_default("log_style", "auto").unwrap();
         settings.set_default("log_dir", "log").unwrap();
@@ -384,6 +385,11 @@ pub fn check_panics() -> bool {
 /// the Viper backend.
 pub fn simplify_encoding() -> bool {
     read_setting("simplify_encoding")
+}
+
+/// Experimental local scalar loan transfers with checked target/value witnesses.
+pub fn checked_scalar_loans() -> bool {
+    read_setting("checked_scalar_loans")
 }
 
 /// When enabled, debug files will be created.

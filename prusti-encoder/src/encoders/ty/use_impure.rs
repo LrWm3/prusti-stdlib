@@ -723,6 +723,16 @@ impl<'vir> TyUseImpureEnum<'vir> {
 impl<'vir> TyUseImpureImmRef<'vir> {}
 
 impl<'vir> TyUseImpureMutRef<'vir> {
+    /// Transfer the referent at an already captured physical address. This avoids
+    /// reading a mutable reference slot again while changing representations.
+    pub(crate) fn acquire_at(&self, target: vir::ExprRef<'vir>) -> Option<vir::Stmt<'vir>> {
+        self.referent_caster.cast_to_callee_ctx(target)
+    }
+
+    pub(crate) fn resolve_at(&self, target: vir::ExprRef<'vir>) -> Option<vir::Stmt<'vir>> {
+        self.referent_caster.cast_to_caller_ctx(target)
+    }
+
     pub fn deref(
         &self,
         self_ref: vir::ExprRef<'vir>,

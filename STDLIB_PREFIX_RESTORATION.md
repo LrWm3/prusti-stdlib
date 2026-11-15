@@ -1,5 +1,11 @@
 # R3: original resource-prefix proof
 
+**Current direction (2026-11-15):** inference and bounded ownership summaries now
+start independently. The ordering below is historical. Follow
+[the independent experiment plan](STDLIB_INFERENCE_SUMMARY_PLAN.md); count inference
+does not wait for native mutable-iterator restoration. Regression counts alone do
+not establish either requested improvement.
+
 Baseline: R2 compiler `ecec87c3fe84379b607cb30e81951fa544ce7979`, report
 `b24809d11`. Integration remains `stdlib/ownership-inference-m3`; experiments use
 `stdlib/ownership-prefix-r3` in the existing isolated repair worktree.

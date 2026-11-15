@@ -7,6 +7,7 @@
 use prusti_rustc_interface::middle::ty::{Ty, TyKind};
 use vir::{CastType, CompType};
 
+use super::loan_state::LoanState;
 use crate::encoders::ty::{
     use_impure::{TyUseImpure, TyUseImpureMutRef},
     use_pure::TyUsePureMutRef,
@@ -32,6 +33,26 @@ pub(crate) struct ScalarLoanTransfer<'vir> {
 /// A witness is assigned once during the dynamic transfer. It is not persisted
 /// across a call, loop backedge, branch join or loan lifetime.
 struct ValueVersion<'vir>(vir::ExprSnap<'vir>);
+
+/// Only produced after lowering the checked restoration. Pending loans cannot
+/// construct this or expose their deferred value through this interface.
+pub(crate) struct ResolvedValue<'vir> {
+    target: vir::ExprRef<'vir>,
+    value: vir::ExprSnap<'vir>,
+    concrete: TyUseImpure<'vir>,
+}
+
+impl<'vir> ResolvedValue<'vir> {
+    pub(crate) fn target(&self) -> vir::ExprRef<'vir> {
+        self.target
+    }
+    pub(crate) fn value(&self) -> vir::ExprSnap<'vir> {
+        self.value
+    }
+    pub(crate) fn current_at(&self, target: vir::ExprRef<'vir>) -> vir::ExprSnap<'vir> {
+        self.concrete.ref_to_snap(target)
+    }
+}
 
 /// Consumed by `acquire` or `resolve`; callers cannot silently reuse this
 /// transfer's witness for another ownership transition.
@@ -98,6 +119,14 @@ impl<'vir> ScalarLoanTransfer<'vir> {
 }
 
 impl<'vir> CapturedTransfer<'vir> {
+    pub(crate) fn remember(
+        &self,
+        vcx: &'vir vir::VirCtxt<'vir>,
+        state: LoanState<'vir>,
+        parents: &[(LoanState<'vir>, vir::ExprBool<'vir>)],
+    ) -> Vec<vir::Stmt<'vir>> {
+        state.begin(vcx, self.target, self.value.0, parents)
+    }
     pub(crate) fn target(&self) -> vir::ExprRef<'vir> {
         self.target
     }
@@ -133,6 +162,18 @@ impl<'vir> CapturedTransfer<'vir> {
         vcx: &'vir vir::VirCtxt<'vir>,
         owner_target: vir::ExprRef<'vir>,
     ) -> Vec<vir::Stmt<'vir>> {
+        self.resolve_with_value(vcx, owner_target).0
+    }
+
+    pub(crate) fn resolve_with_value(
+        self,
+        vcx: &'vir vir::VirCtxt<'vir>,
+        owner_target: vir::ExprRef<'vir>,
+    ) -> (Vec<vir::Stmt<'vir>>, ResolvedValue<'vir>) {
+        let value = self
+            .rule
+            .value_cast
+            .cast_to_caller_ctx(self.value.0.downcast_ty());
         let mut stmts = vec![vcx.mk_assert_stmt(vcx.mk_eq_expr(self.target, owner_target))];
         stmts.extend(self.rule.reference.resolve_at(self.target));
         stmts.push(vcx.mk_assert_stmt(self.rule.concrete.ref_to_pred(vcx, self.target, None)));
@@ -147,7 +188,14 @@ impl<'vir> CapturedTransfer<'vir> {
             ),
         );
         stmts.push(vcx.mk_comment_stmt("[loan-transfer] resolve: correspondence checked"));
-        stmts
+        (
+            stmts,
+            ResolvedValue {
+                target: self.target,
+                value,
+                concrete: self.rule.concrete,
+            },
+        )
     }
 }
 

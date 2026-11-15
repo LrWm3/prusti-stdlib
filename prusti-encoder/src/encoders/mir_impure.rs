@@ -4,7 +4,7 @@ use pcg::{
     action::{BorrowPcgAction, PcgAction, PcgActions},
     borrow_pcg::{
         action::BorrowPcgActionKind,
-        borrow_pcg_edge::{BlockedNode, BorrowPcgEdge},
+        borrow_pcg_edge::{BlockedNode, BorrowPcgEdge, BorrowPcgEdgeLike},
         borrow_pcg_expansion::BorrowPcgExpansion,
         edge::{
             abstraction::{AbstractionEdge, FunctionCallOrLoop},
@@ -47,6 +47,7 @@ use crate::encoders::{
     PrustiBuiltin, PureKind, TyUseImpureEnc, WandEnc, WandEncTask,
     impure::{
         WandOldOuter,
+        loan_state::{LoanState, LoanStates},
         loan_transfer::{self, ScalarLoanTransfer},
     },
     mir_fn::{CallTaskDescription, RustSignature, SpecBlockKind, SpecBlocks},
@@ -176,6 +177,7 @@ where
     /// created no wand to apply on expiry.
     pub wandless_calls: FxHashSet<mir::BasicBlock>,
     pub from_to_vars: FromToVars<'vir>,
+    pub(crate) loan_states: LoanStates<'vir>,
 
     // for the current basic block
     pub current_fpcs: Option<PcgBasicBlock<'enc, 'vir>>,
@@ -371,11 +373,61 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         }
     }
 
+    fn prepare_loan_states(&mut self) {
+        // A creation location is a unique dynamic event in an acyclic body.
+        // Backedges require a summary of live instances, not reused witnesses.
+        if !config::checked_scalar_loans() || self.loop_analysis().all_loops().next().is_some() {
+            return;
+        }
+        for (block, data) in self.body.basic_blocks.iter_enumerated() {
+            for (statement_index, statement) in data.statements.iter().enumerate() {
+                let mir::StatementKind::Assign(box (_, mir::Rvalue::Ref(_, kind, place))) = &statement.kind else { continue };
+                let ty = place.ty(self.local_decls, self.vcx.tcx()).ty;
+                if kind.mutability() == ty::Mutability::Mut && loan_transfer::enabled_for(ty) {
+                    let snapshot = self.ty_use_impure(ty).snapshot();
+                    self.loan_states.register(self.vcx, mir::Location { block, statement_index }, snapshot);
+                }
+            }
+        }
+    }
+
+    fn direct_loan_parents(
+        &mut self,
+        location: mir::Location,
+        borrowed: mir::Place<'vir>,
+    ) -> Vec<(LoanState<'vir>, vir::ExprBool<'vir>)> {
+        if borrowed.projection.len() != 1 || borrowed.projection[0] != mir::ProjectionElem::Deref {
+            return Vec::new();
+        }
+        let parent_slot = Place::from(mir::Place::from(borrowed.local));
+        let cfpcs = self.current_fpcs.as_ref().unwrap();
+        let state = &cfpcs.statements[location.statement_index].states[EvalStmtPhase::PreMain];
+        let mut edges = state.borrow_pcg().graph().edges().filter(|edge| {
+            matches!(edge.kind(), BorrowPcgEdgeKind::Borrow(parent)
+                if parent.is_mut() && parent.assigned_ref().as_current_place() == Some(parent_slot)
+                    && self.loan_states.get(parent.reserve_location()).is_some())
+        }).map(|edge| edge.to_owned_edge()).collect::<Vec<_>>();
+        edges.sort_by_key(|edge| {
+            let BorrowPcgEdgeKind::Borrow(parent) = edge.kind() else { unreachable!() };
+            let origin = parent.reserve_location();
+            (origin.block.index(), origin.statement_index)
+        });
+        let mut result = Vec::new();
+        for edge in edges {
+            let BorrowPcgEdgeKind::Borrow(parent) = edge.kind() else { unreachable!() };
+            let state = self.loan_states.get(parent.reserve_location()).unwrap();
+            let guard = self.vcx.mk_conj(&self.edge_condition(&edge));
+            result.push((state, guard));
+        }
+        result
+    }
+
     fn encode_rvalue(
         &mut self,
         rvalue: &mir::Rvalue<'vir>,
         span: Span,
         operand_snaps: &OperandSnaps<'vir>,
+        location: mir::Location,
     ) -> Result<EncodedRvalue<'vir>, EncodeRvalueError<'vir, E>> {
         let rvalue_ty = rvalue.ty(self.local_decls, self.vcx.tcx());
         match rvalue {
@@ -509,6 +561,11 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         let rule = self.scalar_loan_transfer(rvalue_ty);
                         let (captured, stmts) = rule.capture_entry(self.vcx, &mut self.tmp_ctr, place_ref);
                         self.stmts(stmts);
+                        if let Some(state) = self.loan_states.get(location) {
+                            let parents = self.direct_loan_parents(location, *place);
+                            self.loan_states.set_parents(location, parents.iter().map(|(p, _)| p.origin).collect());
+                            self.stmts(captured.remember(self.vcx, state, &parents));
+                        }
                         let vcx = self.vcx;
                         return Ok(EncodedRvalue {
                             expr: inner.prim_to_snap_assign(captured.target(), metadata).upcast_ty(),
@@ -790,7 +847,20 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 // reverses that effect
                 let ref_ty = borrow.assigned_ref().place().ty(self.pcg_ctxt()).ty;
                 let TyKind::Ref(_, referent_ty, _) = ref_ty.kind() else { unreachable!() };
-                if loan_transfer::enabled_for(*referent_ty)
+                if let Some(state) = self.loan_states.get(borrow.reserve_location())
+                    && footprint.is_none()
+                {
+                    // The origin fixes the original target even if the current
+                    // reference slot was moved or reassigned. Do not reread it.
+                    self.stmts(state.require_live(self.vcx));
+                    let rule = self.scalar_loan_transfer(ref_ty);
+                    let (captured, stmts) = rule.capture_current(self.vcx, &mut self.tmp_ctr, state.target);
+                    self.stmts(stmts);
+                    let (stmts, resolved) = captured.resolve_with_value(self.vcx, state.target);
+                    self.stmts(stmts);
+                    let parents = self.loan_states.parents(state.origin);
+                    self.stmts(state.finish(self.vcx, resolved, &parents));
+                } else if loan_transfer::enabled_for(*referent_ty)
                     && footprint.is_none()
                     && !matches!(borrow.assigned_ref(), MaybeLabelledPlace::Labelled(_))
                     && !matches!(borrow.blocked_place(), MaybeLabelledPlace::Labelled(_))
@@ -1943,6 +2013,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
     }
 
     pub fn visit_body(&mut self, body: &mir::Body<'vir>) -> EncodeResult<'vir, (), E> {
+        self.prepare_loan_states();
         /// A work-queue item, min-ordered by the block's reverse-postorder
         /// index (ties broken by insertion order): every non-back-edge
         /// predecessor of a block is then encoded before the block itself,
@@ -2640,7 +2711,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         .expect_predicate();
 
                     // The snapshot of the value that we are assigning.
-                    let rval_enc = self.encode_rvalue(rvalue, span, &captured);
+                    let rval_enc = self.encode_rvalue(rvalue, span, &captured, location);
 
                     match rval_enc {
                         Ok(rval_enc) => {

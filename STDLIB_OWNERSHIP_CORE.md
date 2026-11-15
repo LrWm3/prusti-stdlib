@@ -71,6 +71,41 @@ inference remain R3/R4; no D1–D6 work or automation is started.
 
 ## Ownership invariant, written before implementation
 
+### Second increment: persistent identities and deferred resolution
+
+Hypothesis: a loan keyed by its MIR reservation location can retain its target
+across reference-slot reassignment, so restoration no longer has to rediscover
+that target by rereading the slot or a historical reference snapshot. Expose PCG's
+existing reservation location without changing its analysis. First qualify this
+in acyclic bodies; loop bodies retain the first increment until a summary frames
+the ledger across backedges.
+
+Each registered creation has a saved target, entry value, a pending final-value
+slot, and explicit live/resolved state. The final-value slot is **not** available
+as a proposition while pending. It is assigned the checked resolved value exactly
+once, after the generic-to-concrete transfer. There is no assumed future equality.
+Creation and resolution assert their state preconditions. An unused final value
+need not be invented when the existing PCG never restores that dead resource.
+Escaping/package obligations continue to use the existing checked wand encoding;
+the new ledger does not discharge them speculatively inside a package.
+
+For a direct scalar reborrow, PCG's guarded parent edge identifies the parent
+creation event, separately from address equality. Record that relation at child
+creation, check both targets coincide and suspend the parent's local ledger.
+Child resolution checks that it is the only outstanding scalar child, transfers
+the resource, and proves the child's final value equals the parent's current
+value at that boundary. Subsequent parent mutation does not rewrite this saved
+child value. Branch guards select the parent; joins never merge identities merely
+because targets coincide. Reassigning a slot creates a distinct identity.
+
+Required new controls: reassignment after mutation with both owners restored,
+wrong historical target/value, sibling reborrows with intervening mutation,
+branch-selected loans and early exits. Preserve scalar/reborrow controls and all
+affected M3 families. If a parent cannot be identified through a direct PCG borrow
+edge, retain the baseline permission path rather than inventing a parent from an
+address. This increment is a deferred-resolution representation, not permission
+to use arbitrary future facts before resolution.
+
 For one scalar loan, distinguish the reference slot `r`, its target address `a`,
 and the scalar value `v`. `C(a)` is the concrete scalar predicate; `G(a,T)` is its
 existing generic representation. Neither predicate represents the reference slot.

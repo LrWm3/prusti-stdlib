@@ -315,6 +315,7 @@ impl TaskEncoder for MethodEnc {
                     call_labels: Default::default(),
                     wandless_calls: Default::default(),
                     from_to_vars: Default::default(),
+                    loan_states: Default::default(),
 
                     current_block: None,
                     current_block_pres: None,
@@ -331,6 +332,7 @@ impl TaskEncoder for MethodEnc {
                 // early errors rather than silently degrading to a stub
                 match visitor.visit_body(body) {
                     Ok(()) => {
+                        start_stmts.extend(visitor.loan_states.declarations());
                         start_stmts.extend(
                             visitor
                                 .from_to_vars

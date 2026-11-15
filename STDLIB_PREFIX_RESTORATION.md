@@ -15,7 +15,7 @@ watchdog. Other cases retain their recorded 180/600-second schedule.
 | Current evidence | Result |
 |---|---|
 | Frozen R2 Ferrum / Silicon gates | Each 454/454; each 70/70 focused |
-| Parser prerequisite, own integration Ferrum gate | 457/457; 72/72 focused; 37 specification + 1 binder test |
+| Current slice-observation integration Ferrum gate | 471/471; 82/82 focused; 37 specification + 1 binder test |
 | Original prefix positive on R2 | Compilation/specification failure |
 | Original exact false control on R2 | Wrong diagnostic |
 | Prefix proof, inference, full restoration | Unqualified |
@@ -124,3 +124,12 @@ existing slice predicates, generic casts and old/before-expiry restrictions.
 Reject unsupported relational/nested temporal uses rather than choosing a heap
 implicitly. Qualify all ten original native controls and affected families before
 integration. Referent/resource-state and iterator-prefix support remain separate.
+
+Slice observations are integrated at `ce448169f9488de9252b3f8d0ca325334ac065e6`.
+All ten unchanged original controls match, including both missing-permission
+rejections. The experimental and own integration gates independently match
+471/471 Ferrum checks and 82/82 focused controls, plus 37 specification and one
+binder-scope test. Integration suite time is 703.00s with no material per-case
+slowdown. See [slice observation evidence](STDLIB_SLICE_OBSERVATION_EVIDENCE.json).
+The original prefix pair remains unqualified; next specify and qualify direct
+referent-state observations before indexed states and iterator summaries.

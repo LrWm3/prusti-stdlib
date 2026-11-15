@@ -1,0 +1,356 @@
+{
+  "step": "slice-observations",
+  "accepted_implementation": "ce448169f9488de9252b3f8d0ca325334ac065e6",
+  "experimental": {
+    "artifact_root": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-01",
+    "source_revision": "7cd1ae3e7ebad59a7ad5a1305e369eb8b87b34f0",
+    "pcg_revision": "77e2a4a8e551086a85ae8b2cf74f7d4a25ec8c70",
+    "source_files": 2435,
+    "pcg_files": 1497,
+    "source": {
+      "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-01/source-before.json",
+      "sha256": "c7e06ee76a1f1f690d1711f5ef69d0bbf10c74c3076d1105b2048bcbf87cb628"
+    },
+    "binaries": [
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-m3-repair/target/debug/cargo-prusti",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-01/bin/cargo-prusti",
+        "sha256": "0c1724ff20a834d994ab5a49ffed3b55a4f0a76d612c7eaac6291375a8d2da82"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-m3-repair/target/debug/prusti-driver",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-01/bin/prusti-driver",
+        "sha256": "c62e012af0058f70ce7698d42298c34b6451bbe2d6ebc3e1423ffa453c295a7c"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-m3-repair/target/debug/prusti-rustc",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-01/bin/prusti-rustc",
+        "sha256": "d283aedaae4d88cc1fe2919247d1eaf16f0473291c23d28abc145c784497493e"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-m3-repair/target/debug/prusti-server",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-01/bin/prusti-server",
+        "sha256": "2acc9bab4df96b2e2454862d14fd613b59770e476614db5f630e5e5a5333a52f"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-m3-repair/target/debug/prusti-server-driver",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-01/bin/prusti-server-driver",
+        "sha256": "118c86b1bd8833fff6d3a6294571892751d309d6849d65347a581c51eb3b4b68"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-m3-repair/target/debug/prusti-smt-solver",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-01/bin/prusti-smt-solver",
+        "sha256": "2fcc7fa36384de83e87b1dd8abcca0320d0a25b15a6b0c011ad5804d09d0e7ba"
+      }
+    ],
+    "tools": {
+      "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-01/tools.json",
+      "sha256": "6746069fcd106eff4c0957fba94152ede06f058bc204b35eb8d5d6d8c0e83189"
+    },
+    "settings": {
+      "backend": "Ferrum",
+      "workers": 1,
+      "program_timeout": 90,
+      "command_timeout": 300,
+      "cache": false,
+      "check_overflows": true,
+      "check_panics": true,
+      "resource_mode_override": false,
+      "checked_scalar_loans": true,
+      "branch_parallelism": false,
+      "environment": {
+        "RUSTUP_TOOLCHAIN": "nightly-2026-08-15",
+        "JAVA_HOME": "/home/will/.local/share/mise/installs/java/openjdk-21.0.2",
+        "VIPER_HOME": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-01/tools/backends",
+        "Z3_EXE": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-01/tools/z3/bin/z3",
+        "CARGO_BUILD_JOBS": "8"
+      }
+    },
+    "matched": 471,
+    "expected": 471,
+    "suites": {
+      "borrow": {
+        "matched": 170,
+        "expected": 170,
+        "seconds": 321.81844071901287,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-01/suite-logs/borrow/results.json",
+          "sha256": "bec563c5cd93fcea6eb53e345899ad7aab8e66654da47ccb351d0d9d61b09098"
+        }
+      },
+      "extern": {
+        "matched": 97,
+        "expected": 97,
+        "seconds": 70.99892287500552,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-01/suite-logs/extern/results.json",
+          "sha256": "79186e6d7e16ef137e0c58aba4e2587e43f5f1d5df1f4b31cab002084ebab852"
+        }
+      },
+      "sequence": {
+        "matched": 22,
+        "expected": 22,
+        "seconds": 21.694648637989303,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-01/suite-logs/sequence/results.json",
+          "sha256": "1836a2822be741a195854798221a67987290e5408b7bc30eb80bf90bde35cb3e"
+        }
+      },
+      "vec": {
+        "matched": 21,
+        "expected": 21,
+        "seconds": 29.39839952197508,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-01/suite-logs/vec/results.json",
+          "sha256": "adac81d5ed53fe1432ae146f98908aac047b99e2865f5859c7ebaa0e0cc1d6a3"
+        }
+      },
+      "collections": {
+        "matched": 27,
+        "expected": 27,
+        "seconds": 92.48040486100945,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-01/suite-logs/collections/results.json",
+          "sha256": "96559deda4b8aa516a229a625e967dc2d412d0218305338f1b06658085a91bc7"
+        }
+      },
+      "iterator": {
+        "matched": 83,
+        "expected": 83,
+        "seconds": 100.70309841801645,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-01/suite-logs/iterator/results.json",
+          "sha256": "2ab2a210828129dd89d84842def970bc9e220e9ceb7c3beb629b17d95f1d90ce"
+        }
+      },
+      "hash": {
+        "matched": 51,
+        "expected": 51,
+        "seconds": 68.83806480100611,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-01/suite-logs/hash/results.json",
+          "sha256": "a025e5e175a41226be00d32ddb32ec90e618b62bf51b4bc4e89b4ce71b050a10"
+        }
+      }
+    },
+    "suite_seconds": 705.9319798340148,
+    "focused": {
+      "matched": 82,
+      "expected": 82,
+      "expected_cases": {
+        "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-01/audit-cases.json",
+        "sha256": "0f40a7f1f9681d3be757626baa248c0ec3c135bd59fb01317c164c8c61376fdc"
+      },
+      "results": {
+        "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-01/audit/results.json",
+        "sha256": "bc10921d453a78ffe9d3bb0e5e1c4b4eeae32b3c0085982c8a7d19a953b06e90"
+      },
+      "subset_of_matrix": true
+    },
+    "specification_unit_tests": 37,
+    "preservation": {
+      "source_unchanged": true,
+      "binary_unchanged": true,
+      "pending_main_unchanged": true
+    },
+    "material_timing_increases": [],
+    "timing_comparison": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/quantifier-gate-02-integration",
+    "unresolved": {
+      "wrong_diagnostic": 0,
+      "verification_failure": 0,
+      "timeout": 0,
+      "skipped": 0,
+      "untested": 0,
+      "unexpected_acceptance": 0
+    }
+  },
+  "integration": {
+    "artifact_root": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-02-integration",
+    "source_revision": "ce448169f9488de9252b3f8d0ca325334ac065e6",
+    "pcg_revision": "77e2a4a8e551086a85ae8b2cf74f7d4a25ec8c70",
+    "source_files": 2435,
+    "pcg_files": 1497,
+    "source": {
+      "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-02-integration/source-before.json",
+      "sha256": "2b4ba854b2d80f81b3457cc7acfad4d0d73421a289b03e75c02b3b89c567fa3d"
+    },
+    "binaries": [
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-ownership-inference/target/debug/cargo-prusti",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-02-integration/bin/cargo-prusti",
+        "sha256": "8f66df5ba7bb6b917af493c97795d6e3a7bdab946d1cfd5f6a9f388a3b1ca8db"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-ownership-inference/target/debug/prusti-driver",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-02-integration/bin/prusti-driver",
+        "sha256": "4ad01a776f6896520d8f7a0cac0fea020505cf2dcac2f64061b86c4efec881f4"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-ownership-inference/target/debug/prusti-rustc",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-02-integration/bin/prusti-rustc",
+        "sha256": "368698d003a25cec58124dd9a2dc7a9960652c907109446dff82fda213344f99"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-ownership-inference/target/debug/prusti-server",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-02-integration/bin/prusti-server",
+        "sha256": "84ed0e8a56f7281f9c7a7d56c5ebc982f9ae4f8f7ba9e49d328bc99d3028e45a"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-ownership-inference/target/debug/prusti-server-driver",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-02-integration/bin/prusti-server-driver",
+        "sha256": "853417aa1cb0c63b3f358c9e5a73ec1f6ec8124d55568e8479c23d5f7453aa12"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-ownership-inference/target/debug/prusti-smt-solver",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-02-integration/bin/prusti-smt-solver",
+        "sha256": "05606fc6776049ec09a6ac292c6f5a245f88ff24a13c2b40b8003419d01a4d97"
+      }
+    ],
+    "tools": {
+      "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-02-integration/tools.json",
+      "sha256": "695ccd9b7fdd4fd8d9e40b0bd95c7ad6b9151c8fdb7f2910d831aa6c4ad71707"
+    },
+    "settings": {
+      "backend": "Ferrum",
+      "workers": 1,
+      "program_timeout": 90,
+      "command_timeout": 300,
+      "cache": false,
+      "check_overflows": true,
+      "check_panics": true,
+      "resource_mode_override": false,
+      "checked_scalar_loans": true,
+      "branch_parallelism": false,
+      "environment": {
+        "RUSTUP_TOOLCHAIN": "nightly-2026-08-15",
+        "JAVA_HOME": "/home/will/.local/share/mise/installs/java/openjdk-21.0.2",
+        "VIPER_HOME": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-02-integration/tools/backends",
+        "Z3_EXE": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-02-integration/tools/z3/bin/z3",
+        "CARGO_BUILD_JOBS": "8"
+      }
+    },
+    "matched": 471,
+    "expected": 471,
+    "suites": {
+      "borrow": {
+        "matched": 170,
+        "expected": 170,
+        "seconds": 318.3697646979999,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-02-integration/suite-logs/borrow/results.json",
+          "sha256": "0bf81e5830b4a7e9173d24ca703ee9b5379b83d35293fec72e6f7a5164314417"
+        }
+      },
+      "extern": {
+        "matched": 97,
+        "expected": 97,
+        "seconds": 72.08634323999286,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-02-integration/suite-logs/extern/results.json",
+          "sha256": "3c7b4805979d9dab21ffe3cd078107cb8f2e76bfa622a0feab8039d3a58ea69e"
+        }
+      },
+      "sequence": {
+        "matched": 22,
+        "expected": 22,
+        "seconds": 21.972410716000013,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-02-integration/suite-logs/sequence/results.json",
+          "sha256": "80f951ae2cc831fcfac958e2239aa27186224059b1793990b64b12e56e3d35db"
+        }
+      },
+      "vec": {
+        "matched": 21,
+        "expected": 21,
+        "seconds": 28.08563057598076,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-02-integration/suite-logs/vec/results.json",
+          "sha256": "39c06ca2fa242d1414a922c536c7be856b1ec08d3293670cd6422e0e8a6ff8e6"
+        }
+      },
+      "collections": {
+        "matched": 27,
+        "expected": 27,
+        "seconds": 89.9577749260061,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-02-integration/suite-logs/collections/results.json",
+          "sha256": "35fabbd557f503add88b943903be77d1cdc0b7c18a24fdc1dae4d4bc6b4fd2a6"
+        }
+      },
+      "iterator": {
+        "matched": 83,
+        "expected": 83,
+        "seconds": 101.58465485298075,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-02-integration/suite-logs/iterator/results.json",
+          "sha256": "03cf0aa47a2d240e846e8deb44417df3934cb6c34229a06e707e8ed870afb05b"
+        }
+      },
+      "hash": {
+        "matched": 51,
+        "expected": 51,
+        "seconds": 70.94753185397713,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-02-integration/suite-logs/hash/results.json",
+          "sha256": "7d874d547d260a9bca3af567e11e58a5edaccd0f011846b9bd51d706c33b7fc8"
+        }
+      }
+    },
+    "suite_seconds": 703.0041108629375,
+    "focused": {
+      "matched": 82,
+      "expected": 82,
+      "expected_cases": {
+        "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-02-integration/audit-cases.json",
+        "sha256": "0f40a7f1f9681d3be757626baa248c0ec3c135bd59fb01317c164c8c61376fdc"
+      },
+      "results": {
+        "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-02-integration/audit/results.json",
+        "sha256": "56238b43f54d3e8d556ff00e1c65117376cb2b46e0f26660a7e653c5607083ae"
+      },
+      "subset_of_matrix": true
+    },
+    "specification_unit_tests": 37,
+    "preservation": {
+      "source_unchanged": true,
+      "binary_unchanged": true,
+      "pending_main_unchanged": true
+    },
+    "material_timing_increases": [],
+    "timing_comparison": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-prefix-r3/slice-observation-gate-01",
+    "unresolved": {
+      "wrong_diagnostic": 0,
+      "verification_failure": 0,
+      "timeout": 0,
+      "skipped": 0,
+      "untested": 0,
+      "unexpected_acceptance": 0
+    }
+  },
+  "r2_complete": true,
+  "r3_complete": false,
+  "feature_flag": "Slice observation support is unconditional; regression gates retain PRUSTI_CHECKED_SCALAR_LOANS=true.",
+  "enabled_by_default": true,
+  "silicon": "R2 signed off; next at R3 feature completion, not repeated for this parser increment.",
+  "original_restoration_inventory": "790 clients / 2198 checks remains unqualified",
+  "stop_before": "D1-D6",
+  "scheduled_automation": false,
+  "scope": [
+    "Mutable slice length is observed from reference metadata without granting element permissions.",
+    "Mutable slice contents reads the existing slice predicate under its permission.",
+    "Entry and expiry modes select the heap of the contents read; unsupported relational or nested temporal uses reject."
+  ],
+  "baseline_controls": {
+    "stage": "slice-observation-baseline-01",
+    "matched": 0,
+    "expected": 10
+  },
+  "candidate_controls": {
+    "stage": "slice-observation-focused-01",
+    "matched": 10,
+    "expected": 10,
+    "all_original_source_hashes_preserved": true
+  },
+  "continuation_unit_tests": 1,
+  "remaining": "Resource-state, indexed referent and mutable-iterator prefix prerequisites remain open; the original full prefix pair is unqualified."
+}

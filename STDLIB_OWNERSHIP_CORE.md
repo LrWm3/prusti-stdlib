@@ -6,23 +6,41 @@ Integration: `prusti-stdlib-ownership-inference`, `stdlib/ownership-inference-m3
 Artifacts: `../prusti-stdlib/target/stdlib-ownership-core-r2/`.
 The six pending main-tree files and all R1/H1 artifacts remain preserved.
 
-Current checkpoint: `e72a93f01c7cda17aac7b130ab1c0946fad1bf53`.
+Current R2 checkpoint: `ecec87c3fe84379b607cb30e81951fa544ce7979`.
 
-| Qualification | Own integration rebuild |
-|---|---|
-| Ferrum suites | 454/454 |
-| Focused controls | 70/70 |
-| Specification unit tests | 36/36 |
-| Unresolved results in these gates | 0 |
-| R2 / Silicon feature sign-off | Incomplete / pending |
+| Qualification | Ferrum | Silicon |
+|---|---|---|
+| Complete R2 suites | 454/454 | 454/454 |
+| Focused controls (subset) | 70/70 | 70/70 |
+| Specification / binder unit tests | 36/36 + 1/1 | 36/36 + 1/1 |
+| Unresolved results in these gates | 0 | 0 |
+| Suite wall time | 695.05s | 3179.85s |
 
-Selected mutable returns now retain their indexed frame until packaging and read
-the index from the package's saved history. The unchanged target improves from
-10/12 to 12/12, including the full generic array-update pledge and exact wrong-frame
-control. All affected families pass; integration suites take 693.45 seconds, with
-no material per-case slowdown. See [selected-return evidence](STDLIB_SELECTED_RETURN_EVIDENCE.json).
-This qualifies the continuation prerequisite. Next implement the explicit checked
-continuation/future-observation boundary. R3–R5 remain open; stop before D1–D6.
+**R2 is complete in its documented scope.** Both own integration builds use the
+same source and all six compiler binary hashes. Checked local transfers, loan
+identities, reference replacement, selected-element frames and acyclic call
+continuations are qualified together. Entry and post-call histories remain fixed;
+expiry observations become available only after the original checked wand
+application. No pending future value is assumed. Original negative diagnostics,
+including false callee summaries, still reject. See
+[combined continuation evidence](STDLIB_CONTINUATION_EVIDENCE.json).
+
+There are no material per-case slowdowns against the prior same-backend gates.
+Added checks increase proof size; no speedup is claimed. Existing generic
+conversion and array split/join contracts remain trusted translation. The feature
+remains opt-in with `PRUSTI_CHECKED_SCALAR_LOANS=true`; packages, cyclic bodies and
+arbitrarily many retained yields keep the previous encoding. This is not a proof
+of a general prophecy calculus or qualification of the newer restoration matrix.
+
+Next is R3: preserve the difficult prefix pair and restore its missing resource
+observations and iterator-summary prerequisites in isolated increments. R4
+inference and R5's 790-client/2,198-check inventory remain open. Stop before D1–D6;
+no automation is scheduled.
+
+Previous prerequisite `e72a93f01` qualified 454/454 Ferrum checks and 70/70 focused
+controls. It preserves the selected return's frame until packaging and reads its
+index from saved history; the unchanged target improved from 10/12 to 12/12.
+See [selected-return evidence](STDLIB_SELECTED_RETURN_EVIDENCE.json).
 
 Previous selected-element checkpoint: `f5037ccdaa9f411f62e1fbf0886128117ca252eb`. Its own integration
 rebuild matches **437/437 Ferrum suite checks**, **58/58 focused controls**, and

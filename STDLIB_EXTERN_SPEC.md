@@ -39,19 +39,17 @@ No automation is scheduled.
 The original M3 reproduction remains a frozen comparison, and the main tree's six
 pending encoder files, frozen H1 compiler and proof inputs remain preserved.
 
-R2 is integrated through `e72a93f01`: opt-in checked transfers, persistent
-creation-site identities, local slot and escaped `mem::replace` restoration in
-acyclic functions, plus checked selected-element split/join records and the
-array-to-slice value bridge. Selected returns additionally retain their package frame
-and saved index. The own
-integration rebuild matches 454/454 Ferrum suite checks, 70/70 focused controls
-and 36 specification tests. The escaped-call pair and all ten selected-element
-targets now match. This is not R2 feature sign-off:
-continuation/summary semantics, future-observation scope and the Silicon gate remain
-open. [Selected-element evidence](STDLIB_SELECTED_ELEMENT_EVIDENCE.json) records the
-checked records; [value-bridge evidence](STDLIB_ARRAY_VALUE_BRIDGE_EVIDENCE.json) records the
-generic array repair; [resource-view evidence](STDLIB_RESOURCE_VIEWS_EVIDENCE.json)
-retains the earlier failed candidates and controlled timing investigation.
+R2 is complete at `ecec87c3f`: opt-in checked transfers, persistent creation-site
+identities, local and escaped reference replacement, selected-element split/join
+records and acyclic checked call continuations. The own integration rebuilds match
+454/454 suite checks and 70/70 focused controls **on each backend**, with identical
+source and compiler binaries. All 36 specification tests and the binder-scope test
+pass. No timeout, wrong diagnostic or material per-case slowdown remains in these
+gates. [Combined evidence](STDLIB_CONTINUATION_EVIDENCE.json) records the native
+proofs and the exact scope; existing conversion/split contracts remain trusted.
+This does not qualify loop-prefix summaries, arbitrary retained yields, inference
+or the complete newer restoration inventory. Next is R3's unchanged difficult
+prefix proof and its necessary, separately qualified prerequisites.
 
 The hypothesis is that supplying checked resource correspondence and composing
 restoration summaries will reduce repeated permission search while preserving
@@ -64,7 +62,7 @@ prove that a rewrite is necessary. Resource units are not calibrated millisecond
 | R0: reproduce and audit M3 | Rebuild `be1364c7c` with PCG `e54bf675468d`, original Rust/Java/Viper/Z3 settings; run complete historical hash, extern, iterator and borrow gates, specification unit tests, and audit later correctness changes and controls. Freeze source, binaries, exact coverage, settings and results. | Reproduction/audit complete; adoption blocked by incorrect acceptance |
 | R1a: baseline correctness imports | Backport audited correctness repairs individually and qualify all fifteen controls and affected historical families. | Complete at `844b93b71`: 387/387 suite checks, 22/22 focused controls including the original audit 15/15, 36 unit tests |
 | R1b: Ferrum compatibility | Import the adapter and necessary compatibility changes individually; pin the backend and printer correction; rebuild this branch and qualify the corrected baseline on both backends. | Complete at `2c5484c00`: Ferrum and Silicon each match 387/387 checks and 22/22 focused controls; source and six compiler binary hashes identical |
-| R2: checked ownership and prophecy core | Specify and implement local transfer rules for scalar mutation, reborrowing, reference replacement and one selected element, with manually supplied value relations. Establish the soundness boundary and native positive/negative proofs. | In progress: `e72a93f01` qualifies selected returns after checked element transfers and escaped-reference restoration; own integration build matches 454/454 Ferrum checks and 70/70 focused controls. [Invariant and evidence](STDLIB_OWNERSHIP_CORE.md). Continuation summaries, future-observation scope and Silicon sign-off remain open. |
+| R2: checked ownership and prophecy core | Specify and implement local transfer rules for scalar mutation, reborrowing, reference replacement and one selected element, with manually supplied value relations. Establish the soundness boundary and native positive/negative proofs. | Complete at `ecec87c3f`: Ferrum and Silicon each match 454/454 checks and 70/70 focused controls, plus 36 specification and one binder-scope test. [Invariant and scope](STDLIB_OWNERSHIP_CORE.md). |
 | R3: original difficult proof | Verify unchanged `mut_native_resource_early_pass` and its exact false control, plus targeted wrong-prefix/wrong-suffix, replacement, generic/non-Copy and zero-sized controls. Compare old encoding and explicit summaries with the same value invariants. | Not started |
 | R4: bounded value inference | Add equality/bounds propagation and a small Houdini-style candidate language over immutable values; recheck inferred entry/preservation/use obligations. Add CHC/Spacer only for a concrete required relation the simpler layer cannot infer. | Not started |
 | R5: restore and qualify | Restore newer families incrementally against the unchanged 790-client/2,198-check inventory; freeze final source, rebuild and run complete Ferrum/Silicon matrices. Commit/push qualified changes and stop before D1-D6. | Not started |

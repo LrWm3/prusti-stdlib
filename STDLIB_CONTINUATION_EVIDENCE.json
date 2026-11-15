@@ -1,0 +1,511 @@
+{
+  "step": "checked-continuation-core",
+  "accepted_implementation": "ecec87c3fe84379b607cb30e81951fa544ce7979",
+  "experimental": {
+    "artifact_root": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-01",
+    "source_revision": "f753a769c207a39d2c7873f8d8b64f33fbd878d9",
+    "pcg_revision": "77e2a4a8e551086a85ae8b2cf74f7d4a25ec8c70",
+    "source_files": 2420,
+    "pcg_files": 1497,
+    "source": {
+      "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-01/source-before.json",
+      "sha256": "05fdbb0e13876dc11ecac7f3c5dfbd821881e99fd84854a692af9c6e0173bc05"
+    },
+    "binaries": [
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-m3-repair/target/debug/cargo-prusti",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-01/bin/cargo-prusti",
+        "sha256": "0c1724ff20a834d994ab5a49ffed3b55a4f0a76d612c7eaac6291375a8d2da82"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-m3-repair/target/debug/prusti-driver",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-01/bin/prusti-driver",
+        "sha256": "f04460fe460b5d1701d26b6c396a5f46e92c7133b03f1c6280fe3ef56e4fdf8d"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-m3-repair/target/debug/prusti-rustc",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-01/bin/prusti-rustc",
+        "sha256": "d283aedaae4d88cc1fe2919247d1eaf16f0473291c23d28abc145c784497493e"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-m3-repair/target/debug/prusti-server",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-01/bin/prusti-server",
+        "sha256": "2acc9bab4df96b2e2454862d14fd613b59770e476614db5f630e5e5a5333a52f"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-m3-repair/target/debug/prusti-server-driver",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-01/bin/prusti-server-driver",
+        "sha256": "bd09e561afc86aca70ca8dcb9aa49604ac8028259a9cb199db8a1edf92fed08a"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-m3-repair/target/debug/prusti-smt-solver",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-01/bin/prusti-smt-solver",
+        "sha256": "2fcc7fa36384de83e87b1dd8abcca0320d0a25b15a6b0c011ad5804d09d0e7ba"
+      }
+    ],
+    "tools": {
+      "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-01/tools.json",
+      "sha256": "2fdee5383de9cd06999e52026a73373c08934ba8d2971d33d2c00b888f813828"
+    },
+    "settings": {
+      "backend": "Ferrum",
+      "workers": 1,
+      "program_timeout": 90,
+      "command_timeout": 300,
+      "cache": false,
+      "check_overflows": true,
+      "check_panics": true,
+      "resource_mode_override": false,
+      "checked_scalar_loans": true,
+      "branch_parallelism": false,
+      "environment": {
+        "RUSTUP_TOOLCHAIN": "nightly-2026-08-15",
+        "JAVA_HOME": "/home/will/.local/share/mise/installs/java/openjdk-21.0.2",
+        "VIPER_HOME": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-01/tools/backends",
+        "Z3_EXE": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-01/tools/z3/bin/z3",
+        "CARGO_BUILD_JOBS": "8"
+      }
+    },
+    "matched": 454,
+    "expected": 454,
+    "suites": {
+      "borrow": {
+        "matched": 167,
+        "expected": 167,
+        "seconds": 318.22849403499276,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-01/suite-logs/borrow/results.json",
+          "sha256": "f45169c9859e72819f05bab8d7f57769b78c4e895e51fb0cf15784040f1c51d7"
+        }
+      },
+      "extern": {
+        "matched": 97,
+        "expected": 97,
+        "seconds": 71.11720008897828,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-01/suite-logs/extern/results.json",
+          "sha256": "ca985d3006312c79d9a289331d16735edbe8a2da93f532957c146a5b55b4fd53"
+        }
+      },
+      "sequence": {
+        "matched": 22,
+        "expected": 22,
+        "seconds": 19.812699775007786,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-01/suite-logs/sequence/results.json",
+          "sha256": "57f88e0a2a2e4ef35facbda7c472189944d58d98462c876b66f3e61bfad152f1"
+        }
+      },
+      "vec": {
+        "matched": 21,
+        "expected": 21,
+        "seconds": 29.7839817609929,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-01/suite-logs/vec/results.json",
+          "sha256": "0bb78967c89c0c5c2177d2f0856d46a27c7fe1c579fc53bbf211a99b786b2074"
+        }
+      },
+      "collections": {
+        "matched": 27,
+        "expected": 27,
+        "seconds": 94.3166700899892,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-01/suite-logs/collections/results.json",
+          "sha256": "ea786dfb048573659f594e3f6ac6cad164d8b484422ff7574e9a9ca9289f917d"
+        }
+      },
+      "iterator": {
+        "matched": 69,
+        "expected": 69,
+        "seconds": 90.29347550100647,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-01/suite-logs/iterator/results.json",
+          "sha256": "f818203dc7f7e8cd879f0aaf0e94c3ef28ca808c24c5ba6179b2a0403ec60f1c"
+        }
+      },
+      "hash": {
+        "matched": 51,
+        "expected": 51,
+        "seconds": 75.58627525699558,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-01/suite-logs/hash/results.json",
+          "sha256": "87256317a3949ccf2896bb6a88167d903af824017699ac1f80641a01c3f1fddc"
+        }
+      }
+    },
+    "suite_seconds": 699.138796507963,
+    "focused": {
+      "matched": 70,
+      "expected": 70,
+      "expected_cases": {
+        "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-01/audit-cases.json",
+        "sha256": "43a7b34ec07d0053a847b58d4c7ef8fb328761b6d439b453f24685b88efd775a"
+      },
+      "results": {
+        "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-01/audit/results.json",
+        "sha256": "58fb00387b66b9dfee102aa6a1bcb3611d57abe6023f660216f7c1a391301349"
+      },
+      "subset_of_matrix": true
+    },
+    "specification_unit_tests": 36,
+    "preservation": {
+      "source_unchanged": true,
+      "binary_unchanged": true,
+      "pending_main_unchanged": true
+    },
+    "material_timing_increases": [],
+    "timing_comparison": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-index-gate-02-integration",
+    "unresolved": {
+      "wrong_diagnostic": 0,
+      "verification_failure": 0,
+      "timeout": 0,
+      "skipped": 0,
+      "untested": 0,
+      "unexpected_acceptance": 0
+    }
+  },
+  "integration": {
+    "artifact_root": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-02-integration",
+    "source_revision": "ecec87c3fe84379b607cb30e81951fa544ce7979",
+    "pcg_revision": "77e2a4a8e551086a85ae8b2cf74f7d4a25ec8c70",
+    "source_files": 2420,
+    "pcg_files": 1497,
+    "source": {
+      "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-02-integration/source-before.json",
+      "sha256": "90861e40d74d38d423f62950f44bd3a43d1b39bc332c5fec273a157226356c68"
+    },
+    "binaries": [
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-ownership-inference/target/debug/cargo-prusti",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-02-integration/bin/cargo-prusti",
+        "sha256": "8f66df5ba7bb6b917af493c97795d6e3a7bdab946d1cfd5f6a9f388a3b1ca8db"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-ownership-inference/target/debug/prusti-driver",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-02-integration/bin/prusti-driver",
+        "sha256": "99d8dc79cc42655e10ee52572ba9e51c004c2b84ea76ea8fa8b5457a1468a48c"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-ownership-inference/target/debug/prusti-rustc",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-02-integration/bin/prusti-rustc",
+        "sha256": "368698d003a25cec58124dd9a2dc7a9960652c907109446dff82fda213344f99"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-ownership-inference/target/debug/prusti-server",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-02-integration/bin/prusti-server",
+        "sha256": "84ed0e8a56f7281f9c7a7d56c5ebc982f9ae4f8f7ba9e49d328bc99d3028e45a"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-ownership-inference/target/debug/prusti-server-driver",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-02-integration/bin/prusti-server-driver",
+        "sha256": "1f9bf738c27a7c9e412aa99a2a2561d36d30d5698a6bdb2677d225714126b752"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-ownership-inference/target/debug/prusti-smt-solver",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-02-integration/bin/prusti-smt-solver",
+        "sha256": "05606fc6776049ec09a6ac292c6f5a245f88ff24a13c2b40b8003419d01a4d97"
+      }
+    ],
+    "tools": {
+      "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-02-integration/tools.json",
+      "sha256": "f2340c18e0ee42f7dcce0a18cd5a4848f55414c13155d7a706e908c68846394c"
+    },
+    "settings": {
+      "backend": "Ferrum",
+      "workers": 1,
+      "program_timeout": 90,
+      "command_timeout": 300,
+      "cache": false,
+      "check_overflows": true,
+      "check_panics": true,
+      "resource_mode_override": false,
+      "checked_scalar_loans": true,
+      "branch_parallelism": false,
+      "environment": {
+        "RUSTUP_TOOLCHAIN": "nightly-2026-08-15",
+        "JAVA_HOME": "/home/will/.local/share/mise/installs/java/openjdk-21.0.2",
+        "VIPER_HOME": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-02-integration/tools/backends",
+        "Z3_EXE": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-02-integration/tools/z3/bin/z3",
+        "CARGO_BUILD_JOBS": "8"
+      }
+    },
+    "matched": 454,
+    "expected": 454,
+    "suites": {
+      "borrow": {
+        "matched": 167,
+        "expected": 167,
+        "seconds": 313.83280105201993,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-02-integration/suite-logs/borrow/results.json",
+          "sha256": "da8194c8f1d4c59eb86ad618a9f14c0efbb8f9fca86797d9c31879f166c30545"
+        }
+      },
+      "extern": {
+        "matched": 97,
+        "expected": 97,
+        "seconds": 70.33808983699419,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-02-integration/suite-logs/extern/results.json",
+          "sha256": "2f03182f79e86e4b5f6aa4e3bf3cebefb62ed2b1aefe6b56cb249f37cb771eee"
+        }
+      },
+      "sequence": {
+        "matched": 22,
+        "expected": 22,
+        "seconds": 21.77811652101809,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-02-integration/suite-logs/sequence/results.json",
+          "sha256": "c4a1818afcdbde0a5a7e862b35e27c91691c1fd53930bbb20c8b40b587b3cf53"
+        }
+      },
+      "vec": {
+        "matched": 21,
+        "expected": 21,
+        "seconds": 28.452304684004048,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-02-integration/suite-logs/vec/results.json",
+          "sha256": "3973e775c5ad9c354641ea1012853787a427d512d019fc63af54ce6909e3f844"
+        }
+      },
+      "collections": {
+        "matched": 27,
+        "expected": 27,
+        "seconds": 93.45870349698816,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-02-integration/suite-logs/collections/results.json",
+          "sha256": "379405b663ba6c7012c9736c77082e7bb0bff7fbb68d1c0ae859dcc33a06b0de"
+        }
+      },
+      "iterator": {
+        "matched": 69,
+        "expected": 69,
+        "seconds": 95.4160902229778,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-02-integration/suite-logs/iterator/results.json",
+          "sha256": "76447257cfad5ad2f3973d93e4fae0c085fa6e7933b9ad1e607fd3473767632b"
+        }
+      },
+      "hash": {
+        "matched": 51,
+        "expected": 51,
+        "seconds": 71.7737852090213,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-02-integration/suite-logs/hash/results.json",
+          "sha256": "d0bbb264ce667274ae8d9879506d77a8bfc892b35e0ce92651875c860f7d0a5b"
+        }
+      }
+    },
+    "suite_seconds": 695.0498910230235,
+    "focused": {
+      "matched": 70,
+      "expected": 70,
+      "expected_cases": {
+        "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-02-integration/audit-cases.json",
+        "sha256": "43a7b34ec07d0053a847b58d4c7ef8fb328761b6d439b453f24685b88efd775a"
+      },
+      "results": {
+        "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-02-integration/audit/results.json",
+        "sha256": "5124373c09fde14a52e67dd558fd13db622f020f768f45e348005f7ced7dc3d6"
+      },
+      "subset_of_matrix": true
+    },
+    "specification_unit_tests": 36,
+    "preservation": {
+      "source_unchanged": true,
+      "binary_unchanged": true,
+      "pending_main_unchanged": true
+    },
+    "material_timing_increases": [],
+    "timing_comparison": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-01",
+    "unresolved": {
+      "wrong_diagnostic": 0,
+      "verification_failure": 0,
+      "timeout": 0,
+      "skipped": 0,
+      "untested": 0,
+      "unexpected_acceptance": 0
+    }
+  },
+  "r2_complete": true,
+  "feature_flag": "PRUSTI_CHECKED_SCALAR_LOANS=true",
+  "enabled_by_default": false,
+  "silicon": {
+    "artifact_root": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-03-silicon",
+    "source_revision": "ecec87c3fe84379b607cb30e81951fa544ce7979",
+    "pcg_revision": "77e2a4a8e551086a85ae8b2cf74f7d4a25ec8c70",
+    "source_files": 2420,
+    "pcg_files": 1497,
+    "source": {
+      "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-03-silicon/source-before.json",
+      "sha256": "90861e40d74d38d423f62950f44bd3a43d1b39bc332c5fec273a157226356c68"
+    },
+    "binaries": [
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-ownership-inference/target/debug/cargo-prusti",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-03-silicon/bin/cargo-prusti",
+        "sha256": "8f66df5ba7bb6b917af493c97795d6e3a7bdab946d1cfd5f6a9f388a3b1ca8db"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-ownership-inference/target/debug/prusti-driver",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-03-silicon/bin/prusti-driver",
+        "sha256": "99d8dc79cc42655e10ee52572ba9e51c004c2b84ea76ea8fa8b5457a1468a48c"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-ownership-inference/target/debug/prusti-rustc",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-03-silicon/bin/prusti-rustc",
+        "sha256": "368698d003a25cec58124dd9a2dc7a9960652c907109446dff82fda213344f99"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-ownership-inference/target/debug/prusti-server",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-03-silicon/bin/prusti-server",
+        "sha256": "84ed0e8a56f7281f9c7a7d56c5ebc982f9ae4f8f7ba9e49d328bc99d3028e45a"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-ownership-inference/target/debug/prusti-server-driver",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-03-silicon/bin/prusti-server-driver",
+        "sha256": "1f9bf738c27a7c9e412aa99a2a2561d36d30d5698a6bdb2677d225714126b752"
+      },
+      {
+        "path": "/home/will/wk/exp/prusti-stdlib-ownership-inference/target/debug/prusti-smt-solver",
+        "frozen": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-03-silicon/bin/prusti-smt-solver",
+        "sha256": "05606fc6776049ec09a6ac292c6f5a245f88ff24a13c2b40b8003419d01a4d97"
+      }
+    ],
+    "tools": {
+      "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-03-silicon/tools.json",
+      "sha256": "670629635577b8946dd87892ae4fe71785f8de0c60efed80eac3b0b880f679b5"
+    },
+    "settings": {
+      "backend": "Silicon",
+      "workers": 1,
+      "program_timeout": 90,
+      "command_timeout": 300,
+      "cache": false,
+      "check_overflows": true,
+      "check_panics": true,
+      "resource_mode_override": false,
+      "checked_scalar_loans": true,
+      "branch_parallelism": null,
+      "environment": {
+        "RUSTUP_TOOLCHAIN": "nightly-2026-08-15",
+        "JAVA_HOME": "/home/will/.local/share/mise/installs/java/openjdk-21.0.2",
+        "VIPER_HOME": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-03-silicon/tools/backends",
+        "Z3_EXE": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-03-silicon/tools/z3/bin/z3",
+        "CARGO_BUILD_JOBS": "8"
+      }
+    },
+    "matched": 454,
+    "expected": 454,
+    "suites": {
+      "borrow": {
+        "matched": 167,
+        "expected": 167,
+        "seconds": 1463.8590635199798,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-03-silicon/suite-logs/borrow/results.json",
+          "sha256": "4deead6ecb860ba8f84d4b483e2ca1df3c415f55bc5582e82328fcd89d55f803"
+        }
+      },
+      "extern": {
+        "matched": 97,
+        "expected": 97,
+        "seconds": 421.79642990100547,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-03-silicon/suite-logs/extern/results.json",
+          "sha256": "57edc1e29a15b22b338e021f4b83df427241cd0693ed18c94cf1286d85f5ae92"
+        }
+      },
+      "sequence": {
+        "matched": 22,
+        "expected": 22,
+        "seconds": 93.88974046398653,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-03-silicon/suite-logs/sequence/results.json",
+          "sha256": "0e843cfa32fa5df680cb86295bb6927e1d399c0377a639a1b8c4db4c83d0145d"
+        }
+      },
+      "vec": {
+        "matched": 21,
+        "expected": 21,
+        "seconds": 123.74423198102158,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-03-silicon/suite-logs/vec/results.json",
+          "sha256": "1ad73ebeddb50f7a4d4c12907b324be80b98dce25d6873fa3cfe3280d70bad63"
+        }
+      },
+      "collections": {
+        "matched": 27,
+        "expected": 27,
+        "seconds": 258.1676272309851,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-03-silicon/suite-logs/collections/results.json",
+          "sha256": "05fcf0cafcaaa00c8c27cdaf874a9eac2c9e0a65388672a0889090fa9404cd87"
+        }
+      },
+      "iterator": {
+        "matched": 69,
+        "expected": 69,
+        "seconds": 454.09843509597704,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-03-silicon/suite-logs/iterator/results.json",
+          "sha256": "fa4061a087fe361454f08b0adf887ac0f31e51fb4e1af00f0b318a6fb7124e52"
+        }
+      },
+      "hash": {
+        "matched": 51,
+        "expected": 51,
+        "seconds": 364.29919503000565,
+        "per_case": {
+          "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-03-silicon/suite-logs/hash/results.json",
+          "sha256": "0be8421d43ae70494bc152c967bdc92cfb1bb2dfccf4d30dd52c7ecb720fbbe6"
+        }
+      }
+    },
+    "suite_seconds": 3179.854723222961,
+    "focused": {
+      "matched": 70,
+      "expected": 70,
+      "expected_cases": {
+        "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-03-silicon/audit-cases.json",
+        "sha256": "43a7b34ec07d0053a847b58d4c7ef8fb328761b6d439b453f24685b88efd775a"
+      },
+      "results": {
+        "path": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-gate-03-silicon/audit/results.json",
+        "sha256": "9e351eb3964faaab562f167acdbf31670cb58058f5107ea78a1b39a2c367b76e"
+      },
+      "subset_of_matrix": true
+    },
+    "specification_unit_tests": 36,
+    "preservation": {
+      "source_unchanged": true,
+      "binary_unchanged": true,
+      "pending_main_unchanged": true
+    },
+    "material_timing_increases": [],
+    "timing_comparison": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/../stdlib-ownership-inference-20261114/repairs/08-final-silicon",
+    "unresolved": {
+      "wrong_diagnostic": 0,
+      "verification_failure": 0,
+      "timeout": 0,
+      "skipped": 0,
+      "untested": 0,
+      "unexpected_acceptance": 0
+    }
+  },
+  "original_restoration_inventory": "790 clients / 2198 checks remains unqualified",
+  "stop_before": "D1-D6",
+  "scheduled_automation": false,
+  "continuation_unit_tests": 1,
+  "scope": [
+    "Checked scalar and reference-slot resource transfers with persistent acyclic loan identities and child/parent resolution.",
+    "Local and escaped reference replacement preserves the original and replacement owners.",
+    "Checked selected array-element split/join records preserve generic, reference-containing and zero-sized value/frame controls.",
+    "Existing call continuations retain original wand applications; scoped expiry observations are rechecked only after application.",
+    "Pending observations are not ambient future assumptions. Packages, loops and arbitrary retained yields remain outside the new local rules."
+  ],
+  "trusted_boundary": "Existing Rust-to-heap representation, generic conversion and collection split/join contracts remain trusted translation. This gate validates native obligations and controls, not a machine-checked metatheorem.",
+  "structure": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-summary-structure.json",
+  "provenance_review": "/home/will/wk/exp/prusti-stdlib/target/stdlib-ownership-core-r2/continuation-provenance-review.json",
+  "performance_note": "No material per-case slowdown under the fixed >2x and +10s criterion against the prior same-backend checkpoints. Added checks increase proof size; no speedup is claimed."
+}

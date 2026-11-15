@@ -9,7 +9,7 @@ the final 790-client / 2198-check inventory. Stop before D1–D6; no automation.
 | Deliverable | Current status | Required result |
 |---|---|---|
 | I1: count-loop inference | Qualified b30c4156f: 568/568 Ferrum; 10/10 focused both backends | Contract-only generic count; overflow checked; wrong variants rejected |
-| O1: bounded mutable-loop ownership | Native tail prerequisite exposed premature next restoration; investigation | Manual value invariants; checked split/update/join/drop; bounded backedge state |
+| O1: bounded mutable-loop ownership | Resource-only native loop 3/3; prerequisite regression running; value summary pending | Manual value invariants; checked split/update/join/drop; bounded backedge state |
 | C1: combine inference and summary | Not started | Infer value invariants with identical ownership obligations |
 | H1: original difficult prefix | Unqualified | Original assertions and exact negative; repeated native/CLI measurements |
 | Final restoration qualification | Unqualified | Complete same-source Ferrum/Silicon matrix and library verification |
@@ -166,13 +166,30 @@ receive no inferred summary. Manual invariants remain supported. The configurati
 measurements. Inference errors or unknown results grant no fact. Full Rust checks
 independently discharge all inserted invariants.
 
-O1's separate constructor/drop control passes. The first `next` loses yielded
-permissions before use: the emitted continuation applies its restoration wand
-while the yielded reference remains live. The PCG removal shown is an argument
-identity edge, while the applied wand also consumes the yielded result. The exact
-cause in call-shape construction/selection is still under investigation. Preserve
-all seven initial failures and the three isolation results; no bounded mutable
-summary or performance improvement is claimed.
+O1 remains independent on `stdlib/ownership-prefix-r3`. Thirteen straight-line
+native controls pass, including repeated yields, retained yields, early drop,
+exhaustion and exact stale/false negatives. Three resource-only loop controls
+also pass after retaining singleton restoration edges, framing the source's
+reference slot, preserving the PCG projection's pre-call tail, and explicitly
+importing a continuation's checked antecedent before applying it inside a package.
+A minimal Viper positive/negative pair diagnoses that last transfer rule; native
+Rust verification is the acceptance evidence. No permission is granted by the
+immutable value model, and no required assertion is removed.
+
+The PCG prerequisites resolve established region unifications after associated-
+type normalization and preserve historical post-call projections when a moved
+argument's storage expires. Empty shared-reference enum resources no longer
+produce a conditional empty wand. The previously passing iterator library and
+wrong-source diagnostic recovered after that representation repair.
+
+Artifacts are under `target/stdlib-inference-summary-20261115/` in the preserved
+main worktree: `o1-history-regression-01`, `o1-loop-history-native-01`, and the
+small `o1-loop-history-model-01` reproducer. The complete affected Ferrum gate
+`o1-native-gate-02` is in progress (596 required suite checks; 172 focused controls,
+not an additive total). These changes are not integrated or qualified yet. The
+manual bounded prefix/suffix value summary, inference combination, H1 and final
+combined matrix remain pending. The next ownership milestone must demonstrate
+bounded backedge state and functional guarantees, not merely more passing cases.
 
 The integration worktree rebuilt compiler `b30c4156f` independently, retained the
 same complete source manifest as the experiment, and repeated exact suite coverage

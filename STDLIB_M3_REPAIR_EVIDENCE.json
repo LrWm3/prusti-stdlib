@@ -888,5 +888,7 @@
       ]
     }
   ],
-  "checkpoint_complete": false
+  "checkpoint_complete": true,
+  "qualified_source_revision": "2c5484c004ba5051ab7856f2c5938c33b05081e0",
+  "final_qualification": "STDLIB_M3_QUALIFICATION.json"
 }

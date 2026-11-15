@@ -4,7 +4,7 @@
   "adapter_through": "a59ed917c",
   "ferrum_revision": "931a2d55831ca3dffc34444e8ff0f88750f20bbc",
   "pcg_revision": "e54bf675468d44c5e3c0d0e2eca6b7e837e11270",
-  "status": "native compatibility qualified; final own-branch dual-backend baseline qualification pending",
+  "status": "R1a/R1b qualified on both backends from identical own-branch source and binaries; stopped before R2",
   "unit_tests": {
     "adapter": 18,
     "server": 10,
@@ -160,5 +160,7 @@
       "sha256": "8faa6ca7163c092b8406913acd92c81278fc443bc0bd5bacc1a9ee0372d05233"
     }
   ],
-  "checkpoint_complete": false
+  "checkpoint_complete": true,
+  "qualified_source_revision": "2c5484c004ba5051ab7856f2c5938c33b05081e0",
+  "final_qualification": "STDLIB_M3_QUALIFICATION.json"
 }

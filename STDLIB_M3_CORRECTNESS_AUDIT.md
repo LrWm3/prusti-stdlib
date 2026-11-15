@@ -6,20 +6,22 @@ main or of the 790-client restoration inventory. The selected compiler is
 The independently rebuilt source and binary records are preserved alongside this
 report. Historical evidence is kept separately from the new results.
 
-## R1a update
+## Accepted repaired baseline
 
-The repaired baseline through `844b93b71` passes every unchanged original audit
-control (15/15), plus seven focused controls added during repair (22/22 total).
-Its complete seven-family gate passes 387/387, with 36 specification unit tests.
-See [the repair evidence](STDLIB_M3_REPAIR_EVIDENCE.json). The R0 results below
-remain historical evidence for rejecting M3 unchanged; they are not current failures.
-The later no-glue drop implementation was unnecessary for its passing controls.
+The final source `2c5484c004ba5051ab7856f2c5938c33b05081e0` is qualified on
+Ferrum and Silicon: each matches 387/387 checks and every unchanged original audit
+control (15/15), with 22/22 focused controls overall. The compiler was rebuilt from
+the integration branch; the two runs share source manifests and six binary hashes.
+See [final qualification](STDLIB_M3_QUALIFICATION.json) and
+[repair evidence](STDLIB_M3_REPAIR_EVIDENCE.json). The R0 results below remain
+historical evidence for rejecting M3 unchanged; they are not current failures.
 
 The failed-call propagation change `3b9208f05` remains an explicit migration audit
-item: no standalone reproducer or demonstrated failure in the fixed baseline gate
-has been established. Broader restoration and unsupported features remain outside
-this checkpoint. Ferrum compatibility and final dual-backend qualification remain
-required before calling the first baseline checkpoint complete.
+item: no standalone reproducer or demonstrated failure in this fixed baseline gate
+has been established. The later no-glue drop implementation was unnecessary for
+its passing controls. Broader restoration, unsupported features and the complete
+790-client target remain outside this qualified checkpoint. Work is stopped before
+R2 and D1–D6, with no automation scheduled.
 
 ## Scope
 

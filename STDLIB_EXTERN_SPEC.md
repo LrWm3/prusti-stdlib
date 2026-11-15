@@ -30,15 +30,12 @@ implementation, or unsafe internals of the standard library.
 
 ## Ownership summaries and inference experiment (2026-11-14)
 
-**Phase boundary.** Work on `stdlib/ownership-inference-m3` in the isolated
-`prusti-stdlib-ownership-inference` worktree. The user has authorized repairing
-M3 and proceeding to the first usable baseline checkpoint: complete R1a and R1b,
-then report before R2. Require all fifteen audit controls, the affected historical
-suites, own-branch builds and dual-backend qualification on the final baseline.
-Keep the original M3 reproduction as a frozen comparison; it is not qualified
-for adoption unchanged. The current main tree, six pending encoder files, frozen H1
-compiler and proof inputs remain preserved. No architecture change is accepted
-merely because an earlier suite passed.
+**Phase boundary.** R1a and R1b are complete on `stdlib/ownership-inference-m3`.
+The accepted source is `2c5484c004ba5051ab7856f2c5938c33b05081e0`; the final
+own-branch rebuild and both backend gates use that exact revision. Work is stopped
+before R2, at the user's requested first checkpoint. No automation is scheduled.
+The original M3 reproduction remains a frozen comparison, and the main tree's six
+pending encoder files, frozen H1 compiler and proof inputs remain preserved.
 
 The hypothesis is that supplying checked resource correspondence and composing
 restoration summaries will reduce repeated permission search while preserving
@@ -50,38 +47,67 @@ prove that a rewrite is necessary. Resource units are not calibrated millisecond
 |---|---|---|
 | R0: reproduce and audit M3 | Rebuild `be1364c7c` with PCG `e54bf675468d`, original Rust/Java/Viper/Z3 settings; run complete historical hash, extern, iterator and borrow gates, specification unit tests, and audit later correctness changes and controls. Freeze source, binaries, exact coverage, settings and results. | Reproduction/audit complete; adoption blocked by incorrect acceptance |
 | R1a: baseline correctness imports | Backport audited correctness repairs individually and qualify all fifteen controls and affected historical families. | Complete at `844b93b71`: 387/387 suite checks, 22/22 focused controls including the original audit 15/15, 36 unit tests |
-| R1b: Ferrum compatibility | Import the adapter and necessary compatibility changes individually; pin the backend and printer correction; rebuild this branch and qualify the corrected baseline on both backends. Keep compatibility separate from ownership changes. | Native compatibility integrated at `08c842e03`: 387/387 checks, 22/22 controls, 62 adapter/VIR/JVM tests; final own-branch dual gate pending |
+| R1b: Ferrum compatibility | Import the adapter and necessary compatibility changes individually; pin the backend and printer correction; rebuild this branch and qualify the corrected baseline on both backends. | Complete at `2c5484c00`: Ferrum and Silicon each match 387/387 checks and 22/22 focused controls; source and six compiler binary hashes identical |
 | R2: checked ownership and prophecy core | Specify and implement local transfer rules for scalar mutation, reborrowing, reference replacement and one selected element, with manually supplied value relations. Establish the soundness boundary and native positive/negative proofs. | Not started |
 | R3: original difficult proof | Verify unchanged `mut_native_resource_early_pass` and its exact false control, plus targeted wrong-prefix/wrong-suffix, replacement, generic/non-Copy and zero-sized controls. Compare old encoding and explicit summaries with the same value invariants. | Not started |
 | R4: bounded value inference | Add equality/bounds propagation and a small Houdini-style candidate language over immutable values; recheck inferred entry/preservation/use obligations. Add CHC/Spacer only for a concrete required relation the simpler layer cannot infer. | Not started |
 | R5: restore and qualify | Restore newer families incrementally against the unchanged 790-client/2,198-check inventory; freeze final source, rebuild and run complete Ferrum/Silicon matrices. Commit/push qualified changes and stop before D1-D6. | Not started |
 
-### R1 progress
+### First checkpoint accepted
 
-R1a is complete at `844b93b71`. The combined repaired M3 source passes 387/387
-checks across seven historical stdlib families, 22/22 cumulative focused controls,
-and 36 specification unit tests on Silicon. Every original audit case matches
-(15/15), using its unchanged source and intended diagnostic. All seven libraries
-verify. Source, binary and pending-main preservation checks pass; the integrated
-compiler source matches the tested experiment byte for byte.
+The combined implementation is qualified at `2c5484c00`, with PCG `e54bf675468d`
+and Ferrum `931a2d5` (the boolean-printer correction atop `0e048a4`). Both backends
+were rebuilt from this integration branch. Ferrum and Silicon each match all
+**387/387 suite checks**, covering **285 Rust clients**, eight library checks,
+eight Rust compilation checks, 84 runtime checks and two generated-trigger checks.
+All **22/22 focused controls** match on each backend, including the original
+unchanged **15/15 audit controls**. These focused repeats are a subset of the suite
+clients, not additional unique coverage. There are no timeouts, skips, unexpected
+acceptances, wrong diagnostics, or unresolved verification failures in this gate.
 
-Repairs cover entry-state/trigger captures, expiry scope, inferred lifetimes,
-nested loan footprint capture and retained permissions, mutable-read diagnostics,
-and quantified expiry heaps. The no-glue drop controls still pass without importing
-the later drop optimization. No material timing increase remains in the last gate;
-prior outliers and controlled repeats are preserved in
-[the repair record](STDLIB_M3_REPAIR_EVIDENCE.json).
+Coverage per backend is borrow 100, extern 97, sequence 22, vec 21, collections 27,
+iterator 69 and hash 51. The 36 specification unit tests pass. The separately
+qualified compatibility tests comprise 18 adapter, 10 server, 29 VIR, one SMT
+cleanup and four JVM opacity/invalid-program tests. The final source manifests
+(2,362 Prusti files and 1,497 PCG files) and all six compiler binary hashes match
+between backends; the 872-file Ferrum source and toolchain hashes also check out.
+Exact expectations, per-case results, timings and artifact hashes are in
+[the final qualification](STDLIB_M3_QUALIFICATION.json).
 
-R1b now imports the tested Ferrum adapter separately, preserving map operand order,
-checked opacity/reveal support and the printer correction. Pin Ferrum `931a2d5`
-(the boolean printer fix atop `0e048a4`), rebuild the integration branch itself,
-and qualify the same baseline on both backends with one worker and Ferrum branch
-parallelism off. The adapter is integrated at `08c842e03` after a native 387/387 gate, 22/22 focused
-controls and 62 adapter/server/VIR/JVM tests. The isolated build needed the
-`SilFrontend.errors` JNI binding and omission of a conversion arm for the absent
-M3 `PredicatePerm` variant. No ownership encoder or PCG change was included.
-See [backend evidence](STDLIB_M3_BACKEND_EVIDENCE.json). The final own-branch
-Ferrum/Silicon gate is next; R1b remains incomplete until it finishes. Stop before R2.
+The repairs preserve entry snapshots and quantifier-trigger captures; restrict
+expiry observations to pledges; preserve inferred lifetimes when normalization is
+unnecessary; capture nested loan targets at entry/call-return states and return
+retained permissions through checked postconditions; map mutable-read permission
+errors; and retain the correct heap context in quantified expiry pledges. The
+existing no-glue drop controls pass without importing its later optimization.
+Failed intermediate candidates and the discriminating ownership-model reviews are
+preserved in [the repair record](STDLIB_M3_REPAIR_EVIDENCE.json).
+
+The adapter through `a59ed917c` includes the map-operand correction and checked
+opacity/reveal support. The M3 import adds the JVM error binding and omits the
+conversion arm for the `PredicatePerm` variant that does not exist in M3. The
+compatibility step changes neither the repaired ownership encoder nor PCG. See
+[the backend record](STDLIB_M3_BACKEND_EVIDENCE.json).
+
+With one verifier worker, cache disabled, overflow/panic checks enabled and Ferrum
+branch parallelism off, the complete suite runs took **552.54s Ferrum** and
+**2,459.71s Silicon**: Ferrum was **4.45 times faster** in this paired observation.
+These totals include Cargo, library, runtime and structural checks, but exclude
+compiler builds and focused repetitions. They are not isolated solver benchmarks.
+The historical 90s program and 300s command limits remained unchanged; no larger
+diagnostic allowance was used for qualification. No material timing regression
+remains against the preceding comparable candidates. Earlier transient increases
+and controlled repeats remain in the evidence.
+
+This is the narrower repaired M3 baseline. Seventeen client checks deliberately
+expect unsupported-feature diagnostics; they establish rejection, not support.
+The historical `mut_wrong_owner` case still rejects a true restoration assertion,
+and remains an incompleteness control. The separate failed-call propagation audit
+item `3b9208f05` has no established standalone reproducer in this gate and remains
+explicit for later migration. Trusted external implementations and reviewed hash
+model laws remain assumptions. The 790-client/2,198-check restoration target is
+still unqualified. R2 ownership/prophecy work, difficult-prefix proofs and inference
+have not begun. **Stop here before R2 and D1–D6; do not schedule automation.**
 
 ### R0 result: reproduced, but not qualified for adoption
 

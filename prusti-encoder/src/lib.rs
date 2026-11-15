@@ -114,6 +114,7 @@ pub fn test_entrypoint<'tcx>(
     GArgsCastEnc::<Impure>::emit_outputs(&mut program);
 
     program.header("snapshots");
+    crate::encoders::ty::resource_observation::ResourceStateEnc::emit_outputs(&mut program);
     crate::encoders::TyUsePureEnc::emit_outputs(&mut program);
     BitVecEnc::emit_outputs(&mut program);
     FloatBitVecConvEnc::emit_outputs(&mut program);

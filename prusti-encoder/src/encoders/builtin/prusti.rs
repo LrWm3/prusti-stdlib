@@ -140,6 +140,7 @@ pub enum PrustiBuiltin {
     SnapClone,
     MutSliceLen,
     MutSliceContents,
+    ResourceState,
     Seq(SeqOp),
     /// An operation on `Set` (`multiset: false`) or `Multiset` (`true`).
     AnySet {
@@ -155,7 +156,7 @@ pub enum PrustiBuiltin {
 impl PrustiBuiltin {
     /// Whether the operation reads beyond its captured operand snapshots.
     pub fn reads_heap(self) -> bool {
-        matches!(self, Self::MutSliceContents)
+        matches!(self, Self::MutSliceContents | Self::ResourceState)
     }
 
     /// Classifies the call to `def_id`. Returns `None` iff the called function
@@ -246,6 +247,7 @@ impl PrustiBuiltin {
                     "ghost_erased" => Self::Ghost(GhostOp::Erased),
                     "mut_slice_len" => Self::MutSliceLen,
                     "mut_slice_contents" => Self::MutSliceContents,
+                    "resource_state" => Self::ResourceState,
                     "old_start" => Self::Spec(SpecBuiltin::ModeStart(Mode::Old)),
                     "old_end" => Self::Spec(SpecBuiltin::ModeEnd(Mode::Old)),
                     "rel_start" => Self::Spec(SpecBuiltin::ModeStart(Mode::Rel(rel_index()))),
@@ -312,7 +314,7 @@ impl PrustiBuiltin {
     /// These are forbidden in impure code, and should return an error.
     pub fn is_spec_only(&self) -> bool {
         match self {
-            Self::Spec(_) | Self::SnapEq | Self::SnapNe => true,
+            Self::Spec(_) | Self::SnapEq | Self::SnapNe | Self::ResourceState => true,
             // `Call`/`Erased` are legitimate only inside a `ghost!` block's
             // dead arm, which is exempt from the spec-only rejection: a stray
             // executable `ghost_call` (i.e. not from a `ghost!` block) would
@@ -556,6 +558,25 @@ impl PrustiBuiltinEnc {
                 ctxt.native_cmp(bin_op, lhs, rhs).upcast_ty()
             }
             PrustiBuiltin::SnapClone => ctxt.deref_operand(0)?,
+            PrustiBuiltin::ResourceState => {
+                if let Some(span) = ctxt.span {
+                    ctxt.handle_partial_op_error(
+                        "application.precondition:insufficient.permission",
+                        "insufficient permission to observe resource state",
+                        span,
+                    );
+                }
+                let ty = RustTyDecomposition::from_ty(
+                    BuiltinCtxt::deref(ctxt.sig.inputs()[0]),
+                    ctxt.args.context(),
+                );
+                let snapshot = ctxt.deref_operand(0)?;
+                let metadata = super::super::ty::resource_observation::unit_metadata(ctxt.deps)?;
+                super::super::ty::resource_observation::observe(
+                    ctxt.deps, ty, snapshot, metadata.lazy(),
+                )?
+                .upcast_ty()
+            }
             PrustiBuiltin::MutSliceLen => {
                 let slice = ctxt.deref_operand::<vir::CSnap>(0)?;
                 ctxt.e_input_deref(0)?

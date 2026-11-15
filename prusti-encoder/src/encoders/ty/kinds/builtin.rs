@@ -12,6 +12,7 @@ pub(crate) fn ty_pure<'vir>(
     match data {
         // Represented directly by the native Viper `Int`/`Perm`/collection
         // types (see `TyPureBuilder::new`); there is nothing to emit.
+        RustBuiltinData::ResourceState => Ok(TyPureBuiltinData::ResourceState),
         RustBuiltinData::Int => Ok(TyPureBuiltinData::Int),
         RustBuiltinData::Real => Ok(TyPureBuiltinData::Real),
         RustBuiltinData::Set(_) => Ok(TyPureBuiltinData::Set),
@@ -27,7 +28,8 @@ pub(crate) fn ty_impure<'vir>(
     builder: &mut impure::PredicateBuilder<'vir>,
 ) -> Result<impure::TyImpureBuiltin<'vir>, EncodeFullError<'vir, impure::TyImpureEnc>> {
     match data.0 {
-        RustBuiltinData::Int
+        RustBuiltinData::ResourceState
+        | RustBuiltinData::Int
         | RustBuiltinData::Real
         | RustBuiltinData::Set(_)
         | RustBuiltinData::Multiset(_)

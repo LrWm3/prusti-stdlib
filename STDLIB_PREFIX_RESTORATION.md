@@ -133,3 +133,31 @@ binder-scope test. Integration suite time is 703.00s with no material per-case
 slowdown. See [slice observation evidence](STDLIB_SLICE_OBSERVATION_EVIDENCE.json).
 The original prefix pair remains unqualified; next specify and qualify direct
 referent-state observations before indexed states and iterator summaries.
+
+## Direct referent-state observations: model before implementation
+
+Freeze the five original `mut_resource_state_*` clients: equal/different scalar
+states, a false unchanged-state postcondition, missing permission for an opaque
+value, and executable misuse. The initial rule observes values only; it neither
+creates nor transfers a loan or resource.
+
+For a mutable-reference snapshot `r`, its address/metadata identify the physical
+target. Read the target's current generic snapshot only through its existing
+predicate, then construct `Reference(stored_value, nested_state)`. Equal target
+values produce equal states even at different addresses. Replacing a reference
+slot does not redirect a previously captured state. Entry and expiry observations
+use the same explicit heap selection already qualified for slice contents.
+Known resource-free primitive/shared-reference/raw-pointer values have empty
+indirect state. Their own stored value is included only when reached through an
+owning mutable reference. Do not infer emptiness for generic or opaque values,
+arrays, recursive structures or unknown ownership wrappers.
+
+For those unsupported structural groups, observation requires a separate opaque
+resource predicate indexed by snapshot, type and metadata. This increment emits
+no operation that grants that predicate. It therefore rejects the original
+generic missing-permission control conservatively; it does not claim generic
+resource transfer support. Finite field/enum composition and indexed collection
+states will require their own checked rules and native controls. The state domain
+contains immutable logical values and grants no heap access. Preserve the actual
+physical predicate reads, all original negative diagnostics and executable-use
+rejection. No physical-address injectivity or future-value assumption is added.

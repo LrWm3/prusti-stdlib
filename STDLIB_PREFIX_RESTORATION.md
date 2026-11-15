@@ -396,3 +396,68 @@ R3 remains open. Next restore explicit call-return snapshot capture for expiry
 pledges, then the minimal native mutable-iterator model and checked prefix summary.
 The original difficult prefix pair, generic restoration, inference and full
 790-client/2198-check matrix remain unqualified. Stop before D1–D6.
+
+## Call-return capture before iterator restoration
+
+The fixed native target is seven unchanged after_call controls from c2631cfb0.
+Use the original limits and exact negative diagnostics. Baseline evidence is
+required before any repair. The logical IterMut tail observation depends on this
+distinction between entry, post-call and expiry states.
+
+Physical resources remain the holder's actual predicate and its referent loan.
+H0 captures count=1 and the original target. H1 is the callee return heap, where
+count=7. The caller may subsequently change count to 9 or move the holder. An
+after_call read must denote H1 throughout the delayed pledge, not the heap where
+the pledge is eventually applied. The observation grants no permission at H2.
+
+At the call, materialize each required post-call read while its actual permission
+is available; bind its immutable value in the obligation. The saved heap label
+and SnapshotBindings connect these reads to the call output and retained target.
+When the returned loan expires, consume the existing wand and discharge the
+original pledge using that bound value. In a callee package, check the pledge
+against its own return label. Existing old/expiry binders remain distinct.
+
+Hypothesis: backport the narrow explicit PostCapture from 358c34d50 while retaining
+the restart branch's already qualified entry, quantifier and nested-wand rules.
+Reject after_call outside pledge RHS and within another temporal mode. Preserve
+all current transfer, frame and pledge assertions. Native move/wrong-capture/false
+controls must distinguish immutable call-return state from current mutable state.
+No new permission, address injectivity, or assertion-free restoration is allowed.
+
+The narrow backport matches all seven original native controls in
+`after-call-focused-01`. It retains the restart branch's existing entry/expiry
+closure contexts and nested-wand rules. Six new controls distinguish a captured
+return value 7 from a live loan subsequently changed to 9, reject false captures
+and restored values, and enforce the quantified-capture boundary. Materialized
+snapshots live outside quantifier scope; this increment therefore rejects both
+quantifiers inside after_call and after_call inside quantified closures. It does
+not permit a snapshot binding with an escaped quantifier variable. Full affected
+regression and feature qualification are still required.
+
+The expanded gate initially matches 9/13. All four new escaping-scalar controls
+fail the capture's permission check in the function contract: the return heap
+owns the result target, while the capture reads the input target. Add and prove
+the same input/output reference-snapshot identity postcondition in each helper.
+The positive visit also needs its value==9 postcondition for its ordinary runtime
+caller. These are stronger checked guarantees; all capture/final assertions and
+original clients remain unchanged. See `after-call-scalar-review.json`.
+
+The stronger identity contract alone still fails: generated wand postconditions
+precede ordinary postconditions, so their snapshot reads are checked before the
+identity fact. Model review preserved both attempts. The next diagnostic changes
+only capture through input to capture through result in copied native fixtures;
+both positive and exact wrong-pledge control pass. This isolates contract order
+from missing physical ownership at return.
+
+The repair keeps direct and indirect output resources first, then checks ordinary
+postconditions, then the unchanged captured-wand postconditions. Dependency
+encoding order is retained. The identity is still proved, every original wand
+and assertion remains, and no target permission is manufactured. Qualification
+must use the fixed native input-capture clients, not the diagnostic variants.
+
+`after-call-extended-03` matches all 13 native controls, including the original
+input-target captures with their proved identity guarantee. Captured 7 and final
+9 remain distinct; wrong capture, false, and stale-final controls reject at the
+intended locations. This is focused evidence. Run every affected earlier family
+before integration, because contract ordering and pledge reification are shared
+encoder paths.

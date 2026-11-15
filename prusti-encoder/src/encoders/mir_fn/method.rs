@@ -244,7 +244,7 @@ impl TaskEncoder for MethodEnc {
             // ..
             pres.extend(wands.indirect_pres(vcx, &arg_defs, deps));
             posts.extend(wands.indirect_posts(vcx, &arg_defs, deps));
-            posts.extend(wands.wand_posts(vcx, &arg_defs, deps));
+            let wand_posts = wands.wand_posts(vcx, &arg_defs, deps).collect::<Vec<_>>();
 
             // Trusted functions, call stubs, external functions and trait
             // functions without a default implementation have no body to
@@ -374,9 +374,14 @@ impl TaskEncoder for MethodEnc {
                 None
             };
 
-            // Add functional specification as the last pre- and postconditions.
+            // Establish functional specifications before captured expiry pledges.
             pres.extend(spec.pre_exprs());
             posts.extend(spec.post_exprs());
+            // A delayed pledge may capture a post-call read through an input
+            // target. Establish the checked functional facts (for example,
+            // input/result reference identity) before checking that capture's
+            // permission. Direct and indirect output resources still come first.
+            posts.extend(wand_posts);
 
             Ok((
                 MethodEncOutput {

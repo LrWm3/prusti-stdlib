@@ -2169,6 +2169,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     context: self.def_id,
                     mode: MirSpecEncMode::Impure,
                     allow_before_expiry: true,
+                    allow_after_call: true,
                 },
             })?;
             result.push(PledgeExpr::new(id, spec.expr.downcast_ty::<vir::Bool>()));
@@ -2736,7 +2737,12 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             .expr
             .reify(
                 self.vcx,
-                (self.def_id, self.vcx.alloc(locals), vir::OldLabel::None),
+                (
+                    self.def_id,
+                    self.vcx.alloc(locals),
+                    vir::OldLabel::None,
+                    None,
+                ),
             )
             .downcast_ty();
         let expr = if place_capabilities.is_none()
@@ -3514,12 +3520,13 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                                         context: self.def_id,
                                         mode: MirSpecEncMode::Impure,
                                         allow_before_expiry: false,
+                                        allow_after_call: false,
                                     },
                                 })?;
-                                let expr = spec
-                                    .expr
-                                    .downcast_ty::<vir::Bool>()
-                                    .reify(vcx, (post, spec_args, vir::OldLabel::Label(label_pre)));
+                                let expr = spec.expr.downcast_ty::<vir::Bool>().reify(
+                                    vcx,
+                                    (post, spec_args, vir::OldLabel::Label(label_pre), None),
+                                );
                                 self.stmt(vcx.mk_inhale_stmt(expr));
                             }
                         }

@@ -1191,6 +1191,12 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         for wand in wands {
                             if let Some(footprint) = &mut footprint {
                                 footprint.parts.push(self.vcx.mk_wand_expr(wand));
+                                // A package can import resources from its outer
+                                // heap during consumption. Import the checked
+                                // antecedent before applying this continuation,
+                                // so its old[lhs] observations include all of
+                                // the resources whose expiry it describes.
+                                self.stmt(self.vcx.mk_assert_stmt(wand.lhs));
                             }
                             if footprint.is_none()
                                 && config::checked_scalar_loans()

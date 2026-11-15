@@ -1,15 +1,18 @@
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use pcg::{
-    borrow_pcg::region_projection::{
-        ExtractRegionsCtxt, LifetimeProjection, PcgLifetimeProjectionBase,
-        PcgLifetimeProjectionBaseLike,
+    borrow_pcg::{
+        edge::{abstraction::AbstractionEdge, kind::BorrowPcgEdgeKind},
+        region_projection::{
+            ExtractRegionsCtxt, LifetimeProjection, LifetimeProjectionLabel,
+            PcgLifetimeProjectionBase, PcgLifetimeProjectionBaseLike,
+        },
     },
     r#loop::PlaceUsages,
     pcg::{CapabilityKind, EvalStmtPhase, PcgNode},
     results::PcgBasicBlock,
     utils::{
-        HasCompilerCtxt, HasPlace, Place, maybe_old::MaybeLabelledPlace,
+        HasCompilerCtxt, HasPlace, Place, SnapshotLocation, maybe_old::MaybeLabelledPlace,
         maybe_remote::MaybeRemotePlace,
     },
 };
@@ -56,6 +59,55 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         let state = &start.states[EvalStmtPhase::PreOperands];
         let mut loop_invariant_place_capabilities =
             cfpcs.loop_invariant_place_capabilities(loop_place_usages, ctxt);
+        // PCG leaves a one-source/one-target loop abstraction uncoupled. Its
+        // package/apply path still creates a wand, so the invariant must retain
+        // that same wand just as it does for coupled loop edges.
+        let restoration_edges = state
+            .borrow_pcg()
+            .graph()
+            .edges()
+            .filter_map(|edge| match edge.kind() {
+                BorrowPcgEdgeKind::Abstraction(edge @ AbstractionEdge::Loop(_)) => {
+                    Some(edge.clone().into_singleton_coupled_edge())
+                }
+                BorrowPcgEdgeKind::Coupled(edge) => Some(edge.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        // A restoration edge can refer to *arg even when the loop body never
+        // reads arg itself. Retain the independently owned reference slot so
+        // its address and metadata remain available to that edge. Its pointee
+        // stays inside the restoration wand: adding its indirect predicates
+        // here would incorrectly demand the borrowed owner's resources.
+        let mut reference_slots = FxHashSet::default();
+        for edge in &restoration_edges {
+            for input in edge.inputs(self.pcg_ctxt()) {
+                let PcgNode::Place(MaybeLabelledPlace::Current(place)) = *input else {
+                    continue;
+                };
+                let local = place.local;
+                if local.as_usize() == 0
+                    || local.as_usize() > self.body.arg_count
+                    || self.body.local_decls[local].mutability != Mutability::Not
+                    || !matches!(place.projection.first(), Some(mir::ProjectionElem::Deref))
+                    || !matches!(
+                        self.body.local_decls[local].ty.kind(),
+                        ty::Ref(_, _, Mutability::Mut)
+                    )
+                {
+                    continue;
+                }
+                let slot = Place::from(local);
+                if !loop_invariant_place_capabilities.contains_key(&slot)
+                    && let Some(capability) = state.computed_owned_capability(slot, self.pcg_ctxt())
+                    && !capability.is_write()
+                {
+                    loop_invariant_place_capabilities.insert(slot, capability);
+                    reference_slots.insert(slot);
+                }
+            }
+        }
 
         // The reference local can be absent from loop usages even when its
         // dereference is present. Preserve it when an invariant reads it and
@@ -89,6 +141,13 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             let ty_out = self.deps.require_dep::<TyUseImpureEnc>(task).unwrap();
             let pred = ty_out.ref_to_pred(self.vcx, place_res.expr.expect_predicate(), None);
             inv.push(pred);
+            if reference_slots.contains(place) {
+                // The argument binding is immutable. Check its stable identity
+                // as an ordinary entry/backedge invariant, without reading the
+                // borrowed pointee or assuming a value-restoration guarantee.
+                inv.push(self.vcx.mk_eq_expr(_snap, self.vcx.mk_old_expr(_snap)));
+                continue;
+            }
             // gets all the lifetime projections of the place
             // for example, if we add an invariant for x and x is a reference, then we also want to add
             // an invariant for *x
@@ -107,9 +166,9 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             }
         }
 
-        for edge in state.borrow_pcg().graph().coupled_edges() {
+        for edge in &restoration_edges {
             let mut let_bind = WandOldOuter::LetBind(Vec::new());
-            let (wand, _) = self.coupled_wand(edge.value(), &mut let_bind)?;
+            let (wand, _) = self.coupled_wand(edge, &mut let_bind)?;
             // Keep empty-edge elimination consistent with package, footprint,
             // and apply emission in pcs_handle_wand.
             if super::wand::empty_resource_wand(wand) {
@@ -163,9 +222,35 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         old_outer: &mut WandOldOuter<'vir>,
     ) -> EncodeResult<'vir, Vec<vir::ExprBool<'vir>>, E> {
         let place = r.base().to_pcg_lifetime_projection_base();
-        let (place_snap, ty, _) = match place {
+        // The projection's history is separate from the lifetime of its local
+        // storage. Advancing an iterator changes its tail while the previous
+        // loop wand still names the pre-call tail. Preserve PCG's saved view,
+        // including heap reads below mutable references in that view.
+        let heap_label = match r.label() {
+            Some(LifetimeProjectionLabel::Location(at)) => Some(self.get_location_label(at)),
+            _ => None,
+        };
+        let (place_snap, ty) = match place {
+            PcgLifetimeProjectionBase::Place(MaybeRemotePlace::Local(
+                MaybeLabelledPlace::Current(p),
+            )) if heap_label.is_some() => {
+                let (_, snap, ty, _) = self.encode_place_with_snap(p)?;
+                (self.vcx.maybe_apply_label(snap, heap_label), ty)
+            }
+            PcgLifetimeProjectionBase::Place(MaybeRemotePlace::Local(
+                MaybeLabelledPlace::Labelled(p),
+            )) if matches!(r.label(), Some(LifetimeProjectionLabel::Location(at))
+                if self.snapshot_precedes(at, p.at())) =>
+            {
+                // A later move of the local does not replace an earlier tail.
+                // If storage was moved first, preserve that saved shallow
+                // value and use the projection label for its nested heap reads.
+                let (_, snap, ty, _) = self.encode_place_with_snap(p.place())?;
+                (self.vcx.maybe_apply_label(snap, heap_label), ty)
+            }
             PcgLifetimeProjectionBase::Place(p) => {
-                self.encode_maybe_remote_place_snap(p, old_outer)?
+                let (snap, ty, _) = self.encode_maybe_remote_place_snap(p, old_outer)?;
+                (snap, ty)
             }
             PcgLifetimeProjectionBase::Const(c) => todo!("{c:?}"),
         };
@@ -177,8 +262,35 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         Ok(indirect
             .predicate_applications
             .into_iter()
-            .map(|expr| expr.reify(self.vcx, ExprInput::current(place_snap)))
+            .map(|expr| {
+                expr.reify(
+                    self.vcx,
+                    ExprInput {
+                        heap_label,
+                        ..ExprInput::current(place_snap)
+                    },
+                )
+            })
             .collect::<Vec<_>>())
+    }
+
+    fn snapshot_precedes(&self, first: SnapshotLocation, second: SnapshotLocation) -> bool {
+        if first.location().block != second.location().block {
+            return self
+                .body
+                .basic_blocks
+                .dominators()
+                .dominates(first.location().block, second.location().block);
+        }
+        // Prusti has one Before label per MIR statement, then a distinct
+        // reference-reassignment label, and After at the end of the block.
+        let point = |at: SnapshotLocation| match at {
+            SnapshotLocation::Loop(_) | SnapshotLocation::BeforeJoin(_) => (0, 0),
+            SnapshotLocation::Before(at) => (at.location().statement_index, 0),
+            SnapshotLocation::BeforeRefReassignment(at) => (at.statement_index, 1),
+            SnapshotLocation::After(_) => (usize::MAX, 0),
+        };
+        point(first) <= point(second)
     }
 
     fn get_place(place: MaybeRemotePlace<'vir>) -> Place<'vir> {

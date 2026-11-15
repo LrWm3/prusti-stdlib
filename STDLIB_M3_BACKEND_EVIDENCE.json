@@ -1,0 +1,164 @@
+{
+  "schema": 1,
+  "integration_commit": "08c842e03dd247b5cefcc48c03306fb5dc037fdb",
+  "adapter_through": "a59ed917c",
+  "ferrum_revision": "931a2d55831ca3dffc34444e8ff0f88750f20bbc",
+  "pcg_revision": "e54bf675468d44c5e3c0d0e2eca6b7e837e11270",
+  "status": "native compatibility qualified; final own-branch dual-backend baseline qualification pending",
+  "unit_tests": {
+    "adapter": 18,
+    "server": 10,
+    "vir": 29,
+    "smt_cleanup": 1,
+    "jvm_opacity_and_invalid": 4
+  },
+  "native_rust_gate": {
+    "suite_checks": 387,
+    "focused_controls": 22,
+    "original_audit_controls": 15,
+    "specification_unit_tests": 36,
+    "details": {
+      "suites": {
+        "borrow": {
+          "matched": 100,
+          "expected": 100,
+          "seconds": 236.46,
+          "longest": {
+            "case": "frame_pass",
+            "passed": true,
+            "seconds": 13.48
+          }
+        },
+        "collections": {
+          "matched": 27,
+          "expected": 27,
+          "seconds": 76.21,
+          "longest": {
+            "case": "boundaries_pass",
+            "passed": true,
+            "seconds": 21.96
+          }
+        },
+        "extern": {
+          "matched": 97,
+          "expected": 97,
+          "seconds": 65.74,
+          "longest": {
+            "case": "core-only",
+            "passed": true,
+            "seconds": 5.28
+          }
+        },
+        "hash": {
+          "matched": 51,
+          "expected": 51,
+          "seconds": 72.78,
+          "longest": {
+            "case": "spec-library",
+            "passed": true,
+            "seconds": 10.55
+          }
+        },
+        "iterator": {
+          "matched": 69,
+          "expected": 69,
+          "seconds": 93.79,
+          "longest": {
+            "case": "spec-library",
+            "passed": true,
+            "seconds": 13.66
+          }
+        },
+        "sequence": {
+          "matched": 22,
+          "expected": 22,
+          "seconds": 18.05,
+          "longest": {
+            "case": "spec-library",
+            "passed": true,
+            "seconds": 6.71
+          }
+        },
+        "vec": {
+          "matched": 21,
+          "expected": 21,
+          "seconds": 25.72,
+          "longest": {
+            "case": "spec-library",
+            "passed": true,
+            "seconds": 5.55
+          }
+        }
+      },
+      "material_timing_increases": []
+    }
+  },
+  "artifact_root": "../prusti-stdlib/target/stdlib-ownership-inference-20261114",
+  "artifact_manifest": [
+    {
+      "path": "backend-compat/import.json",
+      "sha256": "e977c6ff5c69b96472406002d3e5a4c9160ee5f52455703721d43680360bf81e"
+    },
+    {
+      "path": "backend-compat/tests-status.json",
+      "sha256": "f90b7c7296a58462166eeb6a7303e5dbd028d404a54b340ba7217676076bb95e"
+    },
+    {
+      "path": "backend-compat/test-binaries.json",
+      "sha256": "0e519829367053d2b7a938c59c799943bb6263716a64016b5259767c53f9d25f"
+    },
+    {
+      "path": "backend-compat/cargo-metadata.json",
+      "sha256": "a82dbe712e058f0de4340dead46a5f96042151d1abc37c2da791c3d93341261f"
+    },
+    {
+      "path": "backend-compat/ferrum-source.json",
+      "sha256": "39978feac5684bb787e332a199e743c6ad6fb774c5d35789176f2ace592ce861"
+    },
+    {
+      "path": "backend-compat/toolchain-binaries.json",
+      "sha256": "5b84531f1575bf2bee6b3cf04623d94354f4f8f0bfdbd3bf3920c2d6f5d7c574"
+    },
+    {
+      "path": "repairs/06-ferrum-compat/source-before.json",
+      "sha256": "d55238367cccc7dca9cb3a9159c429a01542e93d0e7f720f1712a1e3fd4db50d"
+    },
+    {
+      "path": "repairs/06-ferrum-compat/source-after.json",
+      "sha256": "a042f06d7035b399cfd5828f59098878b5a963c7632087b873bdef3866150639"
+    },
+    {
+      "path": "repairs/06-ferrum-compat/binaries.json",
+      "sha256": "e2d7ffed28037d4b8b972504a8f3bafd51d177d332c54ef2fcf5812daf29fa9c"
+    },
+    {
+      "path": "repairs/06-ferrum-compat/tools.json",
+      "sha256": "4a895d34046f1c16ae44b729dce65df30d56f68893f867bf46aeca20a24225e4"
+    },
+    {
+      "path": "repairs/06-ferrum-compat/settings.json",
+      "sha256": "28a15d911dec3b8d6b401feef31a57c422bb9ece4b6fed3cbe85a00267a2e5ab"
+    },
+    {
+      "path": "repairs/06-ferrum-compat/gate-protocol.json",
+      "sha256": "550a0b327c6236b959a8e0f18dd1caa30cf3d5cbdb976100fe964019ec7b1115"
+    },
+    {
+      "path": "repairs/06-ferrum-compat/gate-review.json",
+      "sha256": "29f1fefb2c223ba13273b1d91613334a732d7534f24b7f777b90b96f09ffc8c3"
+    },
+    {
+      "path": "repairs/06-ferrum-compat/integration.json",
+      "sha256": "60cd1d4ce0456d68aef2d06e2fd45259c818e146386cfbb01b1c73bbc7f676c6"
+    },
+    {
+      "path": "repairs/06-ferrum-compat/preservation.json",
+      "sha256": "c834534c2d8d4c8c1aa63028c6f5daf6d6e55dc11fbabb16ba9a94ce183baca9"
+    },
+    {
+      "path": "repairs/06-ferrum-compat/audit/results.json",
+      "sha256": "8faa6ca7163c092b8406913acd92c81278fc443bc0bd5bacc1a9ee0372d05233"
+    }
+  ],
+  "checkpoint_complete": false
+}

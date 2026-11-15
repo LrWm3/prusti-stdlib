@@ -50,7 +50,7 @@ prove that a rewrite is necessary. Resource units are not calibrated millisecond
 |---|---|---|
 | R0: reproduce and audit M3 | Rebuild `be1364c7c` with PCG `e54bf675468d`, original Rust/Java/Viper/Z3 settings; run complete historical hash, extern, iterator and borrow gates, specification unit tests, and audit later correctness changes and controls. Freeze source, binaries, exact coverage, settings and results. | Reproduction/audit complete; adoption blocked by incorrect acceptance |
 | R1a: baseline correctness imports | Backport audited correctness repairs individually and qualify all fifteen controls and affected historical families. | Complete at `844b93b71`: 387/387 suite checks, 22/22 focused controls including the original audit 15/15, 36 unit tests |
-| R1b: Ferrum compatibility | Import the adapter and necessary compatibility changes individually; pin the backend and printer correction; rebuild this branch and qualify the corrected baseline on both backends. Keep compatibility separate from ownership changes. | In progress: isolated compatibility import, then own-branch dual-backend gate |
+| R1b: Ferrum compatibility | Import the adapter and necessary compatibility changes individually; pin the backend and printer correction; rebuild this branch and qualify the corrected baseline on both backends. Keep compatibility separate from ownership changes. | Native compatibility integrated at `08c842e03`: 387/387 checks, 22/22 controls, 62 adapter/VIR/JVM tests; final own-branch dual gate pending |
 | R2: checked ownership and prophecy core | Specify and implement local transfer rules for scalar mutation, reborrowing, reference replacement and one selected element, with manually supplied value relations. Establish the soundness boundary and native positive/negative proofs. | Not started |
 | R3: original difficult proof | Verify unchanged `mut_native_resource_early_pass` and its exact false control, plus targeted wrong-prefix/wrong-suffix, replacement, generic/non-Copy and zero-sized controls. Compare old encoding and explicit summaries with the same value invariants. | Not started |
 | R4: bounded value inference | Add equality/bounds propagation and a small Houdini-style candidate language over immutable values; recheck inferred entry/preservation/use obligations. Add CHC/Spacer only for a concrete required relation the simpler layer cannot infer. | Not started |
@@ -76,7 +76,12 @@ R1b now imports the tested Ferrum adapter separately, preserving map operand ord
 checked opacity/reveal support and the printer correction. Pin Ferrum `931a2d5`
 (the boolean printer fix atop `0e048a4`), rebuild the integration branch itself,
 and qualify the same baseline on both backends with one worker and Ferrum branch
-parallelism off. R1b remains incomplete until those checks finish. Stop before R2.
+parallelism off. The adapter is integrated at `08c842e03` after a native 387/387 gate, 22/22 focused
+controls and 62 adapter/server/VIR/JVM tests. The isolated build needed the
+`SilFrontend.errors` JNI binding and omission of a conversion arm for the absent
+M3 `PredicatePerm` variant. No ownership encoder or PCG change was included.
+See [backend evidence](STDLIB_M3_BACKEND_EVIDENCE.json). The final own-branch
+Ferrum/Silicon gate is next; R1b remains incomplete until it finishes. Stop before R2.
 
 ### R0 result: reproduced, but not qualified for adoption
 

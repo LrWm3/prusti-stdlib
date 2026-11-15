@@ -6,6 +6,27 @@ Integration: `prusti-stdlib-ownership-inference`, `stdlib/ownership-inference-m3
 Artifacts: `../prusti-stdlib/target/stdlib-ownership-core-r2/`.
 The six pending main-tree files and all R1/H1 artifacts remain preserved.
 
+Current checkpoint: `d0b8b0ac95babfaea4fc618e67bb46fe606a4f2d`, with PCG
+`77e2a4a` (only the existing reservation-location getter was made public).
+Both the isolated experiment and own integration rebuild independently match
+**408/408 Ferrum suite checks**, **36/36 focused controls**, and **36 specification
+unit tests**. No timeout, wrong diagnostic, skipped or untested required case
+remains in these gates. The baseline matches 13/14 new identity controls: its
+branch-selected-owner positive fails with a missing-permission diagnostic. The
+new compiler matches 14/14, preserving the exact wrong-frame control. Saved
+creation targets replace historical-slot rereads during local restoration.
+
+The native programs exercise three-level reborrowing, guarded parent links,
+successive children with intervening mutation, slot retargeting and early exits.
+Deferred values are assigned after checked restoration; they are never assumed
+while pending. Current support is acyclic scalar loans and direct PCG parent
+edges. Loops, package/escaping continuations and non-scalar transfers retain the
+earlier encoder. See [identity qualification](STDLIB_OWNERSHIP_IDENTITIES_EVIDENCE.json)
+for exact compiler/source provenance, every suite result and preserved programs.
+The integration suites took 639.68s, versus 551.88s for the smaller preceding gate.
+Extra state checks increase proof size and cost; no speedup is claimed. No case
+crossed the fixed material-slowdown threshold (>2x and >10s).
+
 ## First increment and falsifiable hypothesis
 
 Introduce a small transfer IR between MIR/PCG and VIR for scalar mutable loans.
@@ -61,13 +82,13 @@ The implementation is opt-in. For example, after building this branch:
 ./x.py exec python3 scripts/test_stdlib_extern_spec.py --suite borrow --backend Ferrum --checked-scalar-loans
 ```
 
-**R2 remains incomplete.** Next, introduce persistent loan identities and a
-deferred-value representation with explicit child/parent composition. This must
-keep unresolved values unavailable to ordinary assertions until a checked
-continuation or resolution rule justifies their use. Then qualify
+**R2 remains incomplete.** Persistent identities and direct child/parent deferred
+resolution are now implemented in the later checkpoint above. Next qualify
 reference-containing replacement and one selected element, with exact value and
-frame negatives, before the R2 Silicon gate. The difficult prefix proof and
-inference remain R3/R4; no D1–D6 work or automation is started.
+frame negatives, and specify the remaining continuation boundary before R2's
+Silicon gate. Pending values stay unavailable to ordinary assertions. The
+difficult prefix proof and inference remain R3/R4; no D1–D6 work or automation is
+started.
 
 ## Ownership invariant, written before implementation
 

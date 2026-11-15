@@ -47,6 +47,7 @@ use crate::encoders::{
     PrustiBuiltin, PureKind, TyUseImpureEnc, WandEnc, WandEncTask,
     impure::{
         WandOldOuter,
+        continuation::ContinuationSummary,
         element_transfer::SelectedElementTransfer,
         loan_state::{LoanState, LoanStates},
         loan_transfer::{self, ResourceView, ResourceViewAction, ScalarLoanTransfer},
@@ -1151,7 +1152,22 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                             if let Some(footprint) = &mut footprint {
                                 footprint.parts.push(self.vcx.mk_wand_expr(wand));
                             }
-                            self.stmt(self.vcx.mk_apply_stmt(wand));
+                            if footprint.is_none()
+                                && config::checked_scalar_loans()
+                                && self.loop_analysis().all_loops().next().is_none()
+                            {
+                                let expiry = self.new_label("loan_expiry");
+                                self.stmts(
+                                    ContinuationSummary {
+                                        wand,
+                                        entry: label_pre,
+                                        post_call: label_post,
+                                    }
+                                    .apply(self.vcx, expiry),
+                                );
+                            } else {
+                                self.stmt(self.vcx.mk_apply_stmt(wand));
+                            }
                         }
                     }
                     _ => unreachable!(),

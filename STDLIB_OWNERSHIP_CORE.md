@@ -516,6 +516,17 @@ before integration. Silicon is required at R2 feature sign-off. This supplies a
 finite checked continuation/future-observation core; arbitrary retained yields,
 loop-prefix summaries and inference remain subsequent work under the existing plan.
 
+The first implementation wraps existing executable call restoration in a consumed
+`ContinuationSummary` and saves an expiry label immediately before application.
+It does not replace call contracts or the original wand. The assertion following
+application rechecks all restored resources and guarantees with scoped expiry
+observations; no future fact is inhaled. A binder-scope unit test passes, and
+`continuation-summary-focused-01` matches all 12 frozen native controls. Structural
+inspection confirms each of the 11 caller clients executes the check; nested and
+retargeted cases execute two. The false callee summary rejects at its unchanged
+pledge diagnostic before a caller can use it. Complete affected gates and Silicon
+feature qualification remain required before accepting this implementation.
+
 ### Second increment: persistent identities and deferred resolution
 
 Hypothesis: a loan keyed by its MIR reservation location can retain its target

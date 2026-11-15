@@ -8,8 +8,8 @@ the final 790-client / 2198-check inventory. Stop before D1–D6; no automation.
 
 | Deliverable | Current status | Required result |
 |---|---|---|
-| I1: count-loop inference | Starting from qualified integration | Contract-only generic count; overflow checked; wrong variants rejected |
-| O1: bounded mutable-loop ownership | Starting from preserved ownership branch | Manual value invariants; checked split/update/join/drop; bounded backedge state |
+| I1: count-loop inference | Native Ferrum 10/10 focused; feature qualification pending | Contract-only generic count; overflow checked; wrong variants rejected |
+| O1: bounded mutable-loop ownership | Native tail prerequisite exposed premature next restoration; investigation | Manual value invariants; checked split/update/join/drop; bounded backedge state |
 | C1: combine inference and summary | Not started | Infer value invariants with identical ownership obligations |
 | H1: original difficult prefix | Unqualified | Original assertions and exact negative; repeated native/CLI measurements |
 | Final restoration qualification | Unqualified | Complete same-source Ferrum/Silicon matrix and library verification |
@@ -140,3 +140,36 @@ Ferrum/Silicon restoration qualification. Report implemented behavior, annotatio
 reduction, ownership-proof reduction, exact diagnostics, performance and restrictions.
 If blocked, identify the unresolved obligation and the evidence/decision needed;
 keep the task incomplete. Stop before D1–D6 and schedule no automation.
+
+## Current experiment evidence (2026-11-15)
+
+I1 prerequisite `c86eafa76` eliminates literal empty loop wands consistently.
+The native manual positive and exact negative passed; all historical iterator
+129/129 and borrow 208/208 checks passed without material per-case slowdowns.
+Artifacts: `target/stdlib-inference-summary-20261115/count-empty-wand-regression-01`.
+These counts are separate from inference results.
+
+`count-inference-03` has 10/10 native focused results, including zero manual
+invariants on the generic count, incorrect update/control-flow negatives, false
+assertion, renamed locals, non-Copy elements and ZSTs. The first arithmetic
+projection generated 39 candidates, made 88 local queries and retained a
+conservation equality plus two bounds in about 27 ms. A checked shared-reference
+frame preserves entry length metadata. Overflow and ordinary permission checks
+remain enabled. This is not yet the final feature qualification.
+
+Scope: one direct core shared-slice iterator, one Some/None loop, a returned usize
+counter and a zero initialization. The finite-step lowering is specific to the
+existing selected sealed model contract; it is not a general contract-to-CHC
+translator. Unsupported constructors, nested loops and additional branches/calls
+receive no inferred summary. Manual invariants remain supported. The configuration
+`infer_loop_invariants` enables this bounded checked pass; disable it for A/B
+measurements. Inference errors or unknown results grant no fact. Full Rust checks
+independently discharge all inserted invariants.
+
+O1's separate constructor/drop control passes. The first `next` loses yielded
+permissions before use: the emitted continuation applies its restoration wand
+while the yielded reference remains live. The PCG removal shown is an argument
+identity edge, while the applied wand also consumes the yielded result. The exact
+cause in call-shape construction/selection is still under investigation. Preserve
+all seven initial failures and the three isolation results; no bounded mutable
+summary or performance improvement is claimed.

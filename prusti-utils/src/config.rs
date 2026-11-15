@@ -102,6 +102,7 @@ lazy_static::lazy_static! {
         settings.set_default::<Vec<String>>("extra_jvm_args", vec![]).unwrap();
         settings.set_default::<Vec<String>>("extra_verifier_args", vec![]).unwrap();
         settings.set_default("quiet", false).unwrap();
+        settings.set_default("infer_loop_invariants", true).unwrap();
         settings.set_default("assert_timeout", 10_000).unwrap();
         settings.set_default("smt_qi_eager_threshold", 1000).unwrap();
         settings.set_default::<Option<bool>>("smt_qi_profile", None).unwrap();
@@ -1153,4 +1154,9 @@ pub fn verify_only_defpaths() -> Vec<String> {
 /// for an external specification
 pub fn query_method_signature() -> Option<String> {
     read_setting("query_method_signature")
+}
+
+/// Experimental checked inference for supported finite-iterator count loops.
+pub fn infer_loop_invariants() -> bool {
+    read_setting("infer_loop_invariants")
 }

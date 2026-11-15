@@ -1,3 +1,4 @@
+mod loop_inference;
 use itertools::Itertools;
 use pcg::{
     PcgOutput,
@@ -2926,6 +2927,8 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 })?;
                 invariant_inputs.extend(enc_output.inputs.iter().copied());
             }
+            let inferred_shape = invariants.is_empty().then(|| self.count_shape(loop_id)).flatten();
+            if let Some(shape) = &inferred_shape { invariant_inputs.extend(shape.inputs()); }
             let (permissions, place_capabilities) = self.get_loop_inv(
                 &cfpcs,
                 &loop_place_usages,
@@ -2980,12 +2983,23 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     })
                 })
                 .collect::<Result<Vec<_>, _>>()?;
+            let inferred = if let Some(shape) = inferred_shape {
+                let span = data.terminator().source_info.span;
+                self.vcx.with_span(span, |vcx| {
+                    for kind in ["invariant.not.established:assertion.false", "invariant.not.preserved:assertion.false"] {
+                        vcx.handle_error(kind, move |_| Some(vec![PrustiError::verification(
+                            "could not prove an inferred loop invariant; add an explicit body invariant", span.into())]));
+                    }
+                    self.infer_count_invariants(shape)
+                })?
+            } else { Vec::new() };
             invariant = Some(
                 self.vcx.alloc_slice(
                     &permissions
                         .into_iter()
                         .chain(branch_choices)
                         .chain(functional)
+                        .chain(inferred)
                         .collect::<Vec<_>>(),
                 ),
             );

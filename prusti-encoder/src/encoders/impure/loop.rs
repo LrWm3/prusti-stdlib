@@ -57,13 +57,14 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         let mut loop_invariant_place_capabilities =
             cfpcs.loop_invariant_place_capabilities(loop_place_usages, ctxt);
 
-        // The reference local can be absent from loop usages even when its
-        // dereference is present. Preserve it when an invariant reads it and
-        // the PCG has a readable owned capability at the loop boundary.
+        // An invariant-only input can be absent from executable loop usages.
+        // Preserve shared reference slots and scalar counters only when the
+        // PCG supplies a readable capability. Entry/backedge checks still have
+        // to provide the predicate; this does not grant a new permission.
         for local in invariant_inputs {
             let place: Place<'vir> = (*local).into();
             if loop_invariant_place_capabilities.contains_key(&place)
-                || !matches!(place.ty(ctxt).ty.kind(), ty::Ref(_, _, Mutability::Not))
+                || !matches!(place.ty(ctxt).ty.kind(), ty::Ref(_, _, Mutability::Not) | ty::Uint(_) | ty::Int(_) | ty::Bool | ty::Char)
             {
                 continue;
             }

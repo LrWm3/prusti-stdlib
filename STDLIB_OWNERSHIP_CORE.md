@@ -6,7 +6,23 @@ Integration: `prusti-stdlib-ownership-inference`, `stdlib/ownership-inference-m3
 Artifacts: `../prusti-stdlib/target/stdlib-ownership-core-r2/`.
 The six pending main-tree files and all R1/H1 artifacts remain preserved.
 
-Current checkpoint: `1ef39f2c29364eab505773a0f9a4f5f9f75fc419`. Its own integration
+Current checkpoint: `c2e9b885b7c4fc3ca92323df39f0c13539bf4664`. Its own integration
+rebuild matches **437/437 Ferrum suite checks**, **58/58 focused controls**, and
+**36 specification tests**. The pure array-to-slice equality now triggers from
+slice observations as well as array observations. This repairs the complete
+generic array-update postcondition while preserving its exact negative and the
+same equality, permissions and assertions. The frozen selected-element target
+improves from 8/10 to **10/10**. All scalar, escaped-reference and affected M3
+families remain passing. See [value-bridge evidence](STDLIB_ARRAY_VALUE_BRIDGE_EVIDENCE.json).
+
+Integration suites take **703.25s**, versus 684.01s for the smaller prior gate;
+no case crosses the fixed material-slowdown threshold. Source, binaries and main
+pending changes are preserved. This qualifies the selected-element prerequisite,
+not the planned explicit transfer record, continuation summaries or R2 sign-off.
+Next implement the checked split/join record below. Silicon stays at the R2
+feature boundary; R3–R5 and the stop before D1–D6 remain unchanged.
+
+Previous escaped-reference checkpoint: `1ef39f2c29364eab505773a0f9a4f5f9f75fc419`. Its own integration
 rebuild matches **422/422 Ferrum suite checks**, **48/48 focused controls**, and
 all **36 specification tests**. Escaped `mem::replace` references now restore both
 pointees, including reversed use order, a still-live displaced reference, and an
@@ -364,7 +380,9 @@ The one-change candidate (`selected-trigger-focused-01`) matches **10/10**
 unchanged native controls, including the generic positive and exact negative.
 The generated generic program differs only in the added alternate trigger;
 the value equality, permission obligations and user assertions are preserved.
-Next run the complete affected M3 gate before integrating this prerequisite.
+The complete affected gate and own integration rebuild subsequently each match
+437/437 suite checks, 58/58 focused controls and 36 specification tests. The
+prerequisite is qualified at `c2e9b885b`; the transfer record below is still open.
 
 ### Second increment: persistent identities and deferred resolution
 

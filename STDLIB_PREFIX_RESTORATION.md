@@ -15,7 +15,7 @@ watchdog. Other cases retain their recorded 180/600-second schedule.
 | Current evidence | Result |
 |---|---|
 | Frozen R2 Ferrum / Silicon gates | Each 454/454; each 70/70 focused |
-| Current slice-observation integration Ferrum gate | 471/471; 82/82 focused; 37 specification + 1 binder test |
+| Current direct-state integration Ferrum gate | 490/490; 96/96 focused; 37 specification + 1 binder test |
 | Original prefix positive on R2 | Compilation/specification failure |
 | Original exact false control on R2 | Wrong diagnostic |
 | Prefix proof, inference, full restoration | Unqualified |
@@ -161,3 +161,16 @@ states will require their own checked rules and native controls. The state domai
 contains immutable logical values and grants no heap access. Preserve the actual
 physical predicate reads, all original negative diagnostics and executable-use
 rejection. No physical-address injectivity or future-value assumption is added.
+
+Direct referent-state observations are integrated at
+`8a82d279f136f2784841e009b50fc09aad43de6b`. The five original clients and nine
+additional history/nesting/expiry/ZST/permission controls match. Both experimental
+and own integration gates independently match 490/490 Ferrum checks and 96/96
+focused controls, plus 37 specification and one binder-scope test. Integration
+suite time is 713.42s with no material per-case slowdown. Source, binaries and
+pending main files are preserved. See
+[direct-state qualification](STDLIB_RESOURCE_OBSERVATION_EVIDENCE.json).
+The first extended run exposed a reserved `outer` identifier in the new nested
+controls; renaming it preserved all operations, assertions and expected diagnostics.
+Original clients remain unchanged. R3 remains open: next establish permission-
+checked indexed observations and the resource ownership needed by prefix summaries.

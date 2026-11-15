@@ -302,6 +302,19 @@ impl<'vir> TypeContext<'vir> {
                     ),
                 )
             }
+            vir::ExprKindData::PredicatePerm(pred) => {
+                let args = pred
+                    .args
+                    .iter()
+                    .map(|arg| self.expression(arg))
+                    .collect::<Result<Vec<_>, _>>()?;
+                let location = ferrum_silver::ast::expression::PredicateAccess::new(
+                    args,
+                    pred.target.into(),
+                    meta.clone(),
+                );
+                ExpKind::CurrentPerm(Exp::new(ExpKind::PredicateAccess(location), meta.clone()))
+            }
             vir::ExprKindData::Wand(wand) => {
                 ExpKind::MagicWand(self.expression(&wand.lhs)?, self.expression(&wand.rhs)?)
             }
@@ -652,6 +665,89 @@ mod tests {
                     frontend.verify(&programs[1]).unwrap(),
                     VerificationResult::Failure(_)
                 ));
+                frontend.stop().unwrap();
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    #[test]
+    #[ignore = "requires real Z3; set FERRUM_TEST_Z3"]
+    fn predicate_permission_observation_does_not_acquire_resources() {
+        use vir::CastType;
+        let z3 = std::env::var_os("FERRUM_TEST_Z3").expect("set FERRUM_TEST_Z3");
+        std::thread::Builder::new()
+            .stack_size(ferrum::VERIFICATION_STACK_SIZE)
+            .spawn(move || {
+                vir::init_vcx(vir::VirCtxt::new_without_tcx());
+                let programs = vir::with_vcx(|vcx| {
+                    let argument = vcx.mk_local_decl("target", vir::TYPE_REF);
+                    let args = vcx.alloc_slice(&[argument.as_dyn()]);
+                    let predicate = vcx.mk_predicate_unchecked("Resource", args, None);
+                    let app = vcx.alloc(vir::PredicateAppData {
+                        target: "Resource",
+                        args: vcx.alloc_slice(&[vcx.mk_local_ex(argument).as_dyn()]),
+                        perm: None,
+                    });
+                    let resource = vcx.mk_predicate_app_expr(app);
+                    let held = vcx.mk_predicate_perm_expr(app);
+                    [true, false].map(|has_resource| {
+                        let expected = if has_resource {
+                            vcx.mk_full_perm()
+                        } else {
+                            vcx.mk_no_perm()
+                        };
+                        let mut stmts = vec![vcx.mk_assert_stmt(vcx.mk_eq_expr(held, expected))];
+                        if has_resource {
+                            stmts.push(vcx.mk_exhale_stmt(resource));
+                            stmts.push(
+                                vcx.mk_assert_stmt(vcx.mk_eq_expr(held, vcx.mk_no_perm())),
+                            );
+                        } else {
+                            // Querying the empty permission map cannot justify access.
+                            stmts.push(vcx.mk_assert_stmt(resource));
+                        }
+                        let block = vcx.mk_cfg_block(
+                            vcx.alloc(vir::CfgBlockLabelData::End),
+                            &[],
+                            vcx.alloc_slice(&stmts),
+                            vcx.alloc(vir::TerminatorStmtData::Exit),
+                        );
+                        let pre = if has_resource {
+                            vcx.alloc_slice(&[resource])
+                        } else {
+                            &[]
+                        };
+                        let method = vcx.mk_method_unchecked(
+                            "test", args, &[], pre, &[], Some(vcx.alloc_slice(&[block])),
+                        );
+                        program_to_silver(vcx.mk_program(
+                            &[], &[], &[], vcx.alloc_slice(&[predicate]), &[],
+                            vcx.alloc_slice(&[method]),
+                        ))
+                        .unwrap()
+                    })
+                });
+                let mut frontend = native_frontend(
+                    &[
+                        "--z3Exe".into(),
+                        z3.to_string_lossy().into_owned(),
+                        "--parallelizeBranches=false".into(),
+                    ],
+                    Arc::new(NoopReporter),
+                )
+                .unwrap();
+                assert!(matches!(
+                    frontend.verify(&programs[0]).unwrap(), VerificationResult::Success
+                ));
+                let VerificationResult::Failure(errors) = frontend.verify(&programs[1]).unwrap() else {
+                    panic!("permission observation must not acquire a resource");
+                };
+                assert_eq!(
+                    errors.iter().map(|e| e.full_id()).collect::<Vec<_>>(),
+                    ["assert.failed:insufficient.permission"],
+                );
                 frontend.stop().unwrap();
             })
             .unwrap()

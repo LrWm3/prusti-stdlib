@@ -385,6 +385,8 @@ pub enum ExprKindGenData<'vir, Curr: 'vir, Next: 'vir> {
     Let(LetGen<'vir, Curr, Next>),
     FuncApp(FuncAppGen<'vir, Curr, Next>),
     PredicateApp(PredicateAppGen<'vir, Curr, Next>), // TODO: this should not be used instead of acc?
+    /// Observe the permission held for this predicate instance without changing it.
+    PredicatePerm(PredicateAppGen<'vir, Curr, Next>),
     Wand(WandGen<'vir, Curr, Next>),
     // domain func app
     InhaleExhale(InhaleExhaleGen<'vir, Curr, Next>),
@@ -441,6 +443,7 @@ impl<'vir, Curr, Next> ExprKindGenData<'vir, Curr, Next> {
             ExprKindGenData::Let(l) => l.expr.ty(),
             ExprKindGenData::FuncApp(a) => a.result_ty,
             ExprKindGenData::PredicateApp(_) => crate::TYPE_BOOL.as_dyn(),
+            ExprKindGenData::PredicatePerm(_) => crate::TYPE_PERM.as_dyn(),
             ExprKindGenData::Wand(..) => crate::TYPE_BOOL.as_dyn(),
             ExprKindGenData::InhaleExhale(..) => crate::TYPE_BOOL.as_dyn(),
             ExprKindGenData::Lazy(l) => l.ty,

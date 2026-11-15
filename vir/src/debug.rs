@@ -220,6 +220,7 @@ impl<'vir, Curr, Next> Debug for ExprKindGenData<'vir, Curr, Next> {
             Self::Local(e) => e.fmt(f),
             Self::Old(e) => e.fmt(f),
             Self::PredicateApp(e) => e.fmt(f),
+            Self::PredicatePerm(e) => write!(f, "perm({e:?})"),
             Self::Wand(e) => e.fmt(f),
             Self::Ternary(e) => e.fmt(f),
             Self::UnOp(e) => e.fmt(f),

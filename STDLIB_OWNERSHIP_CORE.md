@@ -174,6 +174,57 @@ the previous 408-check gate plus its two native clients and one runtime check
 target fixture until their separate repair; excluding them from this increment's
 gate does not count them as passed or remove them from R2 acceptance.
 
+### Fourth increment: escaped-call resource views (unqualified)
+
+The unchanged escaped-reference positive still fails at the `make_concrete_u32`
+needed by `*stored = 9`. A bounded native diagnostic identifies its argument as
+the current target of `stored`: the original right-hand loan already restored
+that scalar to its concrete predicate. Extending the old reference's liveness or
+reversing the two uses instead fails while reading the still-generic `stored`
+slot. Omitting the new-reference mutation passes. These three diagnostic variants
+do not replace either original acceptance control; see `reference-escape-order-01`.
+The temporary one-line error logger was removed after preserving its source,
+binaries and result. No SMT query trace is enabled.
+
+Let `s` own the stored reference slot and `a`, `b` own the old and new scalars.
+At entry the slot names `a`; the call's pre-state captures that reference and the
+replacement naming `b`. The existing `mem::replace` postconditions establish that
+the returned reference names `a` and the slot now names `b`. They return `G(s)`;
+the generic scalar resources `G(a)` and `G(b)` are framed through the call. Saved
+loan targets identify the scalar obligations independently of the current slot.
+No snapshot of a reference supplies the pointee's current value or permission.
+
+The representation expected by a later place access need not be the representation
+left by PCG's independent lifetime and place events. The proposed local rule is
+`normalize(a, C)` or `normalize(a, G)`, where `C` and `G` are the exact concrete and
+generic predicates for that value/type at the same captured physical address.
+If the destination's full permission is already held, assert it and preserve it.
+Otherwise assert the source permission, capture its current value, execute the
+existing representation conversion, and assert destination permission and value
+correspondence. A permission query selects an existing resource; it neither
+creates one nor identifies distinct logical owners by address equality. Missing
+resources and insufficient permission must fail. Every conversion frames all
+other predicates. Existing generic caster contracts remain trusted translation.
+
+First restore the already-implemented `PredicatePerm` expression interface from
+the later tree, with matching Ferrum and JVM conversions and a focused adapter
+check. Then test normalization only for the core's supported scalar/reference
+values in acyclic executable code. Keep package scripts, loop summaries, opaque
+generic values and indexed/zero-sized resources outside this first rule. Historical
+addresses may be frozen, but resource selection and value observation occur in the
+current heap. Do not normalize a saved heap observation as if it were current.
+
+PCG loan expiry still creates the same discharge obligations. Normalize their
+source representation before the original checked resolution and publish deferred
+values only afterward. A physical-view conversion by itself neither discharges a
+loan nor makes a pending deferred value available. Reacquisition and executable
+place reads must likewise establish the concrete view they actually need.
+Hypothesis: these checked identity/conversion alternatives repair both lifetime
+orders without changing call specifications, permission quantities or negative
+assertions. Require the unchanged 18 native controls, missing-resource/value/frame
+rule controls and every affected existing family before integration. If this
+hypothesis fails, inspect its first failed obligation before proposing a second.
+
 ### Second increment: persistent identities and deferred resolution
 
 Hypothesis: a loan keyed by its MIR reservation location can retain its target

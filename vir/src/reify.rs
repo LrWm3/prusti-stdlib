@@ -79,6 +79,9 @@ impl<'vir, Curr: Copy, NextA, NextB> Reify<'vir, Curr>
             ExprKindGenData::PredicateApp(v) => {
                 vcx.alloc(ExprKindGenData::PredicateApp(v.reify(vcx, lctx)))
             }
+            ExprKindGenData::PredicatePerm(v) => {
+                vcx.alloc(ExprKindGenData::PredicatePerm(v.reify(vcx, lctx)))
+            }
             ExprKindGenData::Wand(v) => vcx.alloc(ExprKindGenData::Wand(v.reify(vcx, lctx))),
             ExprKindGenData::Local(v) => match vcx.local_subst(v.name) {
                 Some(e) => e.lazy().kind,

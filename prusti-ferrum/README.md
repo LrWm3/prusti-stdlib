@@ -6,8 +6,9 @@ to a Git revision for reproducible builds.
 
 On `stdlib/ownership-inference-m3`, the adapter is imported through Prusti
 `a59ed917c` with the map-membership and opaque/reveal corrections. Ferrum is pinned
-to `931a2d5` (the boolean printer fix atop `0e048a4`). M3 has no VIR
-`PredicatePerm` variant, so that newer conversion arm is absent here. Historical
+to `931a2d5` (the boolean printer fix atop `0e048a4`). R2 restores the VIR
+`PredicatePerm` observation and its native/JVM conversions for checked resource
+view selection; observing permission does not acquire it. Historical
 results in `VALIDATION.md` are not qualification of this branch; its current gate
 is recorded in `STDLIB_EXTERN_SPEC.md` at the repository root.
 

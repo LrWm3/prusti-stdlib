@@ -137,7 +137,7 @@ cfg_if! {
                     check_expr_bindings(m, *expr);
                 },
                 ExprKindGenData::Const(..) | ExprKindGenData::Lazy(..) => {},
-                ExprKindGenData::PredicateApp(app) => {
+                ExprKindGenData::PredicateApp(app) | ExprKindGenData::PredicatePerm(app) => {
                     check_predicate_app_bindings(m, app);
                 },
                 ExprKindGenData::AccField( AccFieldGenData { recv, perm, .. }) => {
@@ -554,6 +554,15 @@ impl<'tcx> VirCtxt<'tcx> {
     ) -> ExprGenBool<'vir, Curr, Next> {
         self.alloc(ExprGenData::new(
             self.alloc(ExprKindGenData::PredicateApp(pred_app)),
+        ))
+    }
+
+    pub fn mk_predicate_perm_expr<'vir, Curr, Next>(
+        &'vir self,
+        pred_app: PredicateAppGen<'vir, Curr, Next>,
+    ) -> ExprGenPerm<'vir, Curr, Next> {
+        self.alloc(ExprGenData::new(
+            self.alloc(ExprKindGenData::PredicatePerm(pred_app)),
         ))
     }
 

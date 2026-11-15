@@ -466,6 +466,16 @@ impl<'vir, 'v, T: vir::CompType> ToViper<'vir, 'v> for vir::Expr<'vir, T> {
             vir::ExprKindData::Local(v) => v.to_viper_with_span(ctx, self.span),
             vir::ExprKindData::Old(v) => v.to_viper_with_span(ctx, self.span),
             vir::ExprKindData::PredicateApp(v) => v.to_viper_with_span(ctx, self.span),
+            vir::ExprKindData::PredicatePerm(v) => ctx.ast.current_perm(
+                ctx.ast.predicate_access_with_pos(
+                    &v.args
+                        .iter()
+                        .map(|arg| arg.to_viper_no_pos(ctx))
+                        .collect::<Vec<_>>(),
+                    v.target,
+                    ctx.span_to_pos(self.span),
+                ),
+            ),
             vir::ExprKindData::Wand(v) => v.to_viper_with_span(ctx, self.span),
             vir::ExprKindData::Result(ty) => ctx
                 .ast

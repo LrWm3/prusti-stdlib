@@ -15,7 +15,7 @@ watchdog. Other cases retain their recorded 180/600-second schedule.
 | Current evidence | Result |
 |---|---|
 | Frozen R2 Ferrum / Silicon gates | Each 454/454; each 70/70 focused |
-| Current direct-state integration Ferrum gate | 490/490; 96/96 focused; 37 specification + 1 binder test |
+| Current pointwise-state integration Ferrum gate | 519/519; 117/117 focused; 37 specification + 2 ownership/history tests |
 | Original prefix positive on R2 | Compilation/specification failure |
 | Original exact false control on R2 | Wrong diagnostic |
 | Prefix proof, inference, full restoration | Unqualified |
@@ -238,3 +238,14 @@ contracts lack `Ghost<T>: Deref`. Import only the non-verifying `Deref` stub fro
 implementation, observations, assertions and ownership rules are unchanged. The
 failed gate and successful remaining suites are retained; complete qualification
 requires a new gate on the combined source.
+
+Pointwise observations and checked restored-owner reads are integrated at
+`e305cc865ac6c5d4b0f8b8dd353ad9f2312e5369`, after the separate erased-ghost fix
+`b52ec1377`. The original four observation controls and seventeen added native
+controls match. Both experimental and own integration gates independently match
+519/519 Ferrum checks and 117/117 focused controls, plus 37 specification and two
+ownership/history tests. Integration suite time is 742.66s with no material
+per-case slowdown. See [pointwise qualification](STDLIB_SEQUENCE_OBSERVATION_EVIDENCE.json).
+Source, binaries and the six pending main files remain preserved. The current-
+owner rule is opt-in and acyclic; whole-sequence resources, indexed slice ownership
+and iterator-prefix restoration remain separate, unqualified work.

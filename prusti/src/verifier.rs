@@ -41,6 +41,8 @@ pub fn verify<'tcx>(
         // encode the crate to a RequestWithContext
         // TODO: push RequestWithContext through (replace VerificationRequest
         //   which is constructed further inside `prusti_server`)
+        let phase_started =
+            std::env::var_os("FERRUM_BENCH_PHASES").map(|_| std::time::Instant::now());
         let request = prusti_encoder::test_entrypoint(
             env.tcx(),
             env.body,
@@ -52,6 +54,12 @@ pub fn verify<'tcx>(
             },
             &env.diagnostic,
         );
+        if let Some(started) = phase_started {
+            log::info!(
+                "[benchmark-phase] Rust to VIR encoding {} ns",
+                started.elapsed().as_nanos()
+            );
+        }
 
         // if we do not use encode-only to get the dumped viper program (e.g., just to see if encoding fails), we don't need to start a JVM
         if !config::verify_mode().is_encode_only() || config::dump_viper_program() {

@@ -153,6 +153,7 @@ fn main() {
                 method!("setVerifier"),
                 method!("verification"),
                 method!("getVerificationResult"),
+                method!("errors"),
                 method!("setState"),
                 method!("verifier"),
                 method!("config"),
@@ -767,6 +768,9 @@ fn main() {
                 constructor!(),
             ]),
             java_class!("viper.silver.ast.SimpleInfo", vec![
+                constructor!(),
+            ]),
+            java_class!("viper.silver.ast.AnnotationInfo", vec![
                 constructor!(),
             ]),
             java_class!("viper.silver.ast.Sub", vec![

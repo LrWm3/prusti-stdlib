@@ -36,6 +36,15 @@ impl<'a> AstFactory<'a> {
             .unwrap_result(ast::NoInfo_object::with(self.env).singleton())
     }
 
+    fn annotation_info(&self, name: &str) -> JObject<'_> {
+        self.jni.unwrap_result(
+            ast::AnnotationInfo::with(self.env).new(
+                self.jni
+                    .new_map(&[(self.jni.new_string(name), self.jni.new_seq(&[]))]),
+            ),
+        )
+    }
+
     fn simple_info(&self, comments: &[&str]) -> JObject<'_> {
         self.jni.unwrap_result(
             ast::SimpleInfo::with(self.env).new(

@@ -49,7 +49,11 @@ impl VerificationRequestProcessing {
         let mtx_rx_servermsg = lock::Mutex::new(rx_servermsg);
         let mtx_tx_verreq = sync::Mutex::new(tx_verreq);
 
-        let handle = thread::spawn(move || verification_thread(rx_verreq, tx_servermsg));
+        let handle = thread::Builder::new()
+            .name("prusti-verification".into())
+            .stack_size(128 * 1024 * 1024)
+            .spawn(move || verification_thread(rx_verreq, tx_servermsg))
+            .expect("verification thread");
         Self {
             mtx_rx_servermsg,
             mtx_tx_verreq,

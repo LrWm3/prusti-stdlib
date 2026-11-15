@@ -16,17 +16,23 @@ path = "src/driver.rs"
 test = false
 doctest = false
 
+[features]
+default = ["jvm"]
+jvm = ["dep:prusti-viper", "dep:viper-sys", "dep:jni", "viper/jvm"]
+ferrum = ["dep:prusti-ferrum"]
+
 [dependencies]
 log = { version = "0.4", features = ["release_max_level_info"] }
 vir = { path = "../vir" }
 ide = { path = "../ide" }
-viper = { path = "../viper" }
+viper = { path = "../viper", default-features = false }
 prusti-encoder = { path = "../prusti-encoder" }
 prusti-interface = { path = "../prusti-interface" }
-prusti-viper = { path = "../prusti-viper" }
+prusti-viper = { path = "../prusti-viper", optional = true }
 prusti-utils = { path = "../prusti-utils" }
+prusti-ferrum = { path = "../prusti-ferrum", optional = true }
 prusti-rustc-interface = { path = "../prusti-rustc-interface" }
-viper-sys = { path = "../viper-sys" }
+viper-sys = { path = "../viper-sys", optional = true }
 tracing = { path = "../tracing" }
 env_logger = "0.10"
 clap = { version = "4.0", features = ["derive"] }
@@ -35,7 +41,7 @@ url = "2.2.2"
 num_cpus = "1.14"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
-jni = { version = "0.20", features = ["invocation"] }
+jni = { version = "0.20", features = ["invocation"], optional = true }
 # the tungstenite version used by warp 0.3
 tokio-tungstenite = "0.13"
 futures = "0.3.25"

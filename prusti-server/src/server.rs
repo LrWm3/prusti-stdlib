@@ -186,6 +186,7 @@ where
                         result.kind,
                         VerificationResultKind::JavaException(_)
                             | VerificationResultKind::Timeout(_)
+                            | VerificationResultKind::BackendError(_)
                     )
                     && !result.cached
                 {

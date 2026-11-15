@@ -18,13 +18,20 @@ use prusti_rustc_interface::{data_structures::fx::FxHashMap, span::DUMMY_SP};
 use prusti_utils::{config, Stopwatch};
 use viper::{self, Cache, PersistentCache};
 
+mod bench_phase;
 mod client;
 mod process_verification;
 pub mod server;
 mod server_message;
+#[cfg(feature = "ferrum")]
+mod native_backend;
+#[cfg(feature = "ferrum")]
+mod native_reporter;
 mod verification_request;
+#[cfg(feature = "jvm")]
 mod backend;
 
+#[cfg(feature = "jvm")]
 pub(crate) use backend::*;
 pub(crate) use client::*;
 pub(crate) use process_verification::*;
@@ -250,6 +257,11 @@ fn handle_result(
         viper::VerificationResultKind::JavaException(exception) => {
             error!("Java exception: {}", exception.get_stack_trace());
             PrustiError::internal(format!("in: {exception}"), DUMMY_SP.into()).emit(env_diagnostic);
+            *overall_result = VerificationResult::Failure;
+        }
+        viper::VerificationResultKind::BackendError(message) => {
+            PrustiError::internal(format!("native backend error: {message}"), DUMMY_SP.into())
+                .emit(env_diagnostic);
             *overall_result = VerificationResult::Failure;
         }
         viper::VerificationResultKind::Timeout(seconds) => {
@@ -505,7 +517,7 @@ fn verify_requests_local<'a>(
             }
             yield vrp.verify(request).map(move |msg| {
                 if let ServerMessage::Termination(result) = &msg {
-                    if config::enable_cache() && !matches!(result.kind, viper::VerificationResultKind::JavaException(_) | viper::VerificationResultKind::Timeout(_)) {
+                    if config::enable_cache() && !matches!(result.kind, viper::VerificationResultKind::JavaException(_) | viper::VerificationResultKind::Timeout(_) | viper::VerificationResultKind::BackendError(_)) {
                         info!(
                             "Storing new cached result {:?}",
                             result,

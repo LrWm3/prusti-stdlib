@@ -972,12 +972,27 @@ impl<'a> AstFactory<'a> {
         return_type: Type,
         pos: Position,
     ) -> Expr<'a> {
+        self.func_app_with_reveal(function_name, args, return_type, pos, false)
+    }
+
+    pub fn func_app_with_reveal(
+        &self,
+        function_name: &str,
+        args: &[Expr],
+        return_type: Type,
+        pos: Position,
+        reveal: bool,
+    ) -> Expr<'a> {
         let func_app_wrapper = ast::FuncApp::with(self.env);
         let obj = self.jni.unwrap_result(func_app_wrapper.call_apply(
             self.jni.new_string(function_name),
             self.jni.new_seq(&map_to_jobjects!(args)),
             pos.to_jobject(),
-            self.no_info(),
+            if reveal {
+                self.annotation_info("reveal")
+            } else {
+                self.no_info()
+            },
             return_type.to_jobject(),
             self.no_trafos(),
         ));

@@ -191,6 +191,7 @@ impl<'a> Verifier<'a, Instantiated> {
                     VerificationBackend::Carbon => {
                         carbon::CarbonFrontend::with(env).new(reporter, logger)
                     }
+                    VerificationBackend::Ferrum => panic!("Ferrum must use the native backend"),
                 }
             };
             let frontend_instance = jni.unwrap_result(unwrapped_frontend_instance);
@@ -258,6 +259,7 @@ impl<'a> Verifier<'a, Instantiated> {
             VerificationBackend::Carbon => {
                 carbon::CarbonVerifier::with(env).new(reporter, debug_info)
             }
+            VerificationBackend::Ferrum => panic!("Ferrum must use the native backend"),
         }
     }
 
@@ -345,7 +347,29 @@ impl<'a> Verifier<'a> {
             );
             let is_empty = self.jni.unwrap_result(scala::Option::with(self.env).call_isEmpty(viper_result_option));
             if is_empty {
-                panic!("Error during typechecking/consistency checking!");
+                // Frontend/plugin checks can reject a program after the initial
+                // AST consistency check, before a verification result exists.
+                let errors = self.jni.seq_to_vec(self.jni.unwrap_result(
+                    self.frontend_wrapper.call_errors(self.frontend_instance),
+                ));
+                let mut errors = errors.into_iter().map(|error| {
+                    let pos_id = if self.jni.is_instance_of(error, "viper/silver/verifier/ConsistencyError") {
+                        let pos = self.jni.unwrap_result(
+                            silver::verifier::ConsistencyError::with(self.env).call_pos(error),
+                        );
+                        extract_pos_id(&self.jni, self.env, pos)
+                    } else {
+                        None
+                    };
+                    ConsistencyError { pos_id, message: self.jni.to_string(error) }
+                }).collect::<Vec<_>>();
+                if errors.is_empty() {
+                    errors.push(ConsistencyError {
+                        pos_id: None,
+                        message: "Viper frontend returned neither a verification result nor an error".into(),
+                    });
+                }
+                return VerificationResultKind::ConsistencyErrors(errors);
             }
             let viper_result = self.jni.unwrap_result(scala::Some::with(self.env).call_get(viper_result_option));
             debug!(
@@ -553,7 +577,7 @@ pub fn extract_errors(
                         "viper/silicon/interfaces/SiliconMappedCounterexample",
                     ) {
                         // only mapped counterexamples are processed
-                        Some(SiliconCounterexample::new(
+                        Some(crate::silicon_counterexample::extract_counterexample(
                             env,
                             *jni_utils,
                             original_counterexample,

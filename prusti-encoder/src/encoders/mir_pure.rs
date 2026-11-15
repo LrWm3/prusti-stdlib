@@ -978,7 +978,35 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                             term.source_info.span,
                             &new_curr_ver,
                         )? {
-                            Some(expr) => Ok(expr),
+                            Some(expr) => {
+                                // Heap observations select the temporal heap
+                                // for the read itself, not just its operands.
+                                if builtin.reads_heap()
+                                    && (self.rel0_mode
+                                        || self.rel1_mode
+                                        || (self.old_mode && self.before_expiry_mode))
+                                {
+                                    return Err(self.unsupported_rvalue(
+                                        "mutable slice contents in a relational or nested temporal expression".to_string(),
+                                        self.current_span(),
+                                    ));
+                                }
+                                let expr = if builtin.reads_heap() && self.old_mode {
+                                    self.vcx.mk_lazy_expr(
+                                        "old_mut_slice_contents",
+                                        expr.ty(),
+                                        Box::new(move |vcx, lctx: ExprInput<'vir>| {
+                                            use vir::Reify;
+                                            vcx.mk_old(expr.reify(vcx, lctx), lctx.2).kind
+                                        }),
+                                    )
+                                } else if builtin.reads_heap() && self.before_expiry_mode {
+                                    self.vcx.mk_old_lhs_expr(expr)
+                                } else {
+                                    expr
+                                };
+                                Ok(expr)
+                            }
                             // The pure-only builtins (quantifiers, spec blocks,
                             // mode markers).
                             None => {

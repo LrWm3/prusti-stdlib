@@ -7,11 +7,14 @@ use prusti_rustc_interface::{
 use task_encoder::{EncodeFullError, EncodeFullResult, TaskEncoder, TaskEncoderDependencies};
 use vir::{CastType, FunctionIdn};
 
-use crate::encoders::ty::{
-    RustTyDecomposition,
-    generics::GArgs,
-    interpretation::float::FloatDomain,
-    use_pure::{TyUsePure, TyUsePureEnc, TyUsePureImmRef},
+use crate::encoders::{
+    TyUseImpureEnc,
+    ty::{
+        RustTyDecomposition, TySpecifics,
+        generics::GArgs,
+        interpretation::float::FloatDomain,
+        use_pure::{TyUsePure, TyUsePureEnc, TyUsePureImmRef},
+    },
 };
 
 /// Marker for the "mode" spec builtins (`old`/`rel`/`before_expiry`).
@@ -135,6 +138,8 @@ pub enum PrustiBuiltin {
     SnapEq,
     SnapNe,
     SnapClone,
+    MutSliceLen,
+    MutSliceContents,
     Seq(SeqOp),
     /// An operation on `Set` (`multiset: false`) or `Multiset` (`true`).
     AnySet {
@@ -148,6 +153,11 @@ pub enum PrustiBuiltin {
 }
 
 impl PrustiBuiltin {
+    /// Whether the operation reads beyond its captured operand snapshots.
+    pub fn reads_heap(self) -> bool {
+        matches!(self, Self::MutSliceContents)
+    }
+
     /// Classifies the call to `def_id`. Returns `None` iff the called function
     /// does not belong to the `prusti_contracts` crate (a trait method call is
     /// attributed to the crate of the `impl` it relies on, e.g. `PartialOrd::le`
@@ -234,6 +244,8 @@ impl PrustiBuiltin {
                     "for_iterator" => Self::Spec(SpecBuiltin::ForIterator),
                     "ghost_call" => Self::Ghost(GhostOp::Call),
                     "ghost_erased" => Self::Ghost(GhostOp::Erased),
+                    "mut_slice_len" => Self::MutSliceLen,
+                    "mut_slice_contents" => Self::MutSliceContents,
                     "old_start" => Self::Spec(SpecBuiltin::ModeStart(Mode::Old)),
                     "old_end" => Self::Spec(SpecBuiltin::ModeEnd(Mode::Old)),
                     "rel_start" => Self::Spec(SpecBuiltin::ModeStart(Mode::Rel(rel_index()))),
@@ -403,10 +415,9 @@ pub struct PrustiBuiltinTask<'vir> {
     /// [`CollectionOpsEnc`] in pure code (where the precondition-free `f_`
     /// functions could never discharge it).
     pub is_pure: bool,
-    /// The call-site span (`is_none()` iff `is_pure`). The returned expression
-    /// is partial iff `!is_pure`, therefore in this case we need to report
-    /// verification errors with this span (thus each impure call site is
-    /// encoded separately).
+    /// The call-site span for impure operations and heap observations. Heap
+    /// observations retain their permission requirements even in pure code;
+    /// both kinds need an error handler specific to the failing call site.
     pub span: Option<Span>,
 }
 
@@ -498,7 +509,7 @@ impl PrustiBuiltinEnc {
             is_pure,
             span,
         } = *task_key;
-        assert_eq!(is_pure, span.is_none());
+        assert_eq!(span.is_some(), !is_pure || builtin.reads_heap());
         let tcx = vcx.tcx();
         let sig = tcx
             .fn_sig(def_id)
@@ -545,6 +556,49 @@ impl PrustiBuiltinEnc {
                 ctxt.native_cmp(bin_op, lhs, rhs).upcast_ty()
             }
             PrustiBuiltin::SnapClone => ctxt.deref_operand(0)?,
+            PrustiBuiltin::MutSliceLen => {
+                let slice = ctxt.deref_operand::<vir::CSnap>(0)?;
+                ctxt.e_input_deref(0)?
+                    .expect_mutref()
+                    .metadata_access(slice)
+                    .upcast_ty()
+            }
+            PrustiBuiltin::MutSliceContents => {
+                if let Some(span) = ctxt.span {
+                    ctxt.handle_partial_op_error(
+                        "application.precondition:insufficient.permission",
+                        "insufficient permission to read mutable slice contents",
+                        span,
+                    );
+                }
+                let slice = ctxt.deref_operand::<vir::CSnap>(0)?;
+                let reference = ctxt.e_input_deref(0)?.expect_mutref().clone();
+                let address = reference.deref_access(slice);
+                let metadata = reference.metadata_access(slice);
+                let len = ctxt.index_to_int(metadata, ctxt.vcx.tcx().types.usize)?;
+                let inner = BuiltinCtxt::deref(ctxt.sig.inputs()[0]);
+                let ty::TyKind::Ref(_, slice_ty, ty::Mutability::Mut) = inner.kind() else {
+                    unreachable!("mutable slice observation requires a mutable reference")
+                };
+                let slice_ty = *slice_ty;
+                let reference_ty = RustTyDecomposition::from_ty(inner, ctxt.args.context());
+                let reference_pure = ctxt.deps.require_dep::<TyUsePureEnc>(reference_ty)?;
+                let TySpecifics::MutRef((data, ref_domain)) =
+                    reference_ty.ty.zip(reference_pure).specifics
+                else {
+                    unreachable!("mutable slice observation requires a mutable reference")
+                };
+                let referent = data
+                    .referent
+                    .decompose_context(reference_ty.ty.params, reference_ty.args);
+                let impure = ctxt.deps.require_dep::<TyUseImpureEnc>(referent)?;
+                let contents =
+                    ref_domain.cast_to_caller_ctx(impure.ref_to_snap(address).downcast_ty());
+                ctxt.encode_ty(slice_ty)?
+                    .expect_array()
+                    .to_seq(contents.downcast_ty(), len)
+                    .upcast_ty()
+            }
             PrustiBuiltin::Seq(op) => ctxt.encode_seq(op)?,
             PrustiBuiltin::AnySet { multiset, op } => ctxt.encode_any_set(multiset, op)?,
             PrustiBuiltin::Map(op) => ctxt.encode_map(op)?,

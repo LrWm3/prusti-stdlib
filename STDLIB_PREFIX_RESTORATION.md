@@ -100,3 +100,27 @@ no case crosses the fixed material-slowdown threshold. Source, binaries and the
 six pending main files are preserved. See
 [parser qualification](STDLIB_PREFIX_QUANTIFIER_EVIDENCE.json). R3 remains open;
 next restore permission-checked resource observations and iterator summaries.
+
+## Slice observations: invariant and hypothesis
+
+The next fixed target is the original ten length/contents observation clients,
+including current/entry/expiry positives, wrong value/history controls, and
+missing-permission controls in specifications and ordinary pure functions.
+`original-pair-baseline-02` confirms the quantifier syntax error is gone; resource
+APIs and the prefix macro still prevent the unchanged pair from verifying.
+
+The reference snapshot owns address and metadata observations, not its referent.
+Length comes from that metadata and is available without element permissions.
+Contents reads the slice predicate at the reference's physical target; that read
+requires its existing permission. The entry, current and expiry heaps must be
+selected for the contents read itself, not only for the reference snapshot.
+`old` uses the saved entry/call label, and `before_expiry` uses the bound wand LHS
+heap. A saved contents sequence never grants permissions to reference-containing
+elements' referents. No loan is created or discharged by either observation.
+
+Hypothesis: import only `mut_slice_len` from `ec0081c6c` and the permission-checked
+`mut_slice_contents` translation and temporal selection from `aa520ad34`. Keep
+existing slice predicates, generic casts and old/before-expiry restrictions.
+Reject unsupported relational/nested temporal uses rather than choosing a heap
+implicitly. Qualify all ten original native controls and affected families before
+integration. Referent/resource-state and iterator-prefix support remain separate.

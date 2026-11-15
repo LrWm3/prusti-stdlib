@@ -73,6 +73,19 @@ pub use prusti_contracts_proc_macros::invariant;
 /// A macro for writing a loop body invariant.
 pub use prusti_contracts_proc_macros::body_invariant;
 
+/// Observe a mutable slice reference's length without reading its elements.
+#[pure]
+pub fn mut_slice_len<T>(slice: &&mut [T]) -> usize {
+    slice.len()
+}
+
+/// Observe the current contents of a mutable slice reference in a
+/// specification. Verification requires permission to read the slice.
+#[pure]
+pub fn mut_slice_contents<T>(slice: &&mut [T]) -> Seq<T> {
+    Seq::from_slice(&**slice)
+}
+
 /// Observe the iterator of the enclosing `for` loop in a body invariant.
 ///
 /// This is a specification-only marker. `I` must be the concrete iterator

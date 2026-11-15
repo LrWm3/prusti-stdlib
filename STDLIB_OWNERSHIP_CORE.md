@@ -6,7 +6,23 @@ Integration: `prusti-stdlib-ownership-inference`, `stdlib/ownership-inference-m3
 Artifacts: `../prusti-stdlib/target/stdlib-ownership-core-r2/`.
 The six pending main-tree files and all R1/H1 artifacts remain preserved.
 
-Current checkpoint: `c2e9b885b7c4fc3ca92323df39f0c13539bf4664`. Its own integration
+Current checkpoint: `f5037ccdaa9f411f62e1fbf0886128117ca252eb`. Its own integration
+rebuild matches **437/437 Ferrum suite checks**, **58/58 focused controls**, and
+**36 specification tests**. Explicit selected-element records now check split and
+join resource/value correspondence on both owned-place and borrow-graph paths.
+All ten frozen array controls execute the checks, including generic/non-`Copy`,
+zero-sized, reference-containing, saved-index and reborrow cases and their exact
+negatives. Existing split/join contracts remain trusted and unchanged; no physical
+address injectivity is introduced. See [selected-element evidence](STDLIB_SELECTED_ELEMENT_EVIDENCE.json).
+
+Integration suite time is **677.58s**, with no material per-case slowdown. Coverage
+matches the previous gate; routine timing variation is not a demonstrated speedup.
+Source, binaries and the main tree's pending changes remain preserved. This
+qualifies the selected-element increment, **not R2 completion**. Checked
+continuation summaries, explicit future-observation scope and the Silicon feature
+gate remain next. R3–R5 and the stop before D1–D6 remain unchanged.
+
+Previous value-bridge checkpoint: `c2e9b885b7c4fc3ca92323df39f0c13539bf4664`. Its own integration
 rebuild matches **437/437 Ferrum suite checks**, **58/58 focused controls**, and
 **36 specification tests**. The pure array-to-slice equality now triggers from
 slice observations as well as array observations. This repairs the complete
@@ -318,7 +334,7 @@ diagnostic, and all 23 restoration controls remain matched. This supports the
 resource-count/value-transfer explanation. Full affected-family qualification
 is required again on this revised source before integration.
 
-### Fifth increment: one selected array element (qualification pending)
+### Fifth increment: one selected array element (qualified above)
 
 Start from `1ef39f2c2`, with its qualified local/escaped reference rules. First
 freeze native scalar, generic/non-`Copy`, zero-sized and reference-containing
@@ -400,8 +416,9 @@ two of each in the reference-replacement pair. This includes generic/non-`Copy`,
 zero-sized, saved-index, reborrow and wrong-history/value/frame controls. The
 accidentally launched `selected-transfer-focused-01` used stale binaries after
 a failed build; it is explicitly invalidated and supplies no candidate evidence.
-All original target sources are unchanged. Full affected-family qualification is
-still required before integrating this transfer record; no speedup is claimed.
+All original target sources are unchanged. The affected experimental gate and own
+integration rebuild subsequently each match 437/437 suite checks, 58/58 focused
+controls and 36 specification tests at `f5037ccda`; no speedup is claimed.
 
 ### Second increment: persistent identities and deferred resolution
 

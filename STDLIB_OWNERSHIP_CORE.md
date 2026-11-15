@@ -342,6 +342,30 @@ missing obligations justify further repairs. Require all affected existing famil
 before integration. This increment does not claim nested-collection support or
 start D1–D6. Full prophecy/continuation summaries remain a separate R2 obligation.
 
+The frozen `selected-baseline-01` target matches **8/10**. The generic replacement
+positive fails its whole-sequence update postcondition; its exact negative also
+gets that unwanted postcondition failure. Scalar, reborrow, reference-containing
+and ZST pairs already match. `selected-model-01` isolates the boundary: the
+selected-element postcondition and quantified untouched-frame postcondition each
+pass, the fixed-length array's sequence update still fails, and the equivalent
+slice function's sequence update passes. This points to the pure array-to-slice
+value bridge, not missing element ownership or const-generic length semantics.
+
+The emitted value axiom only triggers from an array lookup. A sequence consumer
+queries the slice lookup, leaving the same element equality unavailable in that
+direction. Later revision `98a29875f` contains the relevant alternate slice-lookup
+trigger; its separate resource-marker change is unnecessary on this branch.
+First test just that trigger backport, preserving the equality and every native
+assertion. This is a demonstrated prerequisite for the required generic case,
+not an array contract-selection experiment. Qualify affected families before
+proceeding to the explicit selected-element transfer record.
+
+The one-change candidate (`selected-trigger-focused-01`) matches **10/10**
+unchanged native controls, including the generic positive and exact negative.
+The generated generic program differs only in the added alternate trigger;
+the value equality, permission obligations and user assertions are preserved.
+Next run the complete affected M3 gate before integrating this prerequisite.
+
 ### Second increment: persistent identities and deferred resolution
 
 Hypothesis: a loan keyed by its MIR reservation location can retain its target

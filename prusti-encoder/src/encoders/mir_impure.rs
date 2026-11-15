@@ -826,7 +826,8 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
 
         let index = expansion
             .and_then(|expansion| expansion.guide())
-            .and_then(|guide| self.expansion_index(guide));
+            .and_then(|guide| self.expansion_index(guide))
+            .map(|index| self.vcx.maybe_apply_label(index, label));
 
         if executable
             && base.is_current()
@@ -3087,11 +3088,10 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 // the function contract requires the enclosing predicate.
                 // Unblock all inputs together so shared graph edges are folded
                 // only once, under their original control-flow conditions.
-                let blocked = self.wands.blocked_inputs();
                 let locals = self
                     .wands
-                    .inputs()
-                    .filter(|input| !blocked.contains(input))
+                    .unblocked_resource_inputs(self.vcx, self.deps)
+                    .into_iter()
                     .map(|input| input.mir_local())
                     .collect::<FxHashSet<_>>();
                 let graph = UnblockGraph::for_nodes(

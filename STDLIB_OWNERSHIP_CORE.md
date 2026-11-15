@@ -422,6 +422,38 @@ controls and 36 specification tests at `f5037ccda`; no speedup is claimed.
 
 ### Sixth increment: checked continuation summaries (planned)
 
+The frozen native baseline is `continuation-baseline-01`: 10/12 match. Both
+selected-return clients report an internal permission error before the expected
+result. The first missing permission is the current read of the MIR index
+temporary inside the wand package. The array owner address already uses the
+package's saved heap; its index must use that same history. At entry the array
+owns its complete model; selection splits a generic element and an indexed frame.
+At expiry the returned element and retained frame must rejoin that same owner,
+preserving all other logical indices without assuming distinct physical addresses.
+The package-post label fixes the owner and index used by that obligation; it grants
+no new current permission. The original entry model and `old[lhs]` returned value
+remain distinct. The callee still proves its pledge and the caller still consumes
+the wand at restoration.
+
+First repair hypothesis: backport the saved-index observation from `16ac5c6a0c`
+without other changes. It should remove the index-read error while retaining every
+frame, join and value obligation. Current executable transfers are unaffected
+because their label is absent. A later missing frame would be a separate exposed
+obligation, not evidence that the selected-return pair has passed.
+
+`continuation-index-focused-01` still matches 10/12: the index read is repaired,
+and the first failure is now the package's missing indexed frame. The return
+restorer treats the unblocked generalized `RegionsIn(T)` projection as a request
+to restore the entire array, even though `projection_for_generalized_idx` assigns
+that projection no resource and `indirect_posts` emits none. It consumes the
+indexed frame before packaging the separate, blocked outer-reference lifetime.
+The next hypothesis is to select executable return restorations using precisely
+the existing resource-presence test used by indirect postconditions. Keep every
+resource-bearing unblocked input and all original contract/pledge predicates.
+This should leave the frame available to be captured by the package, whose
+existing join consumes the eventual selected-element resource and restores the
+complete array. No resource is added and no required postcondition is removed.
+
 Start from the qualified `f5037ccda` implementation. A mutable-returning call
 already supplies a checked magic wand: the callee packages it and proves its
 pledge postcondition; the caller applies it only when the required returned and

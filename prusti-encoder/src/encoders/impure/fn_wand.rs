@@ -719,6 +719,25 @@ impl<'vir> WandEncOutput<'vir> {
             .collect()
     }
 
+    /// Only inputs whose immediate postcondition returns a resource need an
+    /// executable restoration. A generalized `RegionsIn(T)` projection has no
+    /// predicate in this encoding; unblocking its whole argument can consume a
+    /// frame that a different, still-blocked lifetime needs for its wand.
+    pub(crate) fn unblocked_resource_inputs(
+        &self,
+        vcx: &'vir vir::VirCtxt<'vir>,
+        deps: &mut TaskEncoderDependencies<'vir, impl TaskEncoder>,
+    ) -> Vec<FunctionShapeInput<Generalized>> {
+        let blocked = self.blocked_inputs();
+        self.inputs()
+            .filter(|input| !blocked.contains(input))
+            .filter(|input| {
+                self.predicates_for_function_shape_node(vcx, deps, (*input).into(), None)
+                    .is_some()
+            })
+            .collect()
+    }
+
     pub fn inputs(&self) -> impl Iterator<Item = FunctionShapeInput<Generalized>> + '_ {
         self.inputs.iter().copied()
     }

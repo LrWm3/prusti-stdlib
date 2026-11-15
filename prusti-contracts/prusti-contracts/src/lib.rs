@@ -98,6 +98,13 @@ pub fn resource_state<T>(_value: &T) -> ResourceState {
     panic!("resource_state is a specification-only observation")
 }
 
+/// Observe one saved element's current referent state. The index must be in
+/// bounds and the caller must still have permission to read its referents.
+#[pure]
+pub fn sequence_resource_state<T>(_values: &Seq<T>, _index: Int) -> ResourceState {
+    panic!("sequence_resource_state is a specification-only observation")
+}
+
 /// Observe the iterator of the enclosing `for` loop in a body invariant.
 ///
 /// This is a specification-only marker. `I` must be the concrete iterator

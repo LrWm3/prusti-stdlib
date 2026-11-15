@@ -174,3 +174,67 @@ The first extended run exposed a reserved `outer` identifier in the new nested
 controls; renaming it preserved all operations, assertions and expected diagnostics.
 Original clients remain unchanged. R3 remains open: next establish permission-
 checked indexed observations and the resource ownership needed by prefix summaries.
+
+## Pointwise sequence observations: invariant before implementation
+
+The selected failure family is observing a single element of a saved logical
+sequence. Freeze the original bounds, negative-index, missing-permission and
+executable-use controls. Add native value/history, repeated-reference, zero-sized
+and exact wrong-state controls. The full original slice-reference positives still
+need indexed ownership and remain in the restoration inventory.
+
+A sequence is immutable data and grants no resource. At an index proved in range,
+cast its element snapshot into the actual element type and apply the qualified
+direct-state observation. Every target read uses an existing physical predicate.
+Saved observations remain values, while a new observation reads the current heap;
+entry and expiry selection use the existing temporal wrapper. Duplicate element
+snapshots may use the same physical permission for repeated reads; no quantified
+permission or address-distinctness axiom is introduced. No loan or obligation is
+created or discharged by this operation.
+
+Hypothesis: a pointwise lowering plus a checked bounds identity function suffices
+for this prerequisite. Bounds must remain explicit even for resource-free element
+types whose state is constant. Unknown structural elements retain the existing
+opaque permission requirement. Whole-sequence capture, ownership transfers and
+loop-prefix summaries are separate work and receive no assumed permissions here.
+
+The first lowering matches 7/13 controls. The first missing obligation is a saved
+sequence's address-to-restored-owner correspondence: its original generic
+predicate can have been converted back to concrete storage. Controlled native
+variants show that the same assertions pass while an executable reference use
+keeps the loan live. A later ghost observation merely moves the failure to its
+own last use. Direct current-reference observations also pass.
+
+Next hypothesis: at acyclic current specification sites, resolve a resource read
+against PCG-owned scalar/unit roots that were actually borrowed. Require explicit
+physical address and type equality before choosing that root's existing concrete
+predicate snapshot, cast back to the common logical value type. Otherwise retain
+the original generic predicate read. Both branches check their actual permissions;
+there is no mask-dependent logical value, new permission or stale final-value
+assumption. Skip historical observations, wand binders and loop invariant contexts.
+The original thirteen controls remain unchanged. Detailed comparison and rejected
+alternatives are in `pointwise-state-model-review.json` in the artifact root.
+
+The owner-read candidate repairs duplicate/ZST controls but initially selects a
+concrete owner too early in the history control (11/13). Review identified an API
+misuse: `computed_owned_capability` explicitly ignores borrowing. Require the
+tracked `place_capability == Exclusive` instead; the live-loan read must retain its
+generic predicate, and only the restored read may use concrete ownership. The
+failed snapshot precondition and full candidate remain preserved.
+
+All original thirteen controls now match. Expanded tests preserve a newly exposed
+last-use ghost-call failure: apply the same current-owner resolution at heap-reading
+builtin call sites, using the tracked pre-main PCG state after operand repacking.
+The new successive-update test initially violated Rust borrowing by assigning the
+owner while its saved reference remained live; update through the existing mutable
+reference instead. Both observations and final assertions remain unchanged, and
+the rejected sources stay in the artifacts.
+
+The expanded native gate matches 117/117 focused controls and both binder/history
+unit tests. Its ordinary Rust borrow-suite build exposes another existing
+prerequisite: erased ghost blocks still type-check their bodies, but the M3 runtime
+contracts lack `Ghost<T>: Deref`. Import only the non-verifying `Deref` stub from
+`f16d6eafc`; it panics if evaluated and ghost bodies remain erased. The verified
+implementation, observations, assertions and ownership rules are unchanged. The
+failed gate and successful remaining suites are retained; complete qualification
+requires a new gate on the combined source.

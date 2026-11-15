@@ -18,7 +18,17 @@ pub(crate) fn state_type<'vir>() -> vir::TypeCSnap<'vir> {
     vir::DomainIdnSnap::new(vir::ViperIdent::new("s_ResourceState"), 0)().downcast_ty()
 }
 
-fn opaque_state<'vir>() -> vir::FunctionIdn<'vir, (vir::PSnap, vir::TyVal, vir::PSnap), vir::CSnap> {
+pub(crate) fn checked_index<'vir>()
+-> vir::FunctionIdn<'vir, (vir::CSnap, vir::Int, vir::Int), vir::CSnap> {
+    vir::FunctionIdn::new(
+        vir::ViperIdent::new("checked_resource_observation_index"),
+        (state_type(), vir::TYPE_INT, vir::TYPE_INT),
+        state_type(),
+    )
+}
+
+fn opaque_state<'vir>() -> vir::FunctionIdn<'vir, (vir::PSnap, vir::TyVal, vir::PSnap), vir::CSnap>
+{
     vir::FunctionIdn::new(
         vir::ViperIdent::new("observed_opaque_resource_state"),
         (vir::TYPE_PSNAP, vir::TYPE_TYVAL, vir::TYPE_PSNAP),
@@ -90,6 +100,24 @@ impl TaskEncoder for ResourceStateEnc {
                 &[],
                 None,
                 None,
+            ));
+            // Keep the bounds obligation even when the element has no indirect
+            // resources and its state does not otherwise use the selected value.
+            let state = vcx.mk_local_decl("observed_state", state_type());
+            let index = vcx.mk_local_decl("observed_index", vir::TYPE_INT);
+            let length = vcx.mk_local_decl("observed_length", vir::TYPE_INT);
+            let i = vcx.mk_local_ex(index);
+            let n = vcx.mk_local_ex(length);
+            program.add_function(vcx.mk_function(
+                checked_index(),
+                (state, index, length),
+                vcx.alloc_slice(&[
+                    vir::expr! { ([vcx.mk_uint::<0>()]) <= ([i]) },
+                    vir::expr! { ([i]) < ([n]) },
+                ]),
+                &[],
+                None,
+                Some(vcx.mk_local_ex(state)),
             ));
         });
     }

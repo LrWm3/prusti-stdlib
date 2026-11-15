@@ -2514,6 +2514,67 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         (candidates.len() == 1).then(|| *candidates.iter().next().unwrap())
     }
 
+    fn current_resource_observation_owners(
+        &mut self,
+        pcg_state: &Pcg<'_, 'vir>,
+    ) -> EncodeResult<'vir, Vec<super::impure::resource_owner::CurrentResourceOwner<'vir>>, E> {
+        use super::{
+            impure::resource_owner::CurrentResourceOwner,
+            ty::{
+                RustTyNormalized,
+                generics::{GArgsCastEnc, TyExprEnc},
+            },
+        };
+        if !config::checked_scalar_loans() || self.loop_analysis().all_loops().next().is_some() {
+            return Ok(Vec::new());
+        }
+        let mut borrowed = FxHashSet::default();
+        for block in self.body.basic_blocks.iter() {
+            for statement in &block.statements {
+                if let mir::StatementKind::Assign(box (
+                    _,
+                    mir::Rvalue::Ref(_, mir::BorrowKind::Mut { .. }, place),
+                )) = &statement.kind
+                    && place.projection.is_empty()
+                {
+                    borrowed.insert(place.local);
+                }
+            }
+        }
+        let mut locals: Vec<_> = borrowed.into_iter().collect();
+        locals.sort();
+        let mut owners = Vec::new();
+        for local in locals {
+            let place: Place<'vir> = local.into();
+            let ty = self.local_decls[local].ty;
+            if !(matches!(
+                ty.kind(),
+                TyKind::Bool | TyKind::Char | TyKind::Int(_) | TyKind::Uint(_)
+            ) || ty.is_unit())
+                || !pcg_state.owned()[local].is_allocated()
+                || pcg_state.place_capability(place, self.pcg_ctxt())
+                    != Some(CapabilityKind::Exclusive)
+            {
+                continue;
+            }
+            let concrete = RustTyDecomposition::from_ty(ty, self.def_id);
+            let caster =
+                self.deps
+                    .require_dep::<GArgsCastEnc<super::Pure>>(Some(RustTyNormalized {
+                        param: RustTyDecomposition::param(),
+                        concrete,
+                    }))?;
+            let type_value = self.deps.require_dep::<TyExprEnc>(concrete)?;
+            let (encoded, value, _, _) = self.encode_place_with_snap(place)?;
+            owners.push(CurrentResourceOwner {
+                address: encoded.expr.address,
+                ty: type_value,
+                value: caster.cast_to_callee_ctx(value).downcast_ty(),
+            });
+        }
+        Ok(owners)
+    }
+
     fn encode_spec_block(
         &mut self,
         spec_block: mir::BasicBlock,
@@ -2560,6 +2621,16 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 (self.def_id, self.vcx.alloc(locals), vir::OldLabel::None),
             )
             .downcast_ty();
+        let expr = if place_capabilities.is_none()
+            && super::impure::resource_owner::has_current_observation(expr.as_dyn())
+        {
+            let owners = self.current_resource_observation_owners(pcg_state)?;
+            expr.fold_with(&mut super::impure::resource_owner::CurrentResourceObservations {
+                vcx: self.vcx, owners: &owners,
+            }).unwrap_or(expr)
+        } else {
+            expr
+        };
         let mut local_names = Default::default();
         vir::collect_locals(expr.as_dyn(), &mut local_names);
         if !local_names
@@ -3540,6 +3611,20 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                     &None,
                 )?
                 .unwrap();
+            let expr = if builtin.reads_heap()
+                && super::impure::resource_owner::has_current_observation(expr.as_dyn())
+            {
+                let current_fpcs = self.current_fpcs.take().unwrap();
+                let state = &current_fpcs.statements.last().unwrap().states[EvalStmtPhase::PreMain];
+                let owners = self.current_resource_observation_owners(state);
+                self.current_fpcs = Some(current_fpcs);
+                let owners = owners?;
+                expr.fold_with(&mut super::impure::resource_owner::CurrentResourceObservations {
+                    vcx: self.vcx, owners: &owners,
+                }).unwrap_or(expr)
+            } else {
+                expr
+            };
             Some((false, expr))
         } else if is_pure {
             let pure_func = self

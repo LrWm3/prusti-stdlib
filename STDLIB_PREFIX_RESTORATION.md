@@ -15,8 +15,8 @@ watchdog. Other cases retain their recorded 180/600-second schedule.
 | Current evidence | Result |
 |---|---|
 | Frozen R2 Ferrum / Silicon gates | Each 454/454; each 70/70 focused |
-| Current method-termination integration Ferrum gate | 519/519; 117/117 focused; 37 specification + 2 ownership/history tests |
-| Native scalar slice segment candidate | 13/13 focused Ferrum; affected-family qualification pending |
+| Current scalar slice segment integration Ferrum gate | 536/536; 130/130 focused; 37 specification + 2 ownership/history tests |
+| Native scalar slice segment feature controls | 13/13 Ferrum and 13/13 Silicon; same experimental source and binaries |
 | Original prefix positive on R2 | Compilation/specification failure |
 | Original exact false control on R2 | Wrong diagnostic |
 | Prefix proof, inference, full restoration | Unqualified |
@@ -318,3 +318,17 @@ restoration remain unqualified. The next gate reruns every currently passing fam
 affected by indirect ownership, observation resolution and array repacking. Detailed
 failed probes, the invariant and immutable binary/source captures remain in
 `target/stdlib-ownership-prefix-r3/` in the preserved main worktree.
+
+Scalar slice segments are integrated at `b01cbd624bf5c10576815ca4d0c5dfaaf0c31595`.
+Experimental and own integration builds independently match 536/536 Ferrum suite
+checks and 130/130 focused controls, plus 37 specification and two ownership/history
+tests. All 13 new controls also match on Silicon with the same experimental source
+and six binaries. Exact negative diagnostics and 180/600-second limits are retained.
+Integration suite time is 863.97s; no case crosses the fixed material slowdown
+threshold. Source, binary and pending main-file preservation checks pass. See
+[segment qualification](STDLIB_COLLECTION_SEGMENT_EVIDENCE.json).
+
+R3 remains open. Next capture whole-sequence resource states from the checked
+segment and validate immutable history against mutation. Generic ownership,
+iterator summaries, the original prefix pair, inference and full restoration
+remain unqualified. Stop before D1–D6.

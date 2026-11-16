@@ -507,6 +507,8 @@ impl TaskEncoder for PrustiBuiltinEnc {
 
     fn emit_outputs<'vir>(program: &mut task_encoder::Program<'vir>) {
         CollectionOpsEnc::emit_outputs(program);
+        SeqAppendLemmaEnc::emit_outputs(program);
+        SeqNativeLookupLemmaEnc::emit_outputs(program);
     }
 }
 
@@ -1984,5 +1986,138 @@ impl CollectionOpsEnc {
             None,
             Some(body),
         )
+    }
+}
+
+/// Checked bridge between total specification lookups and native concatenation.
+/// Its two postconditions introduce the old lookup at a demanded new index.
+/// The existing one-way lookup axiom alone does not instantiate that term.
+/// This method has a verified body; no additional sequence axiom is introduced.
+pub(crate) struct SeqAppendLemmaEnc;
+
+impl TaskEncoder for SeqAppendLemmaEnc {
+    task_encoder::encoder_cache!(SeqAppendLemmaEnc);
+    const ENCODER_NAME: &'static str = "checked sequence append lookup";
+    type TaskDescription<'vir> = ();
+    type OutputFullDependency<'vir> = vir::MethodIdn<'vir, (vir::Seq, vir::Seq)>;
+    type OutputFullLocal<'vir> = vir::Method<'vir>;
+
+    fn task_to_key<'vir>(_: &Self::TaskDescription<'vir>) -> Self::TaskKey<'vir> {}
+
+    fn do_encode_full<'vir>(
+        _: &(),
+        deps: &mut TaskEncoderDependencies<'vir, Self>,
+    ) -> EncodeFullResult<'vir, Self> {
+        deps.emit_output_ref((), ())?;
+        let lookup = deps
+            .require_ref::<CollectionOpsEnc>(CollectionOp::SeqLookup)?
+            .expect_seq_lookup();
+        vir::with_vcx(|vcx| {
+            let seq = vcx.mk_ty_seq(vir::TYPE_PSNAP);
+            let left = vcx.mk_local_decl("left", seq);
+            let right = vcx.mk_local_decl("right", seq);
+            let a = vcx.mk_local_ex(left);
+            let b = vcx.mk_local_ex(right);
+            let joined = vcx.mk_seq_concat_expr(a, b);
+            let index = vcx.mk_local_decl("index", vir::TYPE_INT);
+            let i = vcx.mk_local_ex(index);
+            let total = lookup(joined, i);
+            let before = lookup(a, i);
+            let after = lookup(
+                b,
+                vcx.mk_bin_op_expr(vir::BinOpKind::Sub, i, vcx.mk_collection_len_expr(a))
+                    .downcast_ty(),
+            );
+            let zero = vcx.mk_int::<0>();
+            let prefix = vir::expr! { vcx;
+                forall [index] :: {[total]}
+                    (((zero) <= (i)) && ((i) < (|a|))) ==> ((total) == (before))
+            };
+            let suffix = vir::expr! { vcx;
+                forall [index] :: {[total]}
+                    (((|a|) <= (i)) && ((i) < (|joined|))) ==> ((total) == (after))
+            };
+            let method =
+                vir::MethodIdn::new(vir::ViperIdent::new("prusti_seq_append_lookup"), (seq, seq));
+            let body = vcx.alloc_slice(&[vcx.mk_cfg_block(
+                &vir::CfgBlockLabelData::End,
+                &[],
+                &[],
+                &vir::TerminatorStmtData::Exit,
+            )]);
+            let definition = vcx.mk_method(
+                method,
+                (left, right),
+                &[],
+                &[],
+                vcx.alloc_slice(&[prefix, suffix]),
+                Some(body),
+            );
+            Ok((definition, method))
+        })
+    }
+
+    fn emit_outputs<'vir>(program: &mut task_encoder::Program<'vir>) {
+        for method in Self::all_outputs_local_no_errors(program) {
+            program.add_method(method);
+        }
+    }
+}
+
+/// A checked observation rule for an explicitly available immutable model.
+/// Native indexing is a trigger here, not an unchecked inverse lookup axiom.
+pub(crate) struct SeqNativeLookupLemmaEnc;
+impl TaskEncoder for SeqNativeLookupLemmaEnc {
+    task_encoder::encoder_cache!(SeqNativeLookupLemmaEnc);
+    const ENCODER_NAME: &'static str = "checked native sequence lookup";
+    type TaskDescription<'vir> = ();
+    type OutputFullDependency<'vir> = vir::MethodIdn<'vir, vir::Seq>;
+    type OutputFullLocal<'vir> = vir::Method<'vir>;
+    fn task_to_key<'vir>(_: &Self::TaskDescription<'vir>) -> Self::TaskKey<'vir> {}
+    fn do_encode_full<'vir>(
+        _: &Self::TaskKey<'vir>,
+        deps: &mut TaskEncoderDependencies<'vir, Self>,
+    ) -> EncodeFullResult<'vir, Self> {
+        deps.emit_output_ref((), ())?;
+        let lookup = deps
+            .require_ref::<CollectionOpsEnc>(CollectionOp::SeqLookup)?
+            .expect_seq_lookup();
+        vir::with_vcx(|vcx| {
+            let seq = vcx.mk_ty_seq(vir::TYPE_PSNAP);
+            let model = vcx.mk_local_decl("model", seq);
+            let s = vcx.mk_local_ex(model);
+            let index = vcx.mk_local_decl("index", vir::TYPE_INT);
+            let i = vcx.mk_local_ex(index);
+            let native = vcx.mk_seq_index_expr(s, i).downcast_ty::<vir::PSnap>();
+            let total = lookup(s, i);
+            let bounds = CollectionOpsEnc::in_bounds(vcx, i, s);
+            let guarantee = vir::expr! { vcx;
+                forall [index] :: {[native]} (bounds) ==> ((native) == (total))
+            };
+            let method =
+                vir::MethodIdn::new(vir::ViperIdent::new("prusti_seq_native_lookup_bridge"), seq);
+            let body = vcx.alloc_slice(&[vcx.mk_cfg_block(
+                &vir::CfgBlockLabelData::End,
+                &[],
+                &[],
+                &vir::TerminatorStmtData::Exit,
+            )]);
+            Ok((
+                vcx.mk_method(
+                    method,
+                    (model,),
+                    &[],
+                    &[],
+                    vcx.alloc_slice(&[guarantee]),
+                    Some(body),
+                ),
+                method,
+            ))
+        })
+    }
+    fn emit_outputs<'vir>(program: &mut task_encoder::Program<'vir>) {
+        for method in Self::all_outputs_local_no_errors(program) {
+            program.add_method(method);
+        }
     }
 }

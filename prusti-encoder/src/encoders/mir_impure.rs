@@ -3759,6 +3759,14 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             } else {
                 expr
             };
+            if matches!(builtin, PrustiBuiltin::Seq(crate::encoders::builtin::SeqOp::Append)) {
+                let vir::ExprKindData::CollectionBinOp(concat) = expr.kind else {
+                    unreachable!("Seq::append must lower to native concatenation")
+                };
+                debug_assert!(matches!(concat.kind, vir::CollectionBinOpKind::Concat));
+                let lemma = self.deps.require_dep::<crate::encoders::builtin::SeqAppendLemmaEnc>(())?;
+                self.stmt(lemma(concat.lhs.downcast_ty(), concat.rhs.downcast_ty()).alloc());
+            }
             Some((false, expr))
         } else if is_pure {
             let pure_func = self

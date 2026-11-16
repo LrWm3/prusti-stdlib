@@ -9,7 +9,7 @@ the final 790-client / 2198-check inventory. Stop before D1–D6; no automation.
 | Deliverable | Current status | Required result |
 |---|---|---|
 | I1: count-loop inference | Accepted independently: compiler b30c4156f, report 66376bfcd | Contract-only generic count; overflow checked; wrong variants rejected |
-| O1: bounded mutable-loop ownership | Native prerequisites Ferrum-qualified at 6fcef55c8; functional summary under test | Manual value invariants; checked split/update/join/drop; bounded backedge state |
+| O1: bounded mutable-loop ownership | Inline scalar summary Ferrum-qualified at f22169a59; reusable ownership rules pending | Manual value invariants; checked split/update/join/drop; bounded backedge state |
 | C1: combine inference and summary | Not started | Infer value invariants with identical ownership obligations |
 | H1: original difficult prefix | Unqualified | Original assertions and exact negative; repeated native/CLI measurements |
 | Final restoration qualification | Unqualified | Complete same-source Ferrum/Silicon matrix and library verification |

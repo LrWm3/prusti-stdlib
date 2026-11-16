@@ -253,3 +253,26 @@ These results establish the checked inline scalar summary and value prerequisite
 They do not yet establish O1: native lowering still needs to call the reusable
 checked ownership composition rules, followed by proof-size/work comparison and
 milestone Silicon validation. The original H1 and C1 remain pending.
+
+## Frozen inline comparison baseline
+
+Compiler f22169a59 with PCG 4f3c70f passed the own-build Ferrum gate
+`o1-inline-summary-gate-01`: 608/608 suite checks, all seven libraries, and
+181/181 focused controls (not additive). Source, binaries and main's pending
+changes remained unchanged. No previously passing proof exceeded both 2x its
+prior time and an additional 10 seconds. The nine new controls were included
+on this same compiler. See STDLIB_INLINE_SUMMARY_EVIDENCE.json.
+
+Preserve this branch before experimenting with reusable ownership composition.
+The next hypothesis is that a canonical summary over explicit physical owner /
+tail identities, metadata and an immutable completed sequence allows a checked
+symbolic join to replace the inline backedge proof. Canonicalize at entry, head,
+application and backedge consistently; do not wrap the full historical formula
+into and out of a helper each iteration. Identity and value premises remain
+checked, and the native next continuation remains the permission authority.
+The helper must consume the previous summary, the actual next continuation and
+the expired yield, then produce one replacement summary. Current tail resources
+remain with the iterator. Raw helper models are diagnostic only; acceptance
+requires unchanged native Rust controls, measured proof work and milestone Silicon.
+Detailed proposed operands and stages are in the preserved artifact
+`target/stdlib-inference-summary-20261115/reusable-summary-next.json`.

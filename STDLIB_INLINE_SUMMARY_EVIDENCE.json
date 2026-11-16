@@ -1,0 +1,109 @@
+{
+  "status": "Ferrum-qualified inline scalar summary; reusable native ownership composition and O1 completion pending",
+  "source_revision": "f22169a59b0ade5759117c95227f8c2d705d17ba",
+  "pcg_revision": "4f3c70fb35d2c1e79f9da4ac928aa30719ab5440",
+  "gate": "/home/will/wk/exp/prusti-stdlib/target/stdlib-inference-summary-20261115/o1-inline-summary-gate-01",
+  "source_manifest_sha256": "73ceb5d44d95967648cb6040c1ecc98407b8f2ff18b515644e03024ab9ca1939",
+  "binary_manifest_sha256": "f82364d77030ef01e8792b9f7a5e6ece2e5ab57905c459d3085a01aa45545af5",
+  "ferrum": {
+    "matched": 608,
+    "expected": 608,
+    "libraries_verified": 7,
+    "focused_matched": 181,
+    "focused_expected": 181,
+    "focused_not_additive": true,
+    "suites": {
+      "borrow": {
+        "matched": 224,
+        "expected": 224,
+        "seconds": 362.21,
+        "longest": {
+          "case": "frame_pass",
+          "passed": true,
+          "seconds": 18.44
+        }
+      },
+      "collections": {
+        "matched": 27,
+        "expected": 27,
+        "seconds": 97.13,
+        "longest": {
+          "case": "boundaries_pass",
+          "passed": true,
+          "seconds": 30.08
+        }
+      },
+      "extern": {
+        "matched": 97,
+        "expected": 97,
+        "seconds": 71.47,
+        "longest": {
+          "case": "core-only",
+          "passed": true,
+          "seconds": 5.65
+        }
+      },
+      "hash": {
+        "matched": 51,
+        "expected": 51,
+        "seconds": 71.57,
+        "longest": {
+          "case": "spec-library",
+          "passed": true,
+          "seconds": 9.13
+        }
+      },
+      "iterator": {
+        "matched": 166,
+        "expected": 166,
+        "seconds": 334.53,
+        "longest": {
+          "case": "summary_prefix_wrong_owner",
+          "passed": true,
+          "seconds": 18.42
+        }
+      },
+      "sequence": {
+        "matched": 22,
+        "expected": 22,
+        "seconds": 21.66,
+        "longest": {
+          "case": "spec-library",
+          "passed": true,
+          "seconds": 8.23
+        }
+      },
+      "vec": {
+        "matched": 21,
+        "expected": 21,
+        "seconds": 30.82,
+        "longest": {
+          "case": "spec-library",
+          "passed": true,
+          "seconds": 6.15
+        }
+      }
+    },
+    "material_timing_increases": []
+  },
+  "preservation": {
+    "source_unchanged": true,
+    "binary_unchanged": true,
+    "pending_main_unchanged": true
+  },
+  "repairs": [
+    "Checked append and native-lookup value lemmas",
+    "Checked immutable ghost-model frame from encoded-CFG initialization",
+    "One scalar loop-head restoration wand with explicit physical correspondence",
+    "Checked local prefix reconciliation using the actual expired yield"
+  ],
+  "silicon": "Untested for inline summary; reserved for completed reusable ownership feature",
+  "performance_claim": "No material regression in previously passing cases. No reusable ownership proof-work reduction established yet.",
+  "remaining": [
+    "Reusable checked native split/join/restoration and comparison with this baseline",
+    "C1 inferred collection values",
+    "H1 unchanged reference-containing pair and native/CLI repeats",
+    "Complete same-source Ferrum/Silicon acceptance matrix"
+  ],
+  "stop_before": "D1-D6"
+}

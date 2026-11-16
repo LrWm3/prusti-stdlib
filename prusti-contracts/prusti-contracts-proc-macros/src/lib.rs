@@ -60,6 +60,10 @@ pub fn body_invariant(_tokens: TokenStream) -> TokenStream {
 
 #[cfg(not(feature = "prusti"))]
 #[proc_macro]
+pub fn body_restore_prefix(_tokens: TokenStream) -> TokenStream { TokenStream::new() }
+
+#[cfg(not(feature = "prusti"))]
+#[proc_macro]
 pub fn prusti_assert(_tokens: TokenStream) -> TokenStream {
     TokenStream::new()
 }
@@ -182,6 +186,10 @@ pub fn verified(attr: TokenStream, tokens: TokenStream) -> TokenStream {
 pub fn body_invariant(tokens: TokenStream) -> TokenStream {
     prusti_specs::body_invariant(tokens.into()).into()
 }
+
+#[cfg(feature = "prusti")]
+#[proc_macro]
+pub fn body_restore_prefix(tokens: TokenStream) -> TokenStream { prusti_specs::body_restore_prefix(tokens.into()).into() }
 
 #[cfg(feature = "prusti")]
 #[proc_macro]

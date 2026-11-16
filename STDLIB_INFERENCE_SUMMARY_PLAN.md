@@ -8,8 +8,8 @@ the final 790-client / 2198-check inventory. Stop before D1–D6; no automation.
 
 | Deliverable | Current status | Required result |
 |---|---|---|
-| I1: count-loop inference | Starting from qualified integration | Contract-only generic count; overflow checked; wrong variants rejected |
-| O1: bounded mutable-loop ownership | Starting from preserved ownership branch | Manual value invariants; checked split/update/join/drop; bounded backedge state |
+| I1: count-loop inference | Accepted independently: compiler b30c4156f, report 66376bfcd | Contract-only generic count; overflow checked; wrong variants rejected |
+| O1: bounded mutable-loop ownership | Native prerequisites Ferrum-qualified at 6fcef55c8; functional summary under test | Manual value invariants; checked split/update/join/drop; bounded backedge state |
 | C1: combine inference and summary | Not started | Infer value invariants with identical ownership obligations |
 | H1: original difficult prefix | Unqualified | Original assertions and exact negative; repeated native/CLI measurements |
 | Final restoration qualification | Unqualified | Complete same-source Ferrum/Silicon matrix and library verification |
@@ -26,8 +26,12 @@ immediate queue; it is **untested**, not passed. Integration has not adopted it.
 Detailed provenance remains in `target/stdlib-ownership-prefix-r3/` in the
 preserved main worktree. Main's six pending source files stay untouched.
 
-Use `stdlib/count-inference` in its own worktree for I1 and the existing
-`stdlib/ownership-prefix-r3` worktree for O1. One agent and one verifier worker;
+I1 is preserved on `stdlib/count-inference` and integrated on
+`stdlib/ownership-inference-m3` (own builds, 568/568 Ferrum checks and 10/10
+focused controls on each backend). Native O1 prerequisites remain separate on
+`stdlib/ownership-prefix-r3` at report 57cd95599: 596/596 Ferrum suite checks,
+172/172 focused (not additive), no Silicon qualification yet. Continue O1 on
+`stdlib/bounded-native-summary` in the existing isolated worktree. One agent and one verifier worker;
 independence means separate implementations, prerequisites and measurements,
 not concurrent backend workers. Neither experiment waits for the other's feature
 completion. Keep the integration working tree stable between qualified increments.

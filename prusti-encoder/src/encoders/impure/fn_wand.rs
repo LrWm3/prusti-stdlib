@@ -80,7 +80,7 @@ impl<'vir, E: TaskEncoder> ImpureEncVisitor<'vir, '_, E> {
                     )
                 })
                 .collect();
-            let mut package_script = self.pcs_package_script(final_borrow_state, rhs, label)?;
+            let mut package_script = self.pcs_package_script(final_borrow_state, rhs, label, None)?;
 
             for EncodedPledge {
                 expiry_postcondition,

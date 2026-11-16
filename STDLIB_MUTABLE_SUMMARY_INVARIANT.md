@@ -121,3 +121,135 @@ binary preservation checks passed; no previously passing case exceeded both
 2x its prior time and an additional 10 seconds. See
 STDLIB_NATIVE_OWNERSHIP_EVIDENCE.json. Silicon and the bounded functional summary
 remain pending; this checkpoint is not full O1 or final combined acceptance.
+
+## Native bounded-summary implementation sequence
+
+Preserve the qualified prerequisite compiler at 6fcef55c8 / report 57cd95599.
+The new experiment is stdlib/bounded-native-summary in the same isolated worktree.
+The small join theorem in o1-bounded-summary-model-01 passed; wrong value, missing
+element and missing old summary reject with their intended obligations. It is
+diagnostic evidence only.
+
+Use the existing three-operand manual annotation shape
+`body_restore_prefix!(&it, *owner, *completed)`: owner is an immutable ghost raw
+slice reference captured before borrowing, completed is a ghost sequence updated
+while each yield is accessible. Decode this into an explicit scalar summary IR.
+Select exactly one PCG restoration edge with no live yield at its loop head;
+reject ambiguous edges and advancement before the annotation. The source and
+iterator element representations must match. The source raw pointer is identity
+data, never permission.
+
+First connect the annotated functional relation to the existing checked native
+package path, using one saved tuple of annotation inputs per loop iteration.
+The previous summary uses that tuple after the iterator/prefix change; the new
+summary captures the current tuple. Prove a symbolic-length prefix update and
+untouched suffix with exact false/stale controls. This intermediate step is not
+O1 acceptance: the reusable checked join must then be called by native lowering.
+
+Canonicalize the actual next continuation with a checked package into:
+`Tail(new) * Element(y) --* Tail(previous)` with the existing expiry-value
+concatenation. Preserve the actual post-call yielded identity and require the
+Some branch. The package consumes the original continuation; it does not assert
+its contract as a new assumption. Its antecedent contains both tail and element,
+so all expiry observations have their resource.
+
+Call the checked symbolic join with the prior summary, canonical step, actual
+expired element resource and its observed final value. Its contract returns one
+new summary with `completed ++ [final_value]`. The current tail stays with the
+iterator. The helper consumes the two old obligations and the expired yield; no
+completed-yield history crosses the backedge. Check the user's current ghost
+prefix equals this new model, so an incorrect prefix update cannot be accepted.
+
+The initial constructor package establishes the empty-prefix summary from its
+original continuation and the checked generic-to-concrete owner conversion.
+Dropping/exiting applies the remaining summary only after pending yields expire;
+ordinary reverse restoration can handle an exit between next and the backedge.
+First scope has one next per backedge and no retained yield across it. Preserve
+all original next/constructor contracts, pointer metadata, source slot identity,
+and suffix framing. No logical-index-to-physical-address injectivity is used.
+
+Measure the native result before and after helper extraction: one parameterized
+summary at the head, proof bytes, checked method bodies, cold runtime and available
+backend counters. Count inference remains independently accepted. O1 is complete
+only after the native prefix/suffix pair uses checked reusable contracts and the
+affected regression and milestone Silicon gates pass.
+
+## First native functional result and isolated value prerequisite
+
+The first scalar prefix/suffix run preserved the original contracts and checked
+packages, but the positive failed the quantified completed-prefix invariant.
+The false-assertion control failed that earlier obligation; the wrong-update
+control hit the 180-second verifier limit. None counts as acceptance. Artifacts:
+`o1-scalar-summary-native-01` (source, six binaries, Viper, commands and logs).
+
+A scalar mutation/Seq::single_ref observation passes. A pure sequence-building
+loop, with no iterator or ownership packages, fails the same quantified invariant
+(`o1-scalar-summary-isolate-02`). This isolates a value proof prerequisite.
+A minimal Viper model shows the one-way total-lookup axiom maps a demanded new
+lookup to native indexing, but does not introduce the old wrapper lookup needed
+to instantiate the prefix invariant. A checked append lemma supplies prefix and
+suffix lookup equalities; the model then passes. Its deliberately wrong prefix
+lemma is rejected. No lookup axiom or ownership assumption is changed.
+
+The proposed native repair calls that checked lemma at ghost Seq::append. This
+is independently testable on the pure loop and exact wrong-value controls before
+retesting the native ownership summary. The model is diagnostic evidence only;
+full Rust qualification and affected sequence/ownership regressions are required.
+
+The append lemma now passes the native pure sequence loop and its exact wrong
+value control (`o1-append-lemma-native-02`). A second checked lemma connects
+native indexing to total lookups for the available completed model at the loop
+head. With this bridge the original native prefix/suffix body assertions pass
+in 23.97 seconds (`o1-value-bridge-isolate-01`, exact earlier Rust fixture).
+
+Explicit public postconditions exposed two additional framing obligations:
+`limit == old(limit)` is supplied as a manual checked invariant; the immutable
+original ghost sequence must retain its actual post-initialization value. A
+checked equality to that capture makes the full exported proof pass (29.8s,
+`o1-immutable-model-frame-01`). Directly mentioning the borrowed owner in the
+loop is rejected by Rust, so the implementation identifies the ghost model's
+unique initialization and preserves its value, without reading the owner.
+
+The initial native origin heuristic conservatively emitted no frame: raw MIR
+also has the ghost-erased branch. Dominance must use the same selected spec-arm
+successors as the actual encoding. The revised analysis does so, rejects
+ambiguous/repeated or in-loop initializations, and still emits an ordinary
+entry/backedge invariant rather than assuming stability. Native validation of
+this revision is pending. The wrong-origin control captures the source after
+an explicit mutation and must reject the function-entry suffix postcondition.
+
+`o1-model-frame-native-01` (before the dominance correction) had 5/6 intended
+outcomes: pure positive/negative, false assertion, wrong origin and wrong update
+matched; the full positive still failed its suffix postcondition. The wrong
+update took 148.85s under the unchanged 180s limit, after earlier timeouts. This
+is one passing negative, not repeatability or performance acceptance. No O1
+completion is claimed; reusable native ownership composition and regressions
+remain required.
+
+The corrected native immutable-model frame proves the public prefix and untouched
+suffix postconditions (15.46s, `o1-model-frame-native-02`). The wrong-update
+negative still timed out, so its next repair isolates a necessary join premise:
+`completed_new == completed_old ++ [actual expired yield value]`. The exact
+exported positive still passes with that additional checked assertion; the wrong
+update fails there in 26.62s (`o1-summary-reconcile-model-01`).
+
+Native lowering now carries a typed ScalarSummaryJoin with the actual selected
+next-call location and old/new immutable completed models. It checks the Some
+case and that equality immediately after importing the original continuation's
+checked antecedent. It retains the original continuation, old summary and new
+package proof. Scope is one direct next on the selected iterator before each
+backedge, one captured completed model and no retained yield at the head.
+
+`o1-reconcile-native-01`: 7/7 native outcomes match on one compiler, including
+full postconditions (15.24s), exact wrong-update rejection (9.91s), false
+assertion, wrong origin, scalar observation and pure sequence positive/negative.
+Source and six binary hashes remained unchanged. A separate owner-selection
+control rejects a different physical owner at the annotation (18.5s). The extra
+next case is rejected at the annotation with the intended unsupported reason;
+its expected text was corrected to include the compiler's method-body wrapper.
+The next combined affected gate must include all nine cases on one compiler.
+
+These results establish the checked inline scalar summary and value prerequisites.
+They do not yet establish O1: native lowering still needs to call the reusable
+checked ownership composition rules, followed by proof-size/work comparison and
+milestone Silicon validation. The original H1 and C1 remain pending.

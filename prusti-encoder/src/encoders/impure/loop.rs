@@ -141,6 +141,12 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             let ty_out = self.deps.require_dep::<TyUseImpureEnc>(task).unwrap();
             let pred = ty_out.ref_to_pred(self.vcx, place_res.expr.expect_predicate(), None);
             inv.push(pred);
+            if place.projection.is_empty()
+                && invariant_inputs.contains(&place.local)
+                && let Some(origin) = self.immutable_model_origin(place.local)
+            {
+                inv.push(self.vcx.mk_eq_expr(_snap, self.vcx.maybe_apply_label(_snap, Some(origin))));
+            }
             if reference_slots.contains(place) {
                 // The argument binding is immutable. Check its stable identity
                 // as an ordinary entry/backedge invariant, without reading the
@@ -169,6 +175,7 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         for edge in &restoration_edges {
             let mut let_bind = WandOldOuter::LetBind(Vec::new());
             let (wand, _) = self.coupled_wand(edge, &mut let_bind)?;
+            let wand = self.with_restoration_wand(wand, edge, &mut let_bind, false, false)?;
             // Keep empty-edge elimination consistent with package, footprint,
             // and apply emission in pcs_handle_wand.
             if super::wand::empty_resource_wand(wand) {
@@ -221,6 +228,15 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         r: LifetimeProjection<'vir, T>,
         old_outer: &mut WandOldOuter<'vir>,
     ) -> EncodeResult<'vir, Vec<vir::ExprBool<'vir>>, E> {
+        self.encode_lifetime_projection_with_snapshot(r, old_outer, None)
+    }
+
+    pub(crate) fn encode_lifetime_projection_with_snapshot<T: PcgLifetimeProjectionBaseLike<'vir>>(
+        &mut self,
+        r: LifetimeProjection<'vir, T>,
+        old_outer: &mut WandOldOuter<'vir>,
+        snapshot: Option<vir::ExprSnap<'vir>>,
+    ) -> EncodeResult<'vir, Vec<vir::ExprBool<'vir>>, E> {
         let place = r.base().to_pcg_lifetime_projection_base();
         // The projection's history is separate from the lifetime of its local
         // storage. Advancing an iterator changes its tail while the previous
@@ -230,7 +246,10 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             Some(LifetimeProjectionLabel::Location(at)) => Some(self.get_location_label(at)),
             _ => None,
         };
-        let (place_snap, ty) = match place {
+        let (place_snap, ty) = if let Some(snapshot) = snapshot {
+            let PcgLifetimeProjectionBase::Place(p) = place else { unreachable!() };
+            (snapshot, Self::get_place(p).ty(self.pcg_ctxt()))
+        } else { match place {
             PcgLifetimeProjectionBase::Place(MaybeRemotePlace::Local(
                 MaybeLabelledPlace::Current(p),
             )) if heap_label.is_some() => {
@@ -253,7 +272,7 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                 (snap, ty)
             }
             PcgLifetimeProjectionBase::Const(c) => todo!("{c:?}"),
-        };
+        }};
         let ty = RustTyDecomposition::from_ty(ty.ty, self.def_id);
         let indirect = self
             .deps
@@ -330,7 +349,7 @@ impl<'vir: 'a, 'a, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         }
     }
 
-    fn mk_wand_outer<T: SnapOrRef>(
+    pub(crate) fn mk_wand_outer<T: SnapOrRef>(
         &mut self,
         expr: vir::Expr<'vir, T>,
         old_outer: &mut WandOldOuter<'vir>,

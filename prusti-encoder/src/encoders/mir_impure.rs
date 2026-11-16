@@ -1,3 +1,6 @@
+mod loop_summary;
+use loop_summary::{LoopRestorationFrame, ScalarSummaryJoin};
+
 use itertools::Itertools;
 use pcg::{
     PcgOutput,
@@ -180,6 +183,7 @@ where
     pub wandless_calls: FxHashSet<mir::BasicBlock>,
     pub from_to_vars: FromToVars<'vir>,
     pub(crate) loan_states: LoanStates<'vir>,
+    pub(crate) loop_restoration_frames: FxHashMap<mir::BasicBlock, LoopRestorationFrame<'vir>>,
 
     // for the current basic block
     pub current_fpcs: Option<PcgBasicBlock<'enc, 'vir>>,
@@ -284,6 +288,7 @@ pub(crate) struct Footprint<'a, 'vir> {
     actions: &'a [BorrowPcgUnblockAction<'vir>],
     label: &'vir str,
     pub(crate) parts: Vec<vir::ExprBool<'vir>>,
+    summary_join: Option<ScalarSummaryJoin<'vir>>,
 }
 
 enum EncodeRvalueError<'vir, E: TaskEncoder> {
@@ -1197,6 +1202,12 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                                 // so its old[lhs] observations include all of
                                 // the resources whose expiry it describes.
                                 self.stmt(self.vcx.mk_assert_stmt(wand.lhs));
+                                if let Some(join) = footprint.summary_join
+                                    && join.call == call.location().block
+                                {
+                                    let option_ty = destination.ty(self.local_decls, self.vcx.tcx()).ty;
+                                    self.check_summary_yield(join, option_ty, dest_snap, label_post)?;
+                                }
                             }
                             if footprint.is_none()
                                 && config::checked_scalar_loans()
@@ -1271,6 +1282,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         borrows_state: &BorrowsState<'_, 'vir>,
         rhs: Vec<(N, Vec<vir::ExprBool<'vir>>)>,
         label: &'vir str,
+        summary_join: Option<ScalarSummaryJoin<'vir>>,
     ) -> EncodeResult<'vir, Vec<vir::Stmt<'vir>>, E> {
         let mut parts = Vec::new();
         let mut unblock = Vec::new();
@@ -1281,6 +1293,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             let mut footprint = Footprint {
                 actions: &actions,
                 label,
+                summary_join,
                 parts: Vec::new(),
             };
             // Where nothing unblocks the node, it is given back as it is.
@@ -2921,13 +2934,33 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         // loop head by default
         let mut invariant = None;
         if let Some(loop_spec) = self.spec_blocks.loop_specs.get(&block) {
+            let original_head = loop_spec.original_head_block;
+            let loop_id = loop_spec.loop_id;
+            let restorations = loop_spec.restorations.clone();
+            let invariants = loop_spec.invariants.clone();
+            if let Some((spec_block, span)) = restorations.first().copied() {
+                if restorations.len() != 1 {
+                    return Err(self.unsupported_rvalue(
+                        "body_restore_prefix requires exactly one restoration annotation per loop"
+                            .to_string(),
+                        span,
+                    ));
+                }
+                let frame = self.prepare_restoration_frame(
+                    original_head,
+                    block,
+                    &cfpcs,
+                    loop_id,
+                    spec_block,
+                    span,
+                )?;
+                self.capture_restoration_frame(&frame)?;
+            }
             let loop_place_usages = self
                 .fpcs_analysis
                 .analysis()
-                .loop_place_usages(loop_spec.loop_id)
+                .loop_place_usages(loop_id)
                 .clone();
-            let invariants = loop_spec.invariants.clone();
-            let loop_id = loop_spec.loop_id;
             let mut invariant_inputs = FxHashSet::default();
             for (spec_block, _) in &invariants {
                 let enc_output = self.deps.require_dep::<MirPureEnc>(MirPureEncTask {
@@ -3048,7 +3081,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
 
         if let Some(specs) = self.spec_blocks.specs_for.get(&block).cloned() {
             for spec in specs {
-                if matches!(spec.kind, SpecBlockKind::LoopInvariant) {
+                if matches!(spec.kind, SpecBlockKind::LoopInvariant | SpecBlockKind::LoopRestoration) {
                     continue;
                 }
                 let current_fpcs = self.current_fpcs.take().unwrap();
@@ -3077,7 +3110,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
                         // TODO: handle_error
                         self.stmt(self.vcx.mk_refute_stmt(spec_expr));
                     }
-                    SpecBlockKind::LoopInvariant => {
+                    SpecBlockKind::LoopInvariant | SpecBlockKind::LoopRestoration => {
                         // nothing to do: loop invariants are handled elsewhere
                     }
                 }

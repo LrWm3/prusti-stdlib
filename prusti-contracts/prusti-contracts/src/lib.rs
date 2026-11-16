@@ -79,6 +79,24 @@ pub use prusti_contracts_proc_macros::invariant;
 /// A macro for writing a loop body invariant.
 pub use prusti_contracts_proc_macros::body_invariant;
 
+/// Checked restoration summary for a scalar mutable slice traversal.
+/// Use `body_restore_prefix!(&iterator, *owner, *completed)` before advancing
+/// the iterator. `owner` is a ghost raw slice identity captured before borrowing;
+/// `completed` contains final values of expired yields. At expiry the source
+/// equals that prefix followed by the remaining tail. This grants no owner read.
+/// The verifier checks entry and backedges and rejects overlapping live yields.
+pub use prusti_contracts_proc_macros::body_restore_prefix;
+
+#[doc(hidden)]
+pub fn loop_restore_prefix<T>(
+    _iterator: &core::slice::IterMut<'_, T>,
+    _owner: *const [T],
+    _prefix: Seq<T>,
+) -> bool {
+    panic!("specification-only restoration marker")
+}
+
+
 /// Observe a mutable slice reference's length without reading its elements.
 #[pure]
 pub fn mut_slice_len<T>(slice: &&mut [T]) -> usize {

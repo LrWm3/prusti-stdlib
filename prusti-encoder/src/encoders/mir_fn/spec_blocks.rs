@@ -18,6 +18,7 @@ use crate::encoders::mir_fn::RustSignature;
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SpecBlockKind {
     LoopInvariant,
+    LoopRestoration,
     Assert,
     Assume,
     Refute,
@@ -352,6 +353,7 @@ pub struct LoopSpec {
     pub head_block: BasicBlock,
 
     pub invariants: Vec<(BasicBlock, Span)>,
+    pub restorations: Vec<(BasicBlock, Span)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -464,7 +466,7 @@ impl SpecBlocks {
         let mut loop_invariant_blocks: FxHashMap<LoopId, Vec<&SpecBlock>> = Default::default();
         for specified_blocks in base.specs_for.values() {
             for spec_block in specified_blocks {
-                let SpecBlockKind::LoopInvariant = spec_block.kind else {
+                let (SpecBlockKind::LoopInvariant | SpecBlockKind::LoopRestoration) = spec_block.kind else {
                     continue;
                 };
 
@@ -515,6 +517,7 @@ impl SpecBlocks {
                     head_block: original_head_block,
                     original_head_block,
                     invariants: Vec::new(),
+                    restorations: Vec::new(),
                 }
             })
             .map(|spec| (spec.loop_id, spec))
@@ -730,8 +733,9 @@ impl SpecBlocks {
             // contain statements which mutate the state.
             head_block: base.spec_arms.switches[&first_invariant.attached_to],
             original_head_block,
+            restorations: consecutive_invariants.iter().filter(|spec| spec.kind == SpecBlockKind::LoopRestoration).map(|spec| (spec.block, spec.span)).collect(),
             invariants: consecutive_invariants
-                .into_iter()
+                .into_iter().filter(|spec| spec.kind == SpecBlockKind::LoopInvariant)
                 .map(|spec_block| (spec_block.block, spec_block.span))
                 .collect(),
         })
@@ -826,6 +830,8 @@ impl<'enc, 'vir: 'enc> mir::visit::Visitor<'vir> for SpecVisitor<'enc, 'vir> {
 
             let kind = if has_prusti_attr(cl_attrs, "loop_body_invariant_spec") {
                 SpecBlockKind::LoopInvariant
+            } else if has_prusti_attr(cl_attrs, "loop_body_restoration_spec") {
+                SpecBlockKind::LoopRestoration
             } else if has_prusti_attr(cl_attrs, "prusti_assertion") {
                 SpecBlockKind::Assert
             } else if has_prusti_attr(cl_attrs, "prusti_assumption") {

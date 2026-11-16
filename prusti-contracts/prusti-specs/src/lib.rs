@@ -463,6 +463,10 @@ pub fn body_invariant(tokens: TokenStream) -> TokenStream {
     generate_expression_closure(&AstRewriter::process_loop_invariant, tokens)
 }
 
+pub fn body_restore_prefix(tokens: TokenStream) -> TokenStream {
+    generate_expression_closure(&AstRewriter::process_loop_restoration, tokens)
+}
+
 pub fn prusti_assertion(tokens: TokenStream) -> TokenStream {
     generate_expression_closure(&AstRewriter::process_prusti_assertion, tokens)
 }

@@ -1,3 +1,8 @@
+pub(crate) const RESTORE_SOURCE_ADDR: &str = "__prusti_restore_source_addr";
+pub(crate) const RESTORE_SOURCE_LEN: &str = "__prusti_restore_source_len";
+pub(crate) const RESTORE_TAIL_ADDR: &str = "__prusti_restore_tail_addr";
+pub(crate) const RESTORE_TAIL_LEN: &str = "__prusti_restore_tail_len";
+
 use crate::encoders::{
     ConstEnc, FunctionCallEnc, Mode, PrustiBuiltin, SpecBuiltin, ViperTupleEnc,
     builtin::seq_repeat_function,
@@ -88,6 +93,7 @@ pub enum PureKind {
     /// A closure inside a body assertion/invariant. Its captured snapshots
     /// describe the current heap, unlike the pinned inputs of a contract.
     SpecBlockClosure,
+    RestorationBlockClosure,
     /// A specification, attached to the item `context` specifies. That is
     /// not the specified item itself when an `impl` refines the
     /// specification of a trait: there the trait's parameters (notably
@@ -104,6 +110,7 @@ pub enum PureKind {
     Pure,
     Constant(mir::Promoted),
     SpecBlock(mir::BasicBlock),
+    RestorationBlock(mir::BasicBlock),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -161,7 +168,7 @@ impl TaskEncoder for MirPureEnc {
             // instantiated with the arguments of the encoding.
             let identity = ty::GenericArgs::identity_for_item(vcx.tcx(), def_id);
             let body = match kind {
-                PureKind::Closure | PureKind::SpecClosure { .. } | PureKind::SpecBlockClosure => {
+                PureKind::Closure | PureKind::SpecClosure { .. } | PureKind::SpecBlockClosure | PureKind::RestorationBlockClosure => {
                     vcx.body_mut().get_closure_body(def_id, identity, None)
                 }
                 PureKind::Spec { context, .. } => {
@@ -172,7 +179,7 @@ impl TaskEncoder for MirPureEnc {
                 PureKind::Constant(promoted) => {
                     vcx.body_mut().get_promoted_constant_body(def_id, promoted)
                 }
-                PureKind::SpecBlock(_) => crate::encoders::impure_body(def_id)
+                PureKind::SpecBlock(_) | PureKind::RestorationBlock(_) => crate::encoders::impure_body(def_id)
                     .unwrap_or_else(|| panic!("no body to encode for {def_id:?}")),
             };
 
@@ -190,7 +197,7 @@ impl TaskEncoder for MirPureEnc {
             };
             let mut enc = Enc::new(vcx, task_key.0, def_id, kind, gargs, &body, deps);
             let expr_inner = vcx.with_span(body_span, |_| {
-                if let PureKind::SpecBlock(block) = kind {
+                if let PureKind::SpecBlock(block) | PureKind::RestorationBlock(block) = kind {
                     enc.encode_spec_block(block)
                 } else {
                     enc.encode_body()
@@ -208,7 +215,7 @@ impl TaskEncoder for MirPureEnc {
             // We wrap the expression with an additional lazy that will perform
             // some sanity checks. These requirements cannot be expressed using
             // only the type system.
-            let snapshot = if let PureKind::SpecBlock(..) = kind {
+            let snapshot = if let PureKind::SpecBlock(..) | PureKind::RestorationBlock(..) = kind {
                 vir::TYPE_BOOL.upcast_ty()
             } else {
                 let ret = RustTyDecomposition::from_ty(body.return_ty(), enc.context);
@@ -315,6 +322,7 @@ struct Enc<'vir: 'enc, 'enc> {
     def_id: DefId,
     context: GParams<'vir>,
     spec_block: bool,
+    restoration_block: bool,
     specification: bool,
     spec_closure: bool,
     inline_snapshots: bool,
@@ -435,13 +443,14 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
             encoding_depth,
             def_id,
             context: gargs.context(),
-            spec_block: matches!(kind, PureKind::SpecBlock(_) | PureKind::SpecBlockClosure),
+            restoration_block: matches!(kind, PureKind::RestorationBlock(_) | PureKind::RestorationBlockClosure),
+            spec_block: matches!(kind, PureKind::SpecBlock(_) | PureKind::SpecBlockClosure | PureKind::RestorationBlock(_) | PureKind::RestorationBlockClosure),
             specification: matches!(
                 kind,
-                PureKind::Spec { .. } | PureKind::SpecClosure { .. } | PureKind::SpecBlock(_) | PureKind::SpecBlockClosure
+                PureKind::Spec { .. } | PureKind::SpecClosure { .. } | PureKind::SpecBlock(_) | PureKind::SpecBlockClosure | PureKind::RestorationBlock(_) | PureKind::RestorationBlockClosure
             ),
             spec_closure: matches!(kind, PureKind::SpecClosure { .. }),
-            inline_snapshots: matches!(kind, PureKind::SpecBlock(_) | PureKind::SpecBlockClosure | PureKind::SpecClosure { .. })
+            inline_snapshots: matches!(kind, PureKind::SpecBlock(_) | PureKind::SpecBlockClosure | PureKind::RestorationBlock(_) | PureKind::RestorationBlockClosure | PureKind::SpecClosure { .. })
                 || (matches!(kind, PureKind::Spec { .. }) && has_closure),
             body,
             rev_doms,
@@ -477,7 +486,7 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                 PureKind::Spec {
                     mode: MirSpecEncMode::Impure,
                     ..
-                } | PureKind::SpecBlock(..)
+                } | PureKind::SpecBlock(..) | PureKind::RestorationBlock(..)
                     | PureKind::SpecClosure { impure_context: true, .. }
             ),
         }
@@ -1593,7 +1602,9 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
             .deps
             .require_dep::<MirPureEnc>(MirPureEncTask {
                 encoding_depth: self.encoding_depth + 1,
-                kind: if self.spec_block {
+                kind: if self.restoration_block {
+                    PureKind::RestorationBlockClosure
+                } else if self.spec_block {
                     PureKind::SpecBlockClosure
                 } else if self.specification {
                     PureKind::SpecClosure {
@@ -1752,6 +1763,104 @@ impl<'vir: 'enc, 'enc> Enc<'vir, 'enc> {
                 )?;
                 assert!(qvars.is_empty(), "`spec_block` closures take no arguments");
                 mk_bool(body.downcast_ty::<vir::Bool>())
+            }
+            SpecBuiltin::LoopRestorePrefix => {
+                if !self.restoration_block || self.encoding_depth != 1 {
+                    return Err(self.unsupported_rvalue(
+                        "loop_restore_prefix is only available in body_restore_prefix annotations"
+                            .to_string(),
+                        self.current_span(),
+                    ));
+                }
+                assert_eq!(args.len(), 3);
+                let iterator_ref_ty = args[0].node.ty(self.body, self.vcx.tcx());
+                let TyKind::Ref(_, iterator_ty, ty::Mutability::Not) = iterator_ref_ty.kind() else {
+                    unreachable!("restoration marker requires an iterator reference")
+                };
+                let TyKind::Adt(_, iterator_args) = iterator_ty.kind() else {
+                    unreachable!("restoration marker requires a native iterator")
+                };
+                if RustTyDecomposition::from_ty(*iterator_ty, self.context).ty.special
+                    != crate::encoders::ty::RustTySpecial::SliceIterMut
+                {
+                    return Err(self.unsupported_rvalue(
+                        "body_restore_prefix requires a native mutable slice iterator".to_string(),
+                        self.current_span(),
+                    ));
+                }
+                let owner_ty = args[1].node.ty(self.body, self.vcx.tcx());
+                let TyKind::RawPtr(slice_ty, ty::Mutability::Not) = owner_ty.kind() else {
+                    unreachable!("restoration marker requires a shared raw slice pointer")
+                };
+                let iterator_ref = self.encode_operand_snap(&args[0].node, curr_ver)?;
+                let owner = self.encode_operand_snap(&args[1].node, curr_ver)?;
+                let prefix = self.encode_operand_snap(&args[2].node, curr_ver)?;
+                let iterator_snap = self.ty_use(iterator_ref_ty).expect_immref()
+                    .value_access(iterator_ref.downcast_ty());
+                let tail = self.ty_use(*iterator_ty).expect_structlike().fields.last().unwrap()
+                    .read(iterator_snap.downcast_ty());
+                let owner_use = self.ty_use(owner_ty);
+                let owner_raw = owner_use.expect_raw();
+                let owner_addr = owner_raw.address_access(owner.downcast_ty());
+                let owner_len = owner_raw.metadata_access(owner.downcast_ty());
+                let usize_use = self.ty_use(self.vcx.tcx().types.usize);
+                let owner_len = usize_use.expect_primitive().snap_to_prim(owner_len.downcast_ty())
+                    .downcast_ty::<vir::Int>();
+                let slice_task = RustTyDecomposition::from_ty(*slice_ty, self.context);
+                let slice_impure = self.deps.require_dep::<crate::encoders::TyUseImpureEnc>(slice_task)?;
+                let slice_use = self.ty_use(*slice_ty);
+                let source = slice_use.expect_array().to_seq(
+                    slice_impure.ref_to_snap(owner_addr).downcast_ty(), owner_len,
+                );
+
+                // The iterator's synthetic tail is an `&mut [T]`. Its
+                // referent uses the generic predicate behind a mutable ref,
+                // so cast its snapshot to the caller's slice representation.
+                let tail_ty = ty::Ty::new_mut_ref(self.vcx.tcx(), iterator_args.region_at(0), *slice_ty);
+                let tail_use = self.ty_use(tail_ty);
+                let tail_ref = tail_use.expect_mutref();
+                let tail_addr = tail_ref.deref_access(tail.downcast_ty());
+                let tail_len = tail_ref.metadata_access(tail.downcast_ty());
+                let tail_len = usize_use.expect_primitive().snap_to_prim(tail_len.downcast_ty())
+                    .downcast_ty::<vir::Int>();
+                let tail_task = RustTyDecomposition::from_ty(tail_ty, self.context);
+                let inner = tail_task.ty.expect_mutref();
+                let normalized = inner.referent.decompose_compare_normalize(tail_task.ty.params, tail_task.args);
+                let caster = self.deps.require_dep::<crate::GArgsCastEnc<crate::Pure>>(normalized)?;
+                let inner_task = inner.referent.decompose_context(tail_task.ty.params, tail_task.args);
+                let inner_impure = self.deps.require_dep::<crate::encoders::TyUseImpureEnc>(inner_task)?;
+                let tail_value = caster.cast_to_caller_ctx(inner_impure.ref_to_snap(tail_addr));
+                let tail_contents = slice_use.expect_array().to_seq(tail_value.downcast_ty(), tail_len);
+                let restored = self.vcx.mk_seq_concat_expr(
+                    prefix.downcast_ty(), self.vcx.mk_old_lhs_expr(tail_contents),
+                );
+                // These placeholders are replaced with the selected PCG edge's
+                // actual addresses and metadata by the impure encoder. Check
+                // them before reading either slice in the wand consequent.
+                let source_addr = self
+                    .vcx
+                    .mk_local_ex(self.vcx.mk_local_decl(RESTORE_SOURCE_ADDR, vir::TYPE_REF))
+                    .lift();
+                let source_len = self
+                    .vcx
+                    .mk_local_ex(self.vcx.mk_local_decl(RESTORE_SOURCE_LEN, vir::TYPE_INT))
+                    .lift();
+                let edge_tail_addr = self
+                    .vcx
+                    .mk_local_ex(self.vcx.mk_local_decl(RESTORE_TAIL_ADDR, vir::TYPE_REF))
+                    .lift();
+                let edge_tail_len = self
+                    .vcx
+                    .mk_local_ex(self.vcx.mk_local_decl(RESTORE_TAIL_LEN, vir::TYPE_INT))
+                    .lift();
+                let relations = vec![
+                    self.vcx.mk_eq_expr(owner_addr, source_addr),
+                    self.vcx.mk_eq_expr(owner_len, source_len),
+                    self.vcx.mk_eq_expr(tail_addr, edge_tail_addr),
+                    self.vcx.mk_eq_expr(tail_len, edge_tail_len),
+                    self.vcx.mk_eq_expr(source, restored),
+                ];
+                mk_bool(self.vcx.mk_conj(&relations))
             }
             SpecBuiltin::MutIterTail => {
                 if !self.specification {

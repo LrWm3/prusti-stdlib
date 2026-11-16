@@ -1,3 +1,4 @@
+use prusti_interface::PrustiError;
 use pcg::{borrow_pcg::state::BorrowsState, coupling::PcgCoupledEdgeKind, pcg::PcgNode};
 use task_encoder::TaskEncoder;
 
@@ -24,6 +25,7 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
         }
         let mut old_outer = WandOldOuter::Label(label);
         let (wand, rhs) = self.coupled_wand(edge, &mut old_outer)?;
+        let wand = self.with_restoration_wand(wand, edge, &mut old_outer, !package, footprint.is_some())?;
         // A shared-only loop edge can have no indirect resources on either
         // side. It carries no pledge/value assertion. The loop invariant omits
         // this tautology, so omit its footprint and apply/package as well.
@@ -42,9 +44,18 @@ impl<'vir, 'enc, E: TaskEncoder> ImpureEncVisitor<'vir, 'enc, E> {
             unreachable!()
         };
         let label = *label.get_or_insert_with(|| self.new_label("outer_package"));
-        let proof_block = self.pcs_package_script(borrows_state, rhs, label)?;
+        let summary_join = self.scalar_summary_join(edge, label)?;
+        let proof_block = self.pcs_package_script(borrows_state, rhs, label, summary_join)?;
         let proof_block = self.vcx.alloc_slice(&proof_block);
-        self.stmt(self.vcx.mk_package_stmt(wand, proof_block));
+        let span = edge.loop_head().and_then(|head| self.loop_restoration_frames.get(&head)).map(|frame| frame.span);
+        let stmt = if let Some(span) = span {
+            self.vcx.with_span(span, |vcx| {
+                vcx.handle_error("package.failed:assertion.false", move |_| Some(vec![PrustiError::verification("loop restoration might not hold", span.into())]));
+                vcx.handle_error("package.failed:insufficient.permission", move |_| Some(vec![PrustiError::verification("loop restoration requires additional permission", span.into())]));
+                vcx.mk_package_stmt(wand, proof_block)
+            })
+        } else { self.vcx.mk_package_stmt(wand, proof_block) };
+        self.stmt(stmt);
         Ok(())
     }
 
